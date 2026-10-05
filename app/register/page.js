@@ -35,27 +35,39 @@ export default function RegisterPage() {
     setLoading(true);
     setMessage('');
 
-    // Step 1: Split full_name into first_name and last_name automatically
-    const nameParts = (formData.full_name || '').trim().split(' ');
+    // Safely split full_name into first_name and last_name
+    const trimmedName = (formData.full_name || '').trim();
+    const nameParts = trimmedName.split(/\s+/);
+    
+    // First word as first_name, remaining words joined as last_name
     const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
-    // Step 2: Map frontend state to match exact Supabase column names
+    // Map fields so both legacy/duplicate schema columns are satisfied
     const payload = {
       first_name: firstName,
       last_name: lastName,
-      full_name: formData.full_name,
+      full_name: trimmedName,
+      phone: formData.phone,
       phone_number: formData.phone,
-      dob: formData.date_of_birth,
-      address: formData.home_address,
-      gender: formData.gender,
       email: formData.email,
-      department: formData.sub_department || formData.core_value_department,
+      gender: formData.gender,
+      date_of_birth: formData.date_of_birth || null,
+      dob: formData.date_of_birth || null,
+      place_of_birth: formData.place_of_birth,
+      home_address: formData.home_address,
+      address: formData.home_address,
+      home_town: formData.home_town,
       marital_status: formData.marital_status,
+      date_joined_church: formData.date_joined_church || null,
+      date_of_baptism: formData.date_of_baptism || null,
+      emergency_contact_person: formData.emergency_contact_person,
+      emergency_contact_phone: formData.emergency_contact_phone,
+      core_value_department: formData.core_value_department,
+      department: formData.sub_department || formData.core_value_department,
       status: 'Active',
     };
 
-    // Step 3: Insert mapped record into Supabase
     const { data, error } = await supabase.from('members').insert([payload]);
 
     setLoading(false);
@@ -65,7 +77,6 @@ export default function RegisterPage() {
       setMessage('Error submitting form. Please try again.');
     } else {
       setMessage('Registration successful! Welcome to Gracepoint Church.');
-      // Reset form fields
       setFormData({
         full_name: '',
         phone: '',
@@ -92,7 +103,6 @@ export default function RegisterPage() {
       {message && <p style={{ fontWeight: 'bold', color: message.includes('Error') ? 'red' : 'green' }}>{message}</p>}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Core Department Hierarchy */}
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Department</legend>
           <div style={{ marginBottom: '12px' }}>
@@ -116,12 +126,11 @@ export default function RegisterPage() {
           </div>
         </fieldset>
 
-        {/* Personal Identification */}
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Personal Information</legend>
           <div style={{ marginBottom: '12px' }}>
             <label>Full Name *</label>
-            <input type="text" name="full_name" required value={formData.full_name} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+            <input type="text" name="full_name" required value={formData.full_name} onChange={handleChange} placeholder="e.g. Mathew Duut" style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
