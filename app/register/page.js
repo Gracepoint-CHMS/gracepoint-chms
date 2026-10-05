@@ -5,7 +5,8 @@ import { supabase } from '../../lib/supabase';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
-    full_name: '',
+    first_name: '',
+    last_name: '',
     phone: '',
     email: '',
     gender: 'Male',
@@ -35,19 +36,13 @@ export default function RegisterPage() {
     setLoading(true);
     setMessage('');
 
-    // Safely split full_name into first_name and last_name
-    const trimmedName = (formData.full_name || '').trim();
-    const nameParts = trimmedName.split(/\s+/);
-    
-    // First word as first_name, remaining words joined as last_name
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+    const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
 
-    // Map fields so both legacy/duplicate schema columns are satisfied
+    // Mapping payload for Supabase columns
     const payload = {
-      first_name: firstName,
-      last_name: lastName,
-      full_name: trimmedName,
+      first_name: formData.first_name.trim(),
+      last_name: formData.last_name.trim(),
+      full_name: fullName,
       phone: formData.phone,
       phone_number: formData.phone,
       email: formData.email,
@@ -78,7 +73,8 @@ export default function RegisterPage() {
     } else {
       setMessage('Registration successful! Welcome to Gracepoint Church.');
       setFormData({
-        full_name: '',
+        first_name: '',
+        last_name: '',
         phone: '',
         email: '',
         gender: 'Male',
@@ -128,9 +124,17 @@ export default function RegisterPage() {
 
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Personal Information</legend>
-          <div style={{ marginBottom: '12px' }}>
-            <label>Full Name *</label>
-            <input type="text" name="full_name" required value={formData.full_name} onChange={handleChange} placeholder="e.g. Mathew Duut" style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+          
+          {/* Separated First Name and Surname fields */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label>First Name *</label>
+              <input type="text" name="first_name" required value={formData.first_name} onChange={handleChange} placeholder="First name" style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+            </div>
+            <div>
+              <label>Surname *</label>
+              <input type="text" name="last_name" required value={formData.last_name} onChange={handleChange} placeholder="Surname" style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
@@ -158,19 +162,20 @@ export default function RegisterPage() {
               <input type="date" name="date_of_birth" value={formData.date_of_birth} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
             </div>
             <div>
-              <label>Marital Status</label>
-              <select name="marital_status" value={formData.marital_status} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
-                <option value="Single">Single</option>
-                <option value="Married">Married</option>
-                <option value="Widowed">Widowed</option>
-                <option value="Divorced">Divorced</option>
-              </select>
+              <label>Place of Birth</label>
+              <input type="text" name="place_of_birth" value={formData.place_of_birth} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
             </div>
           </div>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label>Home Address</label>
-            <input type="text" name="home_address" value={formData.home_address} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label>Home Address</label>
+              <input type="text" name="home_address" value={formData.home_address} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+            </div>
+            <div>
+              <label>Home Town</label>
+              <input type="text" name="home_town" value={formData.home_town} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+            </div>
           </div>
         </fieldset>
 
