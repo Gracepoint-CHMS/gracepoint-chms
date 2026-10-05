@@ -24,7 +24,7 @@ export default function DashboardPage() {
     const { data, error } = await supabase
       .from('members')
       .select('*')
-      .order('full_name', { ascending: true });
+      .order('first_name', { ascending: true });
 
     if (error) {
       console.error('Error fetching members:', error);
@@ -42,7 +42,8 @@ export default function DashboardPage() {
       const q = searchQuery.toLowerCase();
       updated = updated.filter(
         (m) =>
-          (m.full_name && m.full_name.toLowerCase().includes(q)) ||
+          (m.first_name && m.first_name.toLowerCase().includes(q)) ||
+          (m.last_name && m.last_name.toLowerCase().includes(q)) ||
           (m.phone && m.phone.includes(q)) ||
           (m.home_town && m.home_town.toLowerCase().includes(q))
       );
@@ -63,27 +64,27 @@ export default function DashboardPage() {
     if (filteredMembers.length === 0) return;
 
     const headers = [
-      'Full Name',
+      'First Name',
+      'Last Name',
       'Phone',
       'Gender',
       'Core Department',
       'Sub Department',
       'Home Address',
       'Home Town',
-      'Marital Status',
-      'Status',
+      'Marital Status'
     ];
 
     const rows = filteredMembers.map((m) => [
-      `"${m.full_name || ''}"`,
+      `"${m.first_name || ''}"`,
+      `"${m.last_name || ''}"`,
       `"${m.phone || ''}"`,
       `"${m.gender || ''}"`,
       `"${m.core_value_department || ''}"`,
       `"${m.sub_department || ''}"`,
       `"${m.home_address || ''}"`,
       `"${m.home_town || ''}"`,
-      `"${m.marital_status || ''}"`,
-      `"${m.status || ''}"`,
+      `"${m.marital_status || ''}"`
     ]);
 
     const csvContent =
@@ -100,9 +101,9 @@ export default function DashboardPage() {
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '30px auto', padding: '0 20px', fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: '1100px', margin: '20px auto', padding: '0 16px', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-        <h2>Gracepoint CHMS - Member Directory</h2>
+        <h2 style={{ margin: '10px 0' }}>Gracepoint CHMS - Member Directory</h2>
         <button
           onClick={exportToCSV}
           disabled={filteredMembers.length === 0}
@@ -113,7 +114,7 @@ export default function DashboardPage() {
             border: 'none',
             borderRadius: '6px',
             fontWeight: 'bold',
-            cursor: 'pointer',
+            cursor: filteredMembers.length === 0 ? 'not-allowed' : 'pointer',
           }}
         >
           Export CSV (Excel)
@@ -169,6 +170,8 @@ export default function DashboardPage() {
             <option value="ALL">All Sub-Departments</option>
             <option value="General Assembly">General Assembly</option>
             <option value="Ushering Department">Ushering Department</option>
+            <option value="Choir / Music Ministry">Choir / Music Ministry</option>
+            <option value="Prayer Warriors">Prayer Warriors</option>
             <option value="Youth Ministry">Youth Ministry</option>
             <option value="Children Ministry">Children Ministry</option>
             <option value="Women Ministry">Women Ministry</option>
@@ -178,17 +181,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Member Counter */}
       <p style={{ fontWeight: 'bold', color: '#555' }}>
         Total Members Found: {filteredMembers.length}
       </p>
 
-      {/* Members Table */}
       {loading ? (
         <p>Loading members...</p>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px', minWidth: '600px' }}>
             <thead>
               <tr style={{ background: '#0070f3', color: '#fff', textAlign: 'left' }}>
                 <th style={{ padding: '10px', border: '1px solid #ccc' }}>Full Name</th>
@@ -204,7 +205,7 @@ export default function DashboardPage() {
                 filteredMembers.map((m, idx) => (
                   <tr key={m.id || idx} style={{ background: idx % 2 === 0 ? '#fff' : '#f4f4f4' }}>
                     <td style={{ padding: '10px', border: '1px solid #ccc', fontWeight: '500' }}>
-                      {m.full_name || `${m.first_name || ''} ${m.last_name || ''}`}
+                      {`${m.first_name || ''} ${m.last_name || ''}`}
                     </td>
                     <td style={{ padding: '10px', border: '1px solid #ccc' }}>{m.phone || '-'}</td>
                     <td style={{ padding: '10px', border: '1px solid #ccc' }}>{m.gender || '-'}</td>
