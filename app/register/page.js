@@ -19,8 +19,8 @@ export default function RegisterPage() {
     date_of_baptism: '',
     emergency_contact_person: '',
     emergency_contact_phone: '',
-    core_value_department: 'Love',
-    sub_department: 'Youth Ministry',
+    core_value_department: 'LOVE',
+    sub_department: 'General Assembly',
   });
 
   const [loading, setLoading] = useState(false);
@@ -62,7 +62,7 @@ export default function RegisterPage() {
       status: 'Active',
     };
 
-    const { data, error } = await supabase.from('members').insert([payload]);
+    const { error } = await supabase.from('members').insert([payload]);
 
     setLoading(false);
 
@@ -86,8 +86,8 @@ export default function RegisterPage() {
         date_of_baptism: '',
         emergency_contact_person: '',
         emergency_contact_phone: '',
-        core_value_department: 'Love',
-        sub_department: 'Youth Ministry',
+        core_value_department: 'LOVE',
+        sub_department: 'General Assembly',
       });
     }
   };
@@ -102,30 +102,33 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        
+        {/* Church Department */}
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Department</legend>
           <div style={{ marginBottom: '12px' }}>
-            <label>Core Value Department</label>
+            <label>Core Value Department *</label>
             <select
               name="core_value_department"
               value={formData.core_value_department}
               onChange={handleChange}
               style={{ width: '100%', padding: '8px', marginTop: '4px' }}
             >
-              <option value="Love">Love</option>
-              <option value="Faith">Faith</option>
-              <option value="Grace">Grace</option>
-              <option value="Hope">Hope</option>
+              <option value="LOVE">LOVE</option>
+              <option value="UNITY">UNITY</option>
+              <option value="CARE">CARE</option>
+              <option value="RESPECT">RESPECT</option>
             </select>
           </div>
           <div>
-            <label>Sub-Department / Ministry</label>
+            <label>Sub-Department / Ministry *</label>
             <select
               name="sub_department"
               value={formData.sub_department}
               onChange={handleChange}
               style={{ width: '100%', padding: '8px', marginTop: '4px' }}
             >
+              <option value="General Assembly">General Assembly</option>
               <option value="Youth Ministry">Youth Ministry</option>
               <option value="Children Ministry">Children Ministry</option>
               <option value="Women Ministry">Women Ministry</option>
@@ -135,6 +138,7 @@ export default function RegisterPage() {
           </div>
         </fieldset>
 
+        {/* Personal Information */}
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Personal Information</legend>
 
@@ -243,6 +247,77 @@ export default function RegisterPage() {
                 name="home_town"
                 value={formData.home_town}
                 onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <label>Marital Status</label>
+            <select
+              name="marital_status"
+              value={formData.marital_status}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+            >
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Divorced">Divorced</option>
+              <option value="Widowed">Widowed</option>
+            </select>
+          </div>
+        </fieldset>
+
+        {/* Church History & Dates */}
+        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Information</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label>Date Joined Church</label>
+              <input
+                type="date"
+                name="date_joined_church"
+                value={formData.date_joined_church}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div>
+              <label>Date of Baptism</label>
+              <input
+                type="date"
+                name="date_of_baptism"
+                value={formData.date_of_baptism}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+          </div>
+        </fieldset>
+
+        {/* Emergency Contact */}
+        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Emergency Contact</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label>Emergency Contact Person</label>
+              <input
+                type="text"
+                name="emergency_contact_person"
+                value={formData.emergency_contact_person}
+                onChange={handleChange}
+                placeholder="Full name"
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div>
+              <label>Emergency Contact Phone</label>
+              <input
+                type="tel"
+                name="emergency_contact_phone"
+                value={formData.emergency_contact_phone}
+                onChange={handleChange}
+                placeholder="Phone number"
                 style={{ width: '100%', padding: '8px', marginTop: '4px' }}
               />
             </div>
