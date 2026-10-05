@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -38,7 +38,6 @@ export default function RegisterPage() {
 
     const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
 
-    // Mapping payload for Supabase columns
     const payload = {
       first_name: formData.first_name.trim(),
       last_name: formData.last_name.trim(),
@@ -125,7 +124,6 @@ export default function RegisterPage() {
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Personal Information</legend>
           
-          {/* Separated First Name and Surname fields */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
               <label>First Name *</label>
