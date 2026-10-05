@@ -36,30 +36,31 @@ export default function RegisterPage() {
     setLoading(true);
     setMessage('');
 
-    const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
+    const firstNameClean = formData.first_name.trim();
+    const lastNameClean = formData.last_name.trim();
+    const fullName = `${firstNameClean} ${lastNameClean}`.trim();
 
     const payload = {
-      first_name: formData.first_name.trim(),
-      last_name: formData.last_name.trim(),
+      first_name: firstNameClean,
+      last_name: lastNameClean,
       full_name: fullName,
-      phone: formData.phone,
-      phone_number: formData.phone,
-      email: formData.email,
+      phone: formData.phone.trim(),
+      email: formData.email.trim() || null,
       gender: formData.gender,
       date_of_birth: formData.date_of_birth || null,
-      dob: formData.date_of_birth || null,
-      place_of_birth: formData.place_of_birth,
-      home_address: formData.home_address,
-      address: formData.home_address,
-      home_town: formData.home_town,
+      place_of_birth: formData.place_of_birth.trim() || null,
+      home_address: formData.home_address.trim() || null,
+      home_town: formData.home_town.trim() || null,
       marital_status: formData.marital_status,
       date_joined_church: formData.date_joined_church || null,
       date_of_baptism: formData.date_of_baptism || null,
-      emergency_contact_person: formData.emergency_contact_person,
-      emergency_contact_phone: formData.emergency_contact_phone,
+      emergency_contact_person: formData.emergency_contact_person.trim() || null,
+      emergency_contact_phone: formData.emergency_contact_phone.trim() || null,
       core_value_department: formData.core_value_department,
+      sub_department: formData.sub_department,
       department: formData.sub_department || formData.core_value_department,
       status: 'Active',
+      welfare_status: 'Active',
     };
 
     const { error } = await supabase.from('members').insert([payload]);
@@ -129,6 +130,7 @@ export default function RegisterPage() {
               style={{ width: '100%', padding: '8px', marginTop: '4px' }}
             >
               <option value="General Assembly">General Assembly</option>
+              <option value="Ushering Department">Ushering Department</option>
               <option value="Youth Ministry">Youth Ministry</option>
               <option value="Children Ministry">Children Ministry</option>
               <option value="Women Ministry">Women Ministry</option>
@@ -264,82 +266,4 @@ export default function RegisterPage() {
               <option value="Married">Married</option>
               <option value="Divorced">Divorced</option>
               <option value="Widowed">Widowed</option>
-            </select>
-          </div>
-        </fieldset>
-
-        {/* Church History & Dates */}
-        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Information</legend>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div>
-              <label>Date Joined Church</label>
-              <input
-                type="date"
-                name="date_joined_church"
-                value={formData.date_joined_church}
-                onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-              />
-            </div>
-            <div>
-              <label>Date of Baptism</label>
-              <input
-                type="date"
-                name="date_of_baptism"
-                value={formData.date_of_baptism}
-                onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-              />
-            </div>
-          </div>
-        </fieldset>
-
-        {/* Emergency Contact */}
-        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Emergency Contact</legend>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div>
-              <label>Emergency Contact Person</label>
-              <input
-                type="text"
-                name="emergency_contact_person"
-                value={formData.emergency_contact_person}
-                onChange={handleChange}
-                placeholder="Full name"
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-              />
-            </div>
-            <div>
-              <label>Emergency Contact Phone</label>
-              <input
-                type="tel"
-                name="emergency_contact_phone"
-                value={formData.emergency_contact_phone}
-                onChange={handleChange}
-                placeholder="Phone number"
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-              />
-            </div>
-          </div>
-        </fieldset>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: '12px',
-            background: '#0070f3',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-          }}
-        >
-          {loading ? 'Submitting...' : 'Register Member'}
-        </button>
-      </form>
-    </div>
-  );
-}
+            </
