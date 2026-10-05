@@ -266,4 +266,82 @@ export default function RegisterPage() {
               <option value="Married">Married</option>
               <option value="Divorced">Divorced</option>
               <option value="Widowed">Widowed</option>
-            </
+            </select>
+          </div>
+        </fieldset>
+
+        {/* Church History & Dates */}
+        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Information</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label>Date Joined Church</label>
+              <input
+                type="date"
+                name="date_joined_church"
+                value={formData.date_joined_church}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div>
+              <label>Date of Baptism</label>
+              <input
+                type="date"
+                name="date_of_baptism"
+                value={formData.date_of_baptism}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+          </div>
+        </fieldset>
+
+        {/* Emergency Contact */}
+        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Emergency Contact</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label>Emergency Contact Person</label>
+              <input
+                type="text"
+                name="emergency_contact_person"
+                value={formData.emergency_contact_person}
+                onChange={handleChange}
+                placeholder="Full name"
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div>
+              <label>Emergency Contact Phone</label>
+              <input
+                type="tel"
+                name="emergency_contact_phone"
+                value={formData.emergency_contact_phone}
+                onChange={handleChange}
+                placeholder="Phone number"
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+          </div>
+        </fieldset>
+
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            padding: '12px',
+            background: '#0070f3',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+          }}
+        >
+          {loading ? 'Submitting...' : 'Register Member'}
+        </button>
+      </form>
+    </div>
+  );
+}
