@@ -466,4 +466,61 @@ export default function DashboardPage() {
                 <p><strong>Place of Birth:</strong> {selectedMember.place_of_birth || '-'}</p>
                 <p><strong>Home Address:</strong> {selectedMember.home_address || '-'}</p>
                 <p><strong>Home Town:</strong> {selectedMember.home_town || '-'}</p>
-                <p><strong>Core Dept:</strong> {selectedMember.core_value_department || '-'}</
+                <p><strong>Core Dept:</strong> {selectedMember.core_value_department || '-'}</p>
+                <p><strong>Sub Dept:</strong> {selectedMember.sub_department || '-'}</p>
+                <p><strong>Date Joined:</strong> {selectedMember.date_joined_church || '-'}</p>
+                <p><strong>Baptism Date:</strong> {selectedMember.date_of_baptism || '-'}</p>
+                <p><strong>Emergency Contact:</strong> {selectedMember.emergency_contact_person || '-'}</p>
+                <p><strong>Emergency Phone:</strong> {selectedMember.emergency_contact_phone || '-'}</p>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={saving}
+                    style={{ padding: '8px 16px', backgroundColor: '#107c41', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    style={{ padding: '8px 14px', backgroundColor: '#666', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      style={{ padding: '8px 14px', backgroundColor: '#0070f3', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                      Edit Record
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMember(selectedMember.id)}
+                      style={{ padding: '8px 14px', backgroundColor: '#e11d48', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setSelectedMember(null)}
+                    style={{ padding: '8px 14px', backgroundColor: '#ddd', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Close
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
