@@ -24,7 +24,7 @@ export default function RegisterPage() {
   });
 
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -34,44 +34,15 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage('');
+    setMessage(null);
 
-    const firstNameClean = formData.first_name.trim();
-    const lastNameClean = formData.last_name.trim();
-    const fullName = `${firstNameClean} ${lastNameClean}`.trim();
-
-    const payload = {
-      first_name: firstNameClean,
-      last_name: lastNameClean,
-      full_name: fullName,
-      phone: formData.phone.trim(),
-      email: formData.email.trim() || null,
-      gender: formData.gender,
-      date_of_birth: formData.date_of_birth || null,
-      place_of_birth: formData.place_of_birth.trim() || null,
-      home_address: formData.home_address.trim() || null,
-      home_town: formData.home_town.trim() || null,
-      marital_status: formData.marital_status,
-      date_joined_church: formData.date_joined_church || null,
-      date_of_baptism: formData.date_of_baptism || null,
-      emergency_contact_person: formData.emergency_contact_person.trim() || null,
-      emergency_contact_phone: formData.emergency_contact_phone.trim() || null,
-      core_value_department: formData.core_value_department,
-      sub_department: formData.sub_department,
-      department: formData.sub_department || formData.core_value_department,
-      status: 'Active',
-      welfare_status: 'Active',
-    };
-
-    const { error } = await supabase.from('members').insert([payload]);
-
-    setLoading(false);
+    const { error } = await supabase.from('members').insert([formData]);
 
     if (error) {
-      console.error('Submission Error:', error);
-      setMessage('Error submitting form. Please try again.');
+      console.error('Error inserting member:', error);
+      setMessage({ type: 'error', text: 'Error submitting registration. Please try again.' });
     } else {
-      setMessage('Registration successful! Welcome to Gracepoint Church.');
+      setMessage({ type: 'success', text: 'Registration completed successfully!' });
       setFormData({
         first_name: '',
         last_name: '',
@@ -91,236 +62,257 @@ export default function RegisterPage() {
         sub_department: 'General Assembly',
       });
     }
+
+    setLoading(false);
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '40px auto', padding: '20px' }}>
-      <h2>Gracepoint Prophetic Church - Member Registration</h2>
+    <div style={{ maxWidth: '800px', margin: '20px auto', padding: '0 16px', fontFamily: 'sans-serif' }}>
+      <h2 style={{ textAlign: 'center', marginBottom: '24px' }}>
+        Gracepoint Prophetic Church - Member Registration
+      </h2>
+
       {message && (
-        <p style={{ fontWeight: 'bold', color: message.includes('Error') ? 'red' : 'green' }}>
-          {message}
-        </p>
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '6px',
+            marginBottom: '20px',
+            fontWeight: 'bold',
+            backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
+            color: message.type === 'success' ? '#155724' : '#721c24',
+            border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
+          }}
+        >
+          {message.text}
+        </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        
-        {/* Church Department */}
-        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Department</legend>
-          <div style={{ marginBottom: '12px' }}>
-            <label>Core Value Department *</label>
-            <select
-              name="core_value_department"
-              value={formData.core_value_department}
-              onChange={handleChange}
-              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-            >
-              <option value="LOVE">LOVE</option>
-              <option value="UNITY">UNITY</option>
-              <option value="CARE">CARE</option>
-              <option value="RESPECT">RESPECT</option>
-            </select>
-          </div>
-          <div>
-            <label>Sub-Department / Ministry *</label>
-            <select
-              name="sub_department"
-              value={formData.sub_department}
-              onChange={handleChange}
-              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-            >
-              <option value="General Assembly">General Assembly</option>
-              <option value="Ushering Department">Ushering Department</option>
-              <option value="Youth Ministry">Youth Ministry</option>
-              <option value="Children Ministry">Children Ministry</option>
-              <option value="Women Ministry">Women Ministry</option>
-              <option value="Men Ministry">Men Ministry</option>
-              <option value="Media & IT">Media & IT</option>
-            </select>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Church Department Section */}
+        <fieldset style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '16px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 8px' }}>Church Department</legend>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Core Value Department *</label>
+              <select
+                name="core_value_department"
+                value={formData.core_value_department}
+                onChange={handleChange}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              >
+                <option value="LOVE">LOVE</option>
+                <option value="UNITY">UNITY</option>
+                <option value="CARE">CARE</option>
+                <option value="RESPECT">RESPECT</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Sub-Department / Ministry *</label>
+              <select
+                name="sub_department"
+                value={formData.sub_department}
+                onChange={handleChange}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              >
+                <option value="General Assembly">General Assembly</option>
+                <option value="Ushering Department">Ushering Department</option>
+                <option value="Choir / Music Ministry">Choir / Music Ministry</option>
+                <option value="Prayer Warriors">Prayer Warriors</option>
+                <option value="Youth Ministry">Youth Ministry</option>
+                <option value="Children Ministry">Children Ministry</option>
+                <option value="Women Ministry">Women Ministry</option>
+                <option value="Men Ministry">Men Ministry</option>
+                <option value="Media & IT">Media & IT</option>
+              </select>
+            </div>
           </div>
         </fieldset>
 
-        {/* Personal Information */}
-        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Personal Information</legend>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+        {/* Personal Information Section */}
+        <fieldset style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '16px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 8px' }}>Personal Information</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             <div>
-              <label>First Name *</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>First Name *</label>
               <input
                 type="text"
                 name="first_name"
-                required
+                placeholder="First name"
                 value={formData.first_name}
                 onChange={handleChange}
-                placeholder="First name"
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
+
             <div>
-              <label>Surname *</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Surname *</label>
               <input
                 type="text"
                 name="last_name"
-                required
+                placeholder="Surname"
                 value={formData.last_name}
                 onChange={handleChange}
-                placeholder="Surname"
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
-              <label>Phone Number *</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Phone Number *</label>
               <input
                 type="tel"
                 name="phone"
-                required
+                placeholder="024XXXXXXX"
                 value={formData.phone}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
+
             <div>
-              <label>Gender *</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Gender *</label>
               <select
                 name="gender"
                 value={formData.gender}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               >
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
             </div>
-          </div>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label>Email Address</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
-              <label>Date of Birth</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Email Address</label>
+              <input
+                type="email"
+                name="email"
+                placeholder="example@mail.com"
+                value={formData.email}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Marital Status *</label>
+              <select
+                name="marital_status"
+                value={formData.marital_status}
+                onChange={handleChange}
+                required
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+              >
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+                <option value="Divorced">Divorced</option>
+                <option value="Widowed">Widowed</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Date of Birth</label>
               <input
                 type="date"
                 name="date_of_birth"
                 value={formData.date_of_birth}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
+
             <div>
-              <label>Place of Birth</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Place of Birth</label>
               <input
                 type="text"
                 name="place_of_birth"
+                placeholder="Town / City"
                 value={formData.place_of_birth}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
-              <label>Home Address</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Home Address</label>
               <input
                 type="text"
                 name="home_address"
+                placeholder="Residential Area / Digital Address"
                 value={formData.home_address}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
+
             <div>
-              <label>Home Town</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Home Town</label>
               <input
                 type="text"
                 name="home_town"
+                placeholder="Hometown"
                 value={formData.home_town}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
           </div>
-
-          <div style={{ marginBottom: '12px' }}>
-            <label>Marital Status</label>
-            <select
-              name="marital_status"
-              value={formData.marital_status}
-              onChange={handleChange}
-              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-            >
-              <option value="Single">Single</option>
-              <option value="Married">Married</option>
-              <option value="Divorced">Divorced</option>
-              <option value="Widowed">Widowed</option>
-            </select>
-          </div>
         </fieldset>
 
-        {/* Church History & Dates */}
-        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Information</legend>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        {/* Church History & Emergency Contact Section */}
+        <fieldset style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '16px' }}>
+          <legend style={{ fontWeight: 'bold', padding: '0 8px' }}>Church History & Emergency Contact</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             <div>
-              <label>Date Joined Church</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Date Joined Church</label>
               <input
                 type="date"
                 name="date_joined_church"
                 value={formData.date_joined_church}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
+
             <div>
-              <label>Date of Baptism</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Date of Baptism</label>
               <input
                 type="date"
                 name="date_of_baptism"
                 value={formData.date_of_baptism}
                 onChange={handleChange}
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
-          </div>
-        </fieldset>
 
-        {/* Emergency Contact */}
-        <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-          <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Emergency Contact</legend>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label>Emergency Contact Person</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Emergency Contact Person</label>
               <input
                 type="text"
                 name="emergency_contact_person"
+                placeholder="Full Name"
                 value={formData.emergency_contact_person}
                 onChange={handleChange}
-                placeholder="Full name"
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
+
             <div>
-              <label>Emergency Contact Phone</label>
+              <label style={{ fontWeight: '600', fontSize: '14px' }}>Emergency Contact Phone</label>
               <input
                 type="tel"
                 name="emergency_contact_phone"
+                placeholder="Phone Number"
                 value={formData.emergency_contact_phone}
                 onChange={handleChange}
-                placeholder="Phone number"
-                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '10px', marginTop: '6px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
               />
             </div>
           </div>
@@ -330,16 +322,18 @@ export default function RegisterPage() {
           type="submit"
           disabled={loading}
           style={{
-            padding: '12px',
-            background: '#0070f3',
+            padding: '14px',
+            backgroundColor: '#0070f3',
             color: '#fff',
+            fontWeight: 'bold',
             border: 'none',
             borderRadius: '6px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
+            fontSize: '16px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginTop: '10px',
           }}
         >
-          {loading ? 'Submitting...' : 'Register Member'}
+          {loading ? 'Submitting...' : 'Submit Registration'}
         </button>
       </form>
     </div>
