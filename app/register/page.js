@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabaseClient';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -95,14 +95,23 @@ export default function RegisterPage() {
   return (
     <div style={{ maxWidth: '600px', margin: '40px auto', padding: '20px' }}>
       <h2>Gracepoint Prophetic Church - Member Registration</h2>
-      {message && <p style={{ fontWeight: 'bold', color: message.includes('Error') ? 'red' : 'green' }}>{message}</p>}
+      {message && (
+        <p style={{ fontWeight: 'bold', color: message.includes('Error') ? 'red' : 'green' }}>
+          {message}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Church Department</legend>
           <div style={{ marginBottom: '12px' }}>
             <label>Core Value Department</label>
-            <select name="core_value_department" value={formData.core_value_department} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+            <select
+              name="core_value_department"
+              value={formData.core_value_department}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+            >
               <option value="Love">Love</option>
               <option value="Faith">Faith</option>
               <option value="Grace">Grace</option>
@@ -111,7 +120,12 @@ export default function RegisterPage() {
           </div>
           <div>
             <label>Sub-Department / Ministry</label>
-            <select name="sub_department" value={formData.sub_department} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+            <select
+              name="sub_department"
+              value={formData.sub_department}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+            >
               <option value="Youth Ministry">Youth Ministry</option>
               <option value="Children Ministry">Children Ministry</option>
               <option value="Women Ministry">Women Ministry</option>
@@ -123,26 +137,54 @@ export default function RegisterPage() {
 
         <fieldset style={{ border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
           <legend style={{ fontWeight: 'bold', padding: '0 5px' }}>Personal Information</legend>
-          
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
               <label>First Name *</label>
-              <input type="text" name="first_name" required value={formData.first_name} onChange={handleChange} placeholder="First name" style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="text"
+                name="first_name"
+                required
+                value={formData.first_name}
+                onChange={handleChange}
+                placeholder="First name"
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
             <div>
               <label>Surname *</label>
-              <input type="text" name="last_name" required value={formData.last_name} onChange={handleChange} placeholder="Surname" style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="text"
+                name="last_name"
+                required
+                value={formData.last_name}
+                onChange={handleChange}
+                placeholder="Surname"
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
               <label>Phone Number *</label>
-              <input type="tel" name="phone" required value={formData.phone} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="tel"
+                name="phone"
+                required
+                value={formData.phone}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
             <div>
               <label>Gender *</label>
-              <select name="gender" value={formData.gender} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }}>
+              <select
+                name="gender"
+                value={formData.gender}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              >
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
@@ -151,33 +193,75 @@ export default function RegisterPage() {
 
           <div style={{ marginBottom: '12px' }}>
             <label>Email Address</label>
-            <input type="email" name="email" value={formData.email} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+            />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
               <label>Date of Birth</label>
-              <input type="date" name="date_of_birth" value={formData.date_of_birth} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="date"
+                name="date_of_birth"
+                value={formData.date_of_birth}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
             <div>
               <label>Place of Birth</label>
-              <input type="text" name="place_of_birth" value={formData.place_of_birth} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="text"
+                name="place_of_birth"
+                value={formData.place_of_birth}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
               <label>Home Address</label>
-              <input type="text" name="home_address" value={formData.home_address} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="text"
+                name="home_address"
+                value={formData.home_address}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
             <div>
               <label>Home Town</label>
-              <input type="text" name="home_town" value={formData.home_town} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
+              <input
+                type="text"
+                name="home_town"
+                value={formData.home_town}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
             </div>
           </div>
         </fieldset>
 
-        <button type="submit" disabled={loading} style={{ padding: '12px', background: '#0070f3', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            padding: '12px',
+            background: '#0070f3',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+          }}
+        >
           {loading ? 'Submitting...' : 'Register Member'}
         </button>
       </form>
