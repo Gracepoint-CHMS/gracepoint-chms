@@ -4,14 +4,26 @@ import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 
-// Core Department to Sub-Department Mapping
-const DEPARTMENT_MAPPING = {
-  'CARE': ['Men Ministry', 'Women Ministry', 'Youth Ministry', 'Children Ministry'],
-  'WORSHIP': ['Choir / Praise Team', 'Ushering', 'Media & Tech', 'Protocol'],
-  'OUTREACH': ['Evangelism', 'Missions', 'Follow-up', 'Hospitality'],
-  'DISCIPLESHIP': ['Sunday School', 'Bible Study Lead', 'Prayer Tower'],
-  'ADMINISTRATION': ['Finance & Accounting', 'Welfare', 'Logistics & Security']
-};
+// Core Departments & Sub-Departments
+const CORE_DEPARTMENTS = [
+  'LOVE',
+  'UNITY',
+  'CARE',
+  'RESPECT'
+];
+
+const SUB_DEPARTMENTS = [
+  'General Assembly',
+  'Pastoral',
+  'Choir/ Music',
+  'Ushering',
+  'Evangelical',
+  'Men',
+  'Women',
+  'Prayer Warriors',
+  'Children',
+  'Media/ IT'
+];
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -39,11 +51,7 @@ export default function RegisterPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'coreDept') {
-      setFormData((prev) => ({ ...prev, coreDept: value, subDept: '' }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoUpload = async (e) => {
@@ -82,6 +90,7 @@ export default function RegisterPage() {
     const fullFormattedName = `${formData.title} ${formData.fullName}`.trim();
 
     try {
+      // 1. Create Supabase Auth User
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -96,6 +105,7 @@ export default function RegisterPage() {
 
       const userId = authData.user?.id;
 
+      // 2. Insert into Database Table (Primary column Naming Strategy)
       const memberPayload = {
         id: userId,
         full_name: fullFormattedName,
@@ -116,6 +126,7 @@ export default function RegisterPage() {
 
       const { error: dbError } = await supabase.from('members').insert([memberPayload]);
 
+      // Fallback for alternate schema column naming (core_dept/sub_dept)
       if (dbError) {
         const fallbackPayload = {
           id: userId,
@@ -144,12 +155,10 @@ export default function RegisterPage() {
     }
   };
 
-  const availableSubDepts = formData.coreDept ? DEPARTMENT_MAPPING[formData.coreDept] || [] : [];
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '1.5rem 0.75rem', fontFamily: 'sans-serif' }}>
       <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px', maxWidth: '640px', margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-        <h2 style={{ color: '#0f172a', marginTop: 0, textAlign: 'center', fontSize: '1.4rem' }}>Gracepoint CHMS - Registration</h2>
+        <h2 style={{ color: '#0f172a', marginTop: 0, textAlign: 'center', fontSize: '1.4rem' }}>Member Registration</h2>
         <p style={{ textAlign: 'center', color: '#64748b', marginTop: '-0.25rem', marginBottom: '1.25rem', fontSize: '0.85rem' }}>Complete all compulsory fields marked with (*)</p>
 
         {errorMsg && (
@@ -194,7 +203,7 @@ export default function RegisterPage() {
             </div>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Full Name *</label>
-              <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} required placeholder="e.g. Mathew Duut" style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
+              <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} required placeholder="Full Name" style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
             </div>
           </div>
 
@@ -234,7 +243,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Church Registration & Baptism Dates */}
+          {/* Church Dates */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Date Joined Church *</label>
@@ -246,24 +255,22 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Compulsory Dynamic Department & Sub Department */}
+          {/* Core & Sub Departments */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Core Department *</label>
               <select name="coreDept" value={formData.coreDept} onChange={handleChange} required style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }}>
                 <option value="">-- Select Core Dept --</option>
-                <option value="CARE">CARE</option>
-                <option value="WORSHIP">WORSHIP</option>
-                <option value="OUTREACH">OUTREACH</option>
-                <option value="DISCIPLESHIP">DISCIPLESHIP</option>
-                <option value="ADMINISTRATION">ADMINISTRATION</option>
+                {CORE_DEPARTMENTS.map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
               </select>
             </div>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Sub Department *</label>
-              <select name="subDept" value={formData.subDept} onChange={handleChange} required disabled={!formData.coreDept} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem', backgroundColor: formData.coreDept ? '#fff' : '#f1f5f9' }}>
+              <select name="subDept" value={formData.subDept} onChange={handleChange} required style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }}>
                 <option value="">-- Select Sub Dept --</option>
-                {availableSubDepts.map((sub, idx) => (
+                {SUB_DEPARTMENTS.map((sub, idx) => (
                   <option key={idx} value={sub}>{sub}</option>
                 ))}
               </select>
@@ -274,7 +281,7 @@ export default function RegisterPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Residential Address</label>
-              <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="e.g. Techiman, Ghana" style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
+              <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="Address" style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
             </div>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#334155' }}>Emergency Contact Phone</label>
