@@ -18,7 +18,7 @@ export default function Register() {
     coreDepartment: '',
     subDepartment: '',
     dateJoined: '',
-    baptismDate: '',
+    dateOfBaptism: '',
     emergencyName: '',
     emergencyPhone: '',
   });
@@ -68,14 +68,10 @@ export default function Register() {
         }
       }
 
-      try {
-        await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-        });
-      } catch (authErr) {
-        console.warn('Auth notice:', authErr);
-      }
+      await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+      });
 
       const { error: insertError } = await supabase.from('members').insert([
         {
@@ -84,27 +80,28 @@ export default function Register() {
           email: formData.email,
           phone: formData.phone,
           gender: formData.gender,
-          dob: formData.dob || null,
+          date_of_birth: formData.dob || null,
           marital_status: formData.maritalStatus,
           hometown: formData.hometown,
           home_address: formData.homeAddress,
           core_department: formData.coreDepartment,
           sub_department: formData.subDepartment,
           date_joined: formData.dateJoined || null,
-          baptism_date: formData.baptismDate || null,
+          date_of_baptism: formData.dateOfBaptism || null,
           emergency_name: formData.emergencyName,
           emergency_phone: formData.emergencyPhone,
           photo_url: photoUrl,
+          role: 'member',
         },
       ]);
 
       if (insertError) throw new Error(insertError.message);
 
-      setMessage({ type: 'success', text: 'Registration successful! Member record saved.' });
+      setMessage({ type: 'success', text: 'Registration successful! You can now log in directly.' });
       setFormData({
         firstName: '', lastName: '', email: '', password: '', phone: '',
         gender: '', dob: '', maritalStatus: '', hometown: '', homeAddress: '',
-        coreDepartment: '', subDepartment: '', dateJoined: '', baptismDate: '',
+        coreDepartment: '', subDepartment: '', dateJoined: '', dateOfBaptism: '',
         emergencyName: '', emergencyPhone: '',
       });
       setFile(null);
@@ -141,7 +138,6 @@ export default function Register() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {/* Name Fields */}
         <div style={gridStyle}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>First Name *</label>
@@ -153,7 +149,6 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Credentials */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
           <h3 style={{ fontSize: '0.95rem', marginBottom: '0.6rem', color: '#2b6cb0' }}>Account Credentials (For Login)</h3>
           <div style={gridStyle}>
@@ -168,7 +163,6 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Contact & Bio */}
         <div style={gridStyle}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Phone Number *</label>
@@ -212,7 +206,6 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Church Info */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
           <h3 style={{ fontSize: '0.95rem', marginBottom: '0.6rem', color: '#2b6cb0' }}>Church & Department Details</h3>
           <div style={gridStyle}>
@@ -250,11 +243,10 @@ export default function Register() {
           </div>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Baptism</label>
-            <input type="date" name="baptismDate" value={formData.baptismDate} onChange={handleChange} style={inputStyle} />
+            <input type="date" name="dateOfBaptism" value={formData.dateOfBaptism} onChange={handleChange} style={inputStyle} />
           </div>
         </div>
 
-        {/* Emergency Contact */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
           <h3 style={{ fontSize: '0.95rem', marginBottom: '0.6rem', color: '#2b6cb0' }}>Emergency Contact</h3>
           <div style={gridStyle}>
@@ -269,7 +261,6 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Passport Photo */}
         <div>
           <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Passport Photo</label>
           <input type="file" accept="image/*" onChange={handleFileChange} style={inputStyle} />
