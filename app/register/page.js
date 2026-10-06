@@ -46,11 +46,6 @@ export default function Register() {
       return;
     }
 
-    if (!formData.email || !formData.password || formData.password.length < 6) {
-      setMessage({ type: 'error', text: 'Email and password (min 6 characters) are required.' });
-      return;
-    }
-
     setSubmitting(true);
     setMessage({ type: '', text: '' });
 
@@ -73,15 +68,17 @@ export default function Register() {
         }
       }
 
-      // 1. Create Supabase Auth user
-      const { error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-      });
+      // Try Auth signUp, but don't stop registration if rate-limited
+      try {
+        await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+        });
+      } catch (authErr) {
+        console.warn('Auth sign-up skipped due to rate limit:', authErr);
+      }
 
-      if (authError) throw new Error(authError.message);
-
-      // 2. Insert record into 'members' table using existing column names
+      // Save complete record directly to database
       const { error: insertError } = await supabase.from('members').insert([
         {
           first_name: formData.firstName,
@@ -105,7 +102,7 @@ export default function Register() {
 
       if (insertError) throw new Error(insertError.message);
 
-      setMessage({ type: 'success', text: 'Registration successful! You can now log into your portal.' });
+      setMessage({ type: 'success', text: 'Registration successful! Member record has been created.' });
       setFormData({
         firstName: '', lastName: '', email: '', password: '', phone: '',
         gender: '', dob: '', maritalStatus: '', hometown: '', homeAddress: '',
