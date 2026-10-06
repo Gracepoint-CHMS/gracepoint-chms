@@ -69,21 +69,18 @@ export default function AdminDashboard() {
       const fileName = `admin-upload-${Date.now()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
+      // Uploads directly to your existing member-photos bucket
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from('member-photos')
         .upload(filePath, file);
 
       if (uploadError) {
-        if (uploadError.message.includes('Bucket not found')) {
-          alert('Please create a public storage bucket named "avatars" in your Supabase Storage settings.');
-        } else {
-          alert('Error uploading photo: ' + uploadError.message);
-        }
+        alert('Error uploading photo: ' + uploadError.message);
         return;
       }
 
       const { data: urlData } = supabase.storage
-        .from('avatars')
+        .from('member-photos')
         .getPublicUrl(filePath);
 
       setFormData((prev) => ({ ...prev, photo_url: urlData.publicUrl }));
