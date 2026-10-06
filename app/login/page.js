@@ -2,99 +2,70 @@
 
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [member, setMember] = useState(null);
-  const [error, setError] = useState('');
+  const [errorMsg, setErrorMsg] = useState(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setErrorMsg(null);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (authError) throw authError;
+      if (error) throw error;
 
-      // Fetch profile for logged in user
-      const { data: memberData, error: memberError } = await supabase
-        .from('members')
-        .select('*')
-        .eq('email', email)
-        .single();
-
-      if (memberError) throw memberError;
-
-      setMember(memberData);
+      if (data.user) {
+        router.push('/dashboard');
+      }
     } catch (err) {
-      setError(err.message || 'Invalid email or password.');
+      console.error('Login error:', err);
+      if (err.message.includes('Email not confirmed')) {
+        setErrorMsg('Email address is not confirmed. Please disable Email Confirmation in Supabase settings or check your inbox.');
+      } else {
+        setErrorMsg(err.message || 'Invalid login credentials');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setMember(null);
-  };
-
   return (
-    <div style={{ maxWidth: '500px', margin: '3rem auto', padding: '2rem', background: '#fff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-      {member ? (
-        <div>
-          <h2 style={{ textAlign: 'center', color: '#1a365d' }}>Member Portal</h2>
-          <div style={{ textAlign: 'center', margin: '1.5rem 0' }}>
-            {member.photo_url ? (
-              <img src={member.photo_url} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
-            ) : (
-              <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#cbd5e0', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>No Pic</div>
-            )}
-            <h3 style={{ marginTop: '0.8rem', color: '#2b6cb0' }}>{member.first_name} {member.last_name}</h3>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', padding: '1rem', fontFamily: 'sans-serif' }}>
+      <div style={{ backgroundColor: '#fff', padding: '2rem', borderRadius: '8px', maxWidth: '380px', width: '100%', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ color: '#0f172a', marginTop: 0, textAlign: 'center', marginBottom: '1.5rem' }}>Member Login</h2>
+
+        {errorMsg && (
+          <div style={{ backgroundColor: '#f8d7da', color: '#842029', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem', textAlign: 'center' }}>
+            {errorMsg}
           </div>
+        )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', background: '#f7fafc', padding: '1rem', borderRadius: '6px' }}>
-            <p><strong>Email:</strong> {member.email}</p>
-            <p><strong>Phone:</strong> {member.phone}</p>
-            <p><strong>Core Department:</strong> {member.core_department || 'None'}</p>
-            <p><strong>Sub Department:</strong> {member.sub_department || 'None'}</p>
-          </div>
-
-          <button onClick={handleLogout} style={{ marginTop: '1.5rem', width: '100%', padding: '0.8rem', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-            Sign Out
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-          <h2 style={{ textAlign: 'center', color: '#1a365d' }}>Member Login</h2>
-
-          {error && (
-            <div style={{ padding: '0.8rem', background: '#fed7d7', color: '#9b2c2c', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold' }}>
-              {error}
-            </div>
-          )}
-
+        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Email Address</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#334155' }}>Email Address</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="duutmathew60@gmail.com" style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Password</label>
-            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#334155' }}>Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
           </div>
 
-          <button type="submit" disabled={loading} style={{ padding: '0.8rem', background: '#2b6cb0', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
             {loading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
-      )}
+      </div>
     </div>
   );
 }
