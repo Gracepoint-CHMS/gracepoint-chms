@@ -187,9 +187,10 @@ export default function DashboardPage() {
           style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
         >
           <option value="">All Core Depts</option>
-          <option value="Love">Love</option>
-          <option value="Faith">Faith</option>
-          <option value="Hope">Hope</option>
+          <option value="LOVE">LOVE</option>
+          <option value="UNITY">UNITY</option>
+          <option value="CARE">CARE</option>
+          <option value="RESPECT">RESPECT</option>
         </select>
         <select
           value={subDeptFilter}
@@ -197,6 +198,10 @@ export default function DashboardPage() {
           style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
         >
           <option value="">All Sub Depts</option>
+          <option value="Ushering">Ushering</option>
+          <option value="Choir / Music">Choir / Music</option>
+          <option value="Prayer Warriors">Prayer Warriors</option>
+          <option value="Evangelical">Evangelical</option>
           <option value="Women Ministry">Women Ministry</option>
           <option value="Men Ministry">Men Ministry</option>
           <option value="Youth Ministry">Youth Ministry</option>
@@ -351,11 +356,27 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <label>Core Department</label>
-                    <input type="text" name="core_department" value={editFormData.core_department || ''} onChange={handleEditChange} style={{ width: '100%', padding: '0.4rem' }} />
+                    <select name="core_department" value={editFormData.core_department || ''} onChange={handleEditChange} style={{ width: '100%', padding: '0.4rem' }}>
+                      <option value="">Select Core Dept</option>
+                      <option value="LOVE">LOVE</option>
+                      <option value="UNITY">UNITY</option>
+                      <option value="CARE">CARE</option>
+                      <option value="RESPECT">RESPECT</option>
+                    </select>
                   </div>
                   <div>
                     <label>Sub Department</label>
-                    <input type="text" name="sub_department" value={editFormData.sub_department || ''} onChange={handleEditChange} style={{ width: '100%', padding: '0.4rem' }} />
+                    <select name="sub_department" value={editFormData.sub_department || ''} onChange={handleEditChange} style={{ width: '100%', padding: '0.4rem' }}>
+                      <option value="">Select Sub Dept</option>
+                      <option value="Ushering">Ushering</option>
+                      <option value="Choir / Music">Choir / Music</option>
+                      <option value="Prayer Warriors">Prayer Warriors</option>
+                      <option value="Evangelical">Evangelical</option>
+                      <option value="Women Ministry">Women Ministry</option>
+                      <option value="Men Ministry">Men Ministry</option>
+                      <option value="Youth Ministry">Youth Ministry</option>
+                      <option value="Children Ministry">Children Ministry</option>
+                    </select>
                   </div>
                 </div>
 
