@@ -8,17 +8,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCoreDept, setSelectedCoreDept] = useState('');
-  const [selectedSubDept, setSelectedSubDept] = useState('');
 
   const coreDepartments = [
-    'ushering',
-    'media',
-    'choir',
-    'protocol',
-    'children',
-    'evangelism',
-    'prayer',
-    'welfare',
+    'LOVE',
+    'UNITY',
+    'CARE',
+    'RESPECT',
   ];
 
   useEffect(() => {
@@ -55,11 +50,7 @@ export default function DashboardPage() {
       ? m.core_department === selectedCoreDept
       : true;
 
-    const matchesSub = selectedSubDept
-      ? m.sub_department === selectedSubDept
-      : true;
-
-    return matchesSearch && matchesCore && matchesSub;
+    return matchesSearch && matchesCore;
   });
 
   return (
@@ -83,7 +74,7 @@ export default function DashboardPage() {
           <option value="">All Core Departments</option>
           {coreDepartments.map((dept) => (
             <option key={dept} value={dept}>
-              {dept.charAt(0).toUpperCase() + dept.slice(1)}
+              {dept}
             </option>
           ))}
         </select>
@@ -95,7 +86,7 @@ export default function DashboardPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ backgroundColor: '#f2f2f2' }}>
+              <tr style={{ backgroundColor: '#2b6cb0', color: '#fff' }}>
                 <th style={{ padding: '10px', border: '1px solid #ddd' }}>Photo</th>
                 <th style={{ padding: '10px', border: '1px solid #ddd' }}>Name</th>
                 <th style={{ padding: '10px', border: '1px solid #ddd' }}>Phone</th>
@@ -114,9 +105,9 @@ export default function DashboardPage() {
                 filteredMembers.map((member) => (
                   <tr key={member.id}>
                     <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                      {member.passport_picture_url ? (
+                      {member.photo_url ? (
                         <img
-                          src={member.passport_picture_url}
+                          src={member.photo_url}
                           alt="Profile"
                           style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
                         />
@@ -128,7 +119,7 @@ export default function DashboardPage() {
                       {member.first_name} {member.last_name}
                     </td>
                     <td style={{ padding: '10px', border: '1px solid #ddd' }}>{member.phone}</td>
-                    <td style={{ padding: '10px', border: '1px solid #ddd' }}>{member.core_department}</td>
+                    <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold', color: '#2b6cb0' }}>{member.core_department}</td>
                     <td style={{ padding: '10px', border: '1px solid #ddd' }}>{member.sub_department || '—'}</td>
                   </tr>
                 ))
