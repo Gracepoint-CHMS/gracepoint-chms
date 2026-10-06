@@ -5,205 +5,271 @@ import { supabase } from '../../lib/supabaseClient';
 
 export default function Register() {
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
+    firstName: '',
+    lastName: '',
     phone: '',
     gender: '',
     dob: '',
-    marital_status: '',
-    residence: '',
-    occupation: '',
-    ministry: '',
+    maritalStatus: '',
+    hometown: '',
+    homeAddress: '',
+    coreDepartment: '', // Mandatory
+    subDepartment: '',  // Optional
+    dateJoined: '',
+    baptismDate: '',
+    emergencyName: '',
+    emergencyPhone: '',
   });
 
-  const [photo, setPhoto] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [file, setFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setPhoto(e.target.files[0]);
+      setFile(e.target.files[0]);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setMessage('');
+
+    if (!formData.coreDepartment) {
+      setMessage({ type: 'error', text: 'Core Department is required. Please select one.' });
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage({ type: '', text: '' });
 
     try {
-      let photoUrl = null;
+      let photoUrl = '';
 
-      if (photo) {
-        const fileExt = photo.name.split('.').pop();
+      if (file) {
+        const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('member-photos')
-          .upload(fileName, photo);
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('passport-photos')
+          .upload(fileName, file);
 
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from('member-photos')
-          .getPublicUrl(fileName);
-
-        photoUrl = publicUrlData.publicUrl;
+        if (uploadError) {
+          console.warn('Photo upload error:', uploadError.message);
+        } else if (uploadData) {
+          const { data: publicUrlData } = supabase.storage
+            .from('passport-photos')
+            .getPublicUrl(fileName);
+          photoUrl = publicUrlData?.publicUrl || '';
+        }
       }
 
       const { error: insertError } = await supabase.from('members').insert([
         {
-          ...formData,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone: formData.phone,
+          gender: formData.gender,
+          dob: formData.dob,
+          marital_status: formData.maritalStatus,
+          hometown: formData.hometown,
+          home_address: formData.homeAddress,
+          core_department: formData.coreDepartment,
+          sub_department: formData.subDepartment,
+          date_joined: formData.dateJoined,
+          baptism_date: formData.baptismDate,
+          emergency_name: formData.emergencyName,
+          emergency_phone: formData.emergencyPhone,
           photo_url: photoUrl,
         },
       ]);
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
 
-      setMessage('Registration successful!');
+      setMessage({ type: 'success', text: 'Member registered successfully!' });
       setFormData({
-        first_name: '',
-        last_name: '',
+        firstName: '',
+        lastName: '',
         phone: '',
         gender: '',
         dob: '',
-        marital_status: '',
-        residence: '',
-        occupation: '',
-        ministry: '',
+        maritalStatus: '',
+        hometown: '',
+        homeAddress: '',
+        coreDepartment: '',
+        subDepartment: '',
+        dateJoined: '',
+        baptismDate: '',
+        emergencyName: '',
+        emergencyPhone: '',
       });
-      setPhoto(null);
+      setFile(null);
     } catch (err) {
-      setMessage(`Error: ${err.message}`);
+      setMessage({ type: 'error', text: `Error: ${err.message}` });
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '2rem auto', padding: '1rem' }}>
-      <h2>Member Registration</h2>
-      {message && <p>{message}</p>}
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
-        <div>
-          <label>First Name</label>
-          <input
-            type="text"
-            name="first_name"
-            value={formData.first_name}
-            onChange={handleChange}
-            required
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
+    <div style={{ maxWidth: '650px', margin: '2rem auto', padding: '2rem', background: '#ffffff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+      <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#1a365d' }}>Member Registration</h2>
+
+      {message.text && (
+        <div
+          style={{
+            padding: '0.8rem',
+            marginBottom: '1.2rem',
+            borderRadius: '6px',
+            backgroundColor: message.type === 'error' ? '#fed7d7' : '#c6f6d5',
+            color: message.type === 'error' ? '#9b2c2c' : '#22543d',
+            textAlign: 'center',
+            fontWeight: '600',
+          }}
+        >
+          {message.text}
         </div>
-        <div>
-          <label>Last Name</label>
-          <input
-            type="text"
-            name="last_name"
-            value={formData.last_name}
-            onChange={handleChange}
-            required
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
+      )}
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>First Name *</label>
+            <input type="text" name="firstName" required value={formData.firstName} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Last Name *</label>
+            <input type="text" name="lastName" required value={formData.lastName} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
         </div>
-        <div>
-          <label>Phone Number</label>
-          <input
-            type="tel"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            required
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Phone Number *</label>
+            <input type="tel" name="phone" required value={formData.phone} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Gender *</label>
+            <select name="gender" required value={formData.gender} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label>Passport Photo</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Birth</label>
+            <input type="date" name="dob" value={formData.dob} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Marital Status</label>
+            <select name="maritalStatus" value={formData.maritalStatus} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
+              <option value="">Select Status</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Widowed">Widowed</option>
+              <option value="Divorced">Divorced</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label>Gender</label>
-          <select
-            name="gender"
-            value={formData.gender}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          >
-            <option value="">Select Gender</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-          </select>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Hometown</label>
+            <input type="text" name="hometown" value={formData.hometown} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Home Address</label>
+            <input type="text" name="homeAddress" value={formData.homeAddress} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
         </div>
-        <div>
-          <label>Date of Birth</label>
-          <input
-            type="date"
-            name="dob"
-            value={formData.dob}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
+
+        {/* Church & Departments */}
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', marginTop: '0.5rem' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: '#2b6cb0' }}>Church & Department Details</h3>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Core Department * (Compulsory)</label>
+              <select name="coreDepartment" required value={formData.coreDepartment} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '2px solid #3182ce', borderRadius: '4px', background: '#ebf8ff' }}>
+                <option value="">-- Select Core Dept --</option>
+                <option value="LOVE">LOVE</option>
+                <option value="UNITY">UNITY</option>
+                <option value="CARE">CARE</option>
+                <option value="RESPECT">RESPECT</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Sub Department (Optional)</label>
+              <select name="subDepartment" value={formData.subDepartment} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <option value="">-- Select Sub Dept --</option>
+                <option value="Ushering">Ushering</option>
+                <option value="Choir / Music">Choir / Music</option>
+                <option value="Prayer Warriors">Prayer Warriors</option>
+                <option value="Evangelical">Evangelical</option>
+                <option value="Women Ministry">Women Ministry</option>
+                <option value="Men Ministry">Men Ministry</option>
+                <option value="Youth Ministry">Youth Ministry</option>
+                <option value="Children Ministry">Children Ministry</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date Joined Church</label>
+              <input type="date" name="dateJoined" value={formData.dateJoined} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Baptism</label>
+              <input type="date" name="baptismDate" value={formData.baptismDate} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+          </div>
         </div>
-        <div>
-          <label>Marital Status</label>
-          <select
-            name="marital_status"
-            value={formData.marital_status}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          >
-            <option value="">Select Status</option>
-            <option value="Single">Single</option>
-            <option value="Married">Married</option>
-            <option value="Other">Other</option>
-          </select>
+
+        {/* Emergency & Photo */}
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', marginTop: '0.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Name</label>
+              <input type="text" name="emergencyName" value={formData.emergencyName} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Phone</label>
+              <input type="tel" name="emergencyPhone" value={formData.emergencyPhone} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Passport Photo</label>
+            <input type="file" accept="image/*" onChange={handleFileChange} style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
         </div>
-        <div>
-          <label>Place of Residence</label>
-          <input
-            type="text"
-            name="residence"
-            value={formData.residence}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
-        </div>
-        <div>
-          <label>Occupation</label>
-          <input
-            type="text"
-            name="occupation"
-            value={formData.occupation}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
-        </div>
-        <div>
-          <label>Ministry / Department</label>
-          <input
-            type="text"
-            name="ministry"
-            value={formData.ministry}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem' }}
-          />
-        </div>
+
         <button
           type="submit"
-          disabled={loading}
-          style={{ padding: '0.75rem', cursor: 'pointer' }}
+          disabled={submitting}
+          style={{
+            marginTop: '1rem',
+            padding: '0.8rem',
+            fontSize: '1rem',
+            fontWeight: 'bold',
+            color: '#fff',
+            backgroundColor: submitting ? '#a0aec0' : '#2b6cb0',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: submitting ? 'not-allowed' : 'pointer',
+          }}
         >
-          {loading ? 'Submitting...' : 'Register Member'}
+          {submitting ? 'Registering Member...' : 'Register Member'}
         </button>
       </form>
     </div>
