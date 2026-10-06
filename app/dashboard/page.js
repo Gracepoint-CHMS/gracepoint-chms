@@ -49,11 +49,11 @@ export default function AdminDashboard() {
   const handleEditClick = (member) => {
     setEditingMember(member);
     setFormData({
-      name: member.name || '',
+      name: member.name || member.full_name || '',
       phone: member.phone || '',
       email: member.email || '',
-      core_dept: member.core_dept || '',
-      sub_dept: member.sub_dept || '',
+      core_dept: member.core_dept || member.core_department || '',
+      sub_dept: member.sub_dept || member.sub_department || '',
       role: member.role || 'member',
       photo_url: member.photo_url || '',
     });
@@ -96,10 +96,13 @@ export default function AdminDashboard() {
         .from('members')
         .update({
           name: formData.name,
+          full_name: formData.name,
           phone: formData.phone,
           email: formData.email,
           core_dept: formData.core_dept,
+          core_department: formData.core_dept,
           sub_dept: formData.sub_dept,
+          sub_department: formData.sub_dept,
           role: formData.role,
           photo_url: formData.photo_url,
         })
@@ -120,8 +123,11 @@ export default function AdminDashboard() {
   const handleDeleteMember = async (id) => {
     if (!confirm('Are you sure you want to delete this member?')) return;
     const { error } = await supabase.from('members').delete().eq('id', id);
-    if (!error) fetchMembers();
-    else alert('Error deleting member: ' + error.message);
+    if (!error) {
+      fetchMembers();
+    } else {
+      alert('Error deleting member: ' + error.message);
+    }
   };
 
   const handleSignOut = async () => {
@@ -130,11 +136,16 @@ export default function AdminDashboard() {
   };
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center', fontSize: '1.1rem' }}>Loading dashboard directory...</div>;
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', fontSize: '1.1rem', color: '#334155' }}>
+        Loading directory...
+      </div>
+    );
   }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
+      {/* Top Header */}
       <nav style={{ backgroundColor: '#0d6efd', padding: '1rem 2rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Gracepoint CHMS - Admin Dashboard</h1>
         <button 
@@ -145,6 +156,7 @@ export default function AdminDashboard() {
         </button>
       </nav>
 
+      {/* Main Container */}
       <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
         <h2 style={{ color: '#0f172a', marginBottom: '1rem' }}>Church Members Directory</h2>
 
@@ -154,8 +166,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Scrollable Table Container */}
         <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '2px solid #e2e8f0', color: '#334155' }}>
                 <th style={{ padding: '0.75rem' }}>Photo</th>
@@ -178,30 +191,61 @@ export default function AdminDashboard() {
               ) : (
                 members.map((member) => (
                   <tr key={member.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    {/* Photo Column */}
                     <td style={{ padding: '0.75rem' }}>
                       {member.photo_url ? (
-                        <img src={member.photo_url} alt={member.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+                        <img src={member.photo_url} alt={member.name || 'Member'} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
                       ) : (
                         <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: '#475569', fontWeight: 'bold' }}>
                           No Pic
                         </div>
                       )}
                     </td>
-                    <td style={{ padding: '0.75rem', fontWeight: 'bold', color: '#0f172a' }}>{member.name || 'N/A'}</td>
-                    <td style={{ padding: '0.75rem', color: '#475569' }}>{member.email || 'N/A'}</td>
-                    <td style={{ padding: '0.75rem' }}>{member.phone || 'N/A'}</td>
-                    <td style={{ padding: '0.75rem', color: '#0d6efd', fontWeight: '600' }}>{member.core_dept || 'N/A'}</td>
-                    <td style={{ padding: '0.75rem' }}>{member.sub_dept || 'N/A'}</td>
+
+                    {/* Name Column */}
+                    <td style={{ padding: '0.75rem', fontWeight: 'bold', color: '#0f172a' }}>
+                      {member.name || member.full_name || 'N/A'}
+                    </td>
+
+                    {/* Email Column */}
+                    <td style={{ padding: '0.75rem', color: '#475569' }}>
+                      {member.email || 'N/A'}
+                    </td>
+
+                    {/* Phone Column */}
+                    <td style={{ padding: '0.75rem' }}>
+                      {member.phone || 'N/A'}
+                    </td>
+
+                    {/* Core Dept Column */}
+                    <td style={{ padding: '0.75rem', color: '#0d6efd', fontWeight: '600' }}>
+                      {member.core_dept || member.core_department || 'N/A'}
+                    </td>
+
+                    {/* Sub Dept Column */}
+                    <td style={{ padding: '0.75rem' }}>
+                      {member.sub_dept || member.sub_department || 'N/A'}
+                    </td>
+
+                    {/* Role Column */}
                     <td style={{ padding: '0.75rem' }}>
                       <span style={{ backgroundColor: '#e2e8f0', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', textTransform: 'capitalize' }}>
                         {member.role || 'member'}
                       </span>
                     </td>
+
+                    {/* Actions Column */}
                     <td style={{ padding: '0.75rem' }}>
-                      <button onClick={() => handleEditClick(member)} style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.4rem', fontSize: '0.85rem' }}>
+                      <button 
+                        onClick={() => handleEditClick(member)} 
+                        style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.4rem', fontSize: '0.85rem' }}
+                      >
                         Edit
                       </button>
-                      <button onClick={() => handleDeleteMember(member.id)} style={{ backgroundColor: '#dc3545', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                      <button 
+                        onClick={() => handleDeleteMember(member.id)} 
+                        style={{ backgroundColor: '#dc3545', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
+                      >
                         Delete
                       </button>
                     </td>
@@ -213,10 +257,11 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Edit Member Modal */}
       {editingMember && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', width: '90%', maxWidth: '480px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ marginTop: 0, color: '#0f172a' }}>Edit Member Details & Photo</h3>
+            <h3 style={{ marginTop: 0, color: '#0f172a' }}>Edit Member Details</h3>
             <form onSubmit={handleSaveMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
                 {formData.photo_url ? (
