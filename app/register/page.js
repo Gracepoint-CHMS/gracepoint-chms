@@ -18,10 +18,10 @@ const SUB_DEPARTMENTS = [
   'Choir/ Music',
   'Ushering',
   'Evangelical',
-  'Men',
-  'Women',
+  'Men ministry',
+  'Women ministry',
   'Prayer Warriors',
-  'Children',
+  'Children ministry',
   'Media/ IT'
 ];
 
@@ -90,7 +90,6 @@ export default function RegisterPage() {
     const fullFormattedName = `${formData.title} ${formData.fullName}`.trim();
 
     try {
-      // 1. Create Supabase Auth User
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -105,7 +104,6 @@ export default function RegisterPage() {
 
       const userId = authData.user?.id;
 
-      // 2. Insert into Database Table (Primary column Naming Strategy)
       const memberPayload = {
         id: userId,
         full_name: fullFormattedName,
@@ -126,7 +124,6 @@ export default function RegisterPage() {
 
       const { error: dbError } = await supabase.from('members').insert([memberPayload]);
 
-      // Fallback for alternate schema column naming (core_dept/sub_dept)
       if (dbError) {
         const fallbackPayload = {
           id: userId,
