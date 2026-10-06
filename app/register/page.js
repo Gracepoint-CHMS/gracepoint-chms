@@ -73,7 +73,7 @@ export default function Register() {
         }
       }
 
-      // Create Supabase Auth account
+      // Create Supabase Auth account for Login
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -83,7 +83,7 @@ export default function Register() {
 
       const authUserId = authData.user ? authData.user.id : null;
 
-      // Save member profile into 'members' table
+      // Save complete record into database
       const { error: insertError } = await supabase.from('members').insert([
         {
           auth_id: authUserId,
@@ -108,7 +108,7 @@ export default function Register() {
 
       if (insertError) throw new Error(insertError.message);
 
-      setMessage({ type: 'success', text: 'Registration successful! You can now log in.' });
+      setMessage({ type: 'success', text: 'Registration successful! You can now log into your portal.' });
       setFormData({
         firstName: '', lastName: '', email: '', password: '', phone: '',
         gender: '', dob: '', maritalStatus: '', hometown: '', homeAddress: '',
@@ -124,7 +124,7 @@ export default function Register() {
   };
 
   return (
-    <div style={{ maxWidth: '650px', margin: '2rem auto', padding: '2rem', background: '#fff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+    <div style={{ maxWidth: '700px', margin: '2rem auto', padding: '2rem', background: '#fff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
       <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#1a365d' }}>Member Registration</h2>
 
       {message.text && (
@@ -134,6 +134,7 @@ export default function Register() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+        {/* Personal Details */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>First Name *</label>
@@ -147,7 +148,7 @@ export default function Register() {
 
         {/* Account Credentials */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Account Credentials</h3>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Account Credentials (For Login)</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Email Address *</label>
@@ -160,6 +161,7 @@ export default function Register() {
           </div>
         </div>
 
+        {/* Contact & Bio */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Phone Number *</label>
@@ -175,6 +177,35 @@ export default function Register() {
           </div>
         </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Birth</label>
+            <input type="date" name="dob" value={formData.dob} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Marital Status</label>
+            <select name="maritalStatus" value={formData.maritalStatus} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
+              <option value="">Select Status</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Divorced">Divorced</option>
+              <option value="Widowed">Widowed</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Hometown</label>
+            <input type="text" name="hometown" value={formData.hometown} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Home Address</label>
+            <input type="text" name="homeAddress" value={formData.homeAddress} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+        </div>
+
+        {/* Church & Department Details */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
           <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Church & Department Details</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -205,6 +236,33 @@ export default function Register() {
           </div>
         </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date Joined</label>
+            <input type="date" name="dateJoined" value={formData.dateJoined} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Baptism</label>
+            <input type="date" name="baptismDate" value={formData.baptismDate} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+          </div>
+        </div>
+
+        {/* Emergency Contact */}
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Emergency Contact</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Name</label>
+              <input type="text" name="emergencyName" value={formData.emergencyName} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Phone</label>
+              <input type="tel" name="emergencyPhone" value={formData.emergencyPhone} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Photo Upload */}
         <div>
           <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Passport Photo</label>
           <input type="file" accept="image/*" onChange={handleFileChange} style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }} />
