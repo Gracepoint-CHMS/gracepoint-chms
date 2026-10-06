@@ -1,18 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-// Safe relative import to prevent Vercel module resolution errors
-let supabase;
-try {
-  supabase = require('../../lib/supabaseClient').supabase;
-} catch (e1) {
-  try {
-    supabase = require('../../lib/supabase').supabase;
-  } catch (e2) {
-    supabase = require('@/lib/supabaseClient').supabase;
-  }
-}
+import { supabase } from '../../lib/supabaseClient';
 
 export default function AdminDashboard() {
   const [members, setMembers] = useState([]);
@@ -135,7 +124,6 @@ export default function AdminDashboard() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
-      {/* Header Navigation */}
       <nav style={{ backgroundColor: '#0d6efd', padding: '1rem 2rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Gracepoint CHMS - Admin Dashboard</h1>
         <button 
@@ -149,7 +137,6 @@ export default function AdminDashboard() {
       <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
         <h2 style={{ color: '#0f172a', marginBottom: '1rem' }}>Church Members Directory</h2>
 
-        {/* Members Table */}
         <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
@@ -201,14 +188,11 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Admin Edit Modal */}
       {editingMember && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', width: '90%', maxWidth: '480px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             <h3 style={{ marginTop: 0, color: '#0f172a' }}>Edit Member Details & Photo</h3>
             <form onSubmit={handleSaveMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
-              
-              {/* Photo Upload Box */}
               <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
                 {formData.photo_url ? (
                   <img src={formData.photo_url} alt="Preview" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0d6efd', margin: '0 auto 0.5rem auto' }} />
