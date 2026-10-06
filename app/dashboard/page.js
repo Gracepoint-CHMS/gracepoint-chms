@@ -73,7 +73,14 @@ export default function AdminDashboard() {
         .from('avatars')
         .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        if (uploadError.message.includes('Bucket not found')) {
+          alert('Please create a public storage bucket named "avatars" in your Supabase Storage settings.');
+        } else {
+          alert('Error uploading photo: ' + uploadError.message);
+        }
+        return;
+      }
 
       const { data: urlData } = supabase.storage
         .from('avatars')
@@ -91,7 +98,6 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!editingMember) return;
 
-    // Build payload using actual column names present in Supabase table
     const updateData = {
       phone: formData.phone,
       email: formData.email,
