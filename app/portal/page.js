@@ -2,18 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-
-// Safe relative import to prevent Vercel module resolution errors
-let supabase;
-try {
-  supabase = require('../../lib/supabaseClient').supabase;
-} catch (e1) {
-  try {
-    supabase = require('../../lib/supabase').supabase;
-  } catch (e2) {
-    supabase = require('@/lib/supabaseClient').supabase;
-  }
-}
+import { supabase } from '../../lib/supabaseClient';
 
 export default function MemberPortalPage() {
   const [member, setMember] = useState(null);
@@ -50,7 +39,7 @@ export default function MemberPortalPage() {
 
       setUploading(true);
       const fileExt = file.name.split('.').pop();
-      const fileName = `${member.id}-${Date.now()}.${fileExt}`;
+      const fileName = `${member?.id || 'user'}-${Date.now()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -108,11 +97,11 @@ export default function MemberPortalPage() {
         </div>
       </nav>
 
-      {/* Member Profile Card */}
+      {/* Profile Card */}
       <div style={{ maxWidth: '420px', margin: '2rem auto', padding: '1.5rem', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' }}>
         <h2 style={{ color: '#1a365d', marginBottom: '1.5rem' }}>Member Portal</h2>
 
-        {/* Profile Photo Display & Upload Controls */}
+        {/* Photo Box & Avatar Upload */}
         <div style={{ position: 'relative', width: '110px', height: '110px', margin: '0 auto 1rem auto' }}>
           {member?.photo_url ? (
             <img 
@@ -134,7 +123,7 @@ export default function MemberPortalPage() {
 
         <h3 style={{ color: '#0f172a', marginBottom: '1.2rem', marginTop: '0.5rem' }}>{member?.name || 'Member'}</h3>
 
-        {/* Member Profile Details */}
+        {/* Profile Details */}
         <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '6px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.95rem' }}>
           <div><strong>Email:</strong> {member?.email}</div>
           <div><strong>Phone:</strong> {member?.phone || 'N/A'}</div>
@@ -143,7 +132,6 @@ export default function MemberPortalPage() {
           <div><strong>Role:</strong> <span style={{ textTransform: 'capitalize', fontWeight: 'bold', color: '#0d6efd' }}>{member?.role || 'member'}</span></div>
         </div>
 
-        {/* Sign Out Button */}
         <button 
           onClick={handleSignOut} 
           style={{ width: '100%', backgroundColor: '#dc3545', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', marginTop: '1.5rem' }}
