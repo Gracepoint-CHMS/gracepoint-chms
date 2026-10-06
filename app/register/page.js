@@ -7,6 +7,8 @@ export default function Register() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    email: '',
+    password: '',
     phone: '',
     gender: '',
     dob: '',
@@ -44,12 +46,18 @@ export default function Register() {
       return;
     }
 
+    if (!formData.password || formData.password.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters long.' });
+      return;
+    }
+
     setSubmitting(true);
     setMessage({ type: '', text: '' });
 
     try {
       let photoUrl = '';
 
+      // 1. Upload Photo if provided
       if (file) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -68,10 +76,28 @@ export default function Register() {
         }
       }
 
+      // 2. Sign up user in Supabase Auth
+      let authUserId = null;
+      if (formData.email) {
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (authError) {
+          console.warn('Auth creation warning:', authError.message);
+        } else if (authData.user) {
+          authUserId = authData.user.id;
+        }
+      }
+
+      // 3. Insert record into members table
       const { error: insertError } = await supabase.from('members').insert([
         {
+          auth_id: authUserId,
           first_name: formData.firstName,
           last_name: formData.lastName,
+          email: formData.email,
           phone: formData.phone,
           gender: formData.gender,
           dob: formData.dob,
@@ -96,6 +122,8 @@ export default function Register() {
       setFormData({
         firstName: '',
         lastName: '',
+        email: '',
+        password: '',
         phone: '',
         gender: '',
         dob: '',
@@ -138,6 +166,7 @@ export default function Register() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+        {/* Name Fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>First Name *</label>
@@ -149,6 +178,22 @@ export default function Register() {
           </div>
         </div>
 
+        {/* Account Credentials Section */}
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Account Credentials</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Email Address *</label>
+              <input type="email" name="email" required value={formData.email} onChange={handleChange} placeholder="member@email.com" style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Password *</label>
+              <input type="password" name="password" required minLength={6} value={formData.password} onChange={handleChange} placeholder="At least 6 characters" style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Contact & Personal */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Phone Number *</label>
