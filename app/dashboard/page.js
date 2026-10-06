@@ -16,6 +16,7 @@ export default function DashboardPage() {
     coreDept: '',
     subDept: '',
     role: '',
+    photo: '',
   });
   const [newPassword, setNewPassword] = useState('');
 
@@ -41,13 +42,37 @@ export default function DashboardPage() {
       name: member.full_name || member.name || '',
       phone: member.phone || '',
       email: member.email || '',
-      coreDept: member.core_dept || member.coreDept || '',
+      coreDept: member.core_dept || member.coreDept || member.department || '',
       subDept: member.sub_dept || member.subDept || '',
-      role: member.role || 'Member',
+      role: member.role || 'member',
+      photo: member.photo || member.photo_url || '',
     });
     setNewPassword('');
     setErrorMsg('');
     setIsEditModalOpen(true);
+  };
+
+  const handleDeleteClick = async (member) => {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete ${member.full_name || member.name || member.email}?`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const res = await fetch(`/api/admin/members/${member.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        alert(`Error deleting member: ${errData.error || 'Failed to delete'}`);
+        return;
+      }
+
+      fetchMembers();
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    }
   };
 
   const handleCloseModal = () => {
@@ -77,7 +102,7 @@ export default function DashboardPage() {
 
       if (!updateRes.ok) {
         const errData = await updateRes.json();
-        throw new Error(errData.message || 'Failed to update member profile.');
+        throw new Error(errData.error || 'Failed to update member profile.');
       }
 
       if (newPassword.trim().length > 0) {
@@ -129,33 +154,47 @@ export default function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {members.map((m) => (
-              <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '12px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#cbd5e1', overflow: 'hidden' }}>
-                    {m.photo ? <img src={m.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                  </div>
-                </td>
-                <td style={{ padding: '12px', fontWeight: 'bold' }}>{m.full_name || m.name || '—'}</td>
-                <td style={{ padding: '12px' }}>{m.email}</td>
-                <td style={{ padding: '12px' }}>{m.phone || '—'}</td>
-                <td style={{ padding: '12px' }}>{m.core_dept || m.coreDept || '—'}</td>
-                <td style={{ padding: '12px' }}>{m.sub_dept || m.subDept || '—'}</td>
-                <td style={{ padding: '12px' }}>
-                  <span style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>
-                    {m.role || 'Member'}
-                  </span>
-                </td>
-                <td style={{ padding: '12px', textAlign: 'right' }}>
-                  <button
-                    onClick={() => handleEditClick(m)}
-                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {members.map((m) => {
+              const photoUrl = m.photo || m.photo_url;
+              const coreDepartment = m.core_dept || m.coreDept || m.department || '—';
+              const subDepartment = m.sub_dept || m.subDept || '—';
+
+              return (
+                <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '12px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#cbd5e1', overflow: 'hidden' }}>
+                      {photoUrl ? <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                    </div>
+                  </td>
+                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{m.full_name || m.name || '—'}</td>
+                  <td style={{ padding: '12px' }}>{m.email}</td>
+                  <td style={{ padding: '12px' }}>{m.phone || '—'}</td>
+                  <td style={{ padding: '12px' }}>{coreDepartment}</td>
+                  <td style={{ padding: '12px' }}>{subDepartment}</td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>
+                      {m.role || 'member'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => handleEditClick(m)}
+                        style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteClick(m)}
+                        style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -184,6 +223,18 @@ export default function DashboardPage() {
                   value={formData.name}
                   onChange={handleFormChange}
                   required
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Photo Image URL</label>
+                <input
+                  type="text"
+                  name="photo"
+                  placeholder="https://..."
+                  value={formData.photo}
+                  onChange={handleFormChange}
                   style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
@@ -241,8 +292,8 @@ export default function DashboardPage() {
                   onChange={handleFormChange}
                   style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', background: '#fff', boxSizing: 'border-box' }}
                 >
-                  <option value="Member">Member</option>
-                  <option value="Super_admin">Super_admin</option>
+                  <option value="member">member</option>
+                  <option value="super_admin">super_admin</option>
                 </select>
               </div>
 
