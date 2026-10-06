@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 
-// Mapping Core Departments to their respective Sub-Departments
+// Core Department to Sub-Department Mapping
 const DEPARTMENT_MAPPING = {
   'CARE': ['Men Ministry', 'Women Ministry', 'Youth Ministry', 'Children Ministry'],
   'WORSHIP': ['Choir / Praise Team', 'Ushering', 'Media & Tech', 'Protocol'],
@@ -40,7 +40,6 @@ export default function RegisterPage() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'coreDept') {
-      // Automatically reset subDept when coreDept changes
       setFormData((prev) => ({ ...prev, coreDept: value, subDept: '' }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
@@ -83,7 +82,6 @@ export default function RegisterPage() {
     const fullFormattedName = `${formData.title} ${formData.fullName}`.trim();
 
     try {
-      // 1. Sign up user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -98,7 +96,6 @@ export default function RegisterPage() {
 
       const userId = authData.user?.id;
 
-      // 2. Prepare database payload with baptism and joined dates
       const memberPayload = {
         id: userId,
         full_name: fullFormattedName,
@@ -120,7 +117,6 @@ export default function RegisterPage() {
       const { error: dbError } = await supabase.from('members').insert([memberPayload]);
 
       if (dbError) {
-        // Fallback check if alternative column names are used in database
         const fallbackPayload = {
           id: userId,
           name: fullFormattedName,
@@ -292,4 +288,11 @@ export default function RegisterPage() {
             <input type="password" name="password" value={formData.password} onChange={handleChange} required placeholder="••••••••" style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
           </div>
 
-          <button type="submit" disabled={loading || uploadingPhoto} style={{ backgroundColor: '#0d6efd', color: '#fff',
+          <button type="submit" disabled={loading || uploadingPhoto} style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.85rem', borderRadius: '6px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+            {loading ? 'Submitting Registration...' : 'Complete Member Registration'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
