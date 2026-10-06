@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabaseClient';
 export default function AdminDashboard() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [editingMember, setEditingMember] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,13 +25,22 @@ export default function AdminDashboard() {
 
   const fetchMembers = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
-      const { data, error } = await supabase.from('members').select('*').order('name');
-      if (!error && data) {
-        setMembers(data);
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) {
+        console.error('Supabase fetch error:', error);
+        setFetchError(error.message);
+      } else {
+        setMembers(data || []);
       }
     } catch (err) {
-      console.error('Error fetching members:', err);
+      console.error('Unexpected error:', err);
+      setFetchError(err.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -111,6 +121,7 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this member?')) return;
     const { error } = await supabase.from('members').delete().eq('id', id);
     if (!error) fetchMembers();
+    else alert('Error deleting member: ' + error.message);
   };
 
   const handleSignOut = async () => {
@@ -119,7 +130,7 @@ export default function AdminDashboard() {
   };
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading dashboard...</div>;
+    return <div style={{ padding: '2rem', textAlign: 'center', fontSize: '1.1rem' }}>Loading dashboard directory...</div>;
   }
 
   return (
@@ -137,6 +148,12 @@ export default function AdminDashboard() {
       <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
         <h2 style={{ color: '#0f172a', marginBottom: '1rem' }}>Church Members Directory</h2>
 
+        {fetchError && (
+          <div style={{ backgroundColor: '#f8d7da', color: '#842029', padding: '1rem', borderRadius: '6px', marginBottom: '1rem', border: '1px solid #f5c2c7' }}>
+            <strong>Database Error:</strong> {fetchError}
+          </div>
+        )}
+
         <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
@@ -152,37 +169,45 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {members.map((member) => (
-                <tr key={member.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '0.75rem' }}>
-                    {member.photo_url ? (
-                      <img src={member.photo_url} alt={member.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: '#475569', fontWeight: 'bold' }}>
-                        No Pic
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '0.75rem', fontWeight: 'bold', color: '#0f172a' }}>{member.name}</td>
-                  <td style={{ padding: '0.75rem', color: '#475569' }}>{member.email}</td>
-                  <td style={{ padding: '0.75rem' }}>{member.phone || 'N/A'}</td>
-                  <td style={{ padding: '0.75rem', color: '#0d6efd', fontWeight: '600' }}>{member.core_dept || 'N/A'}</td>
-                  <td style={{ padding: '0.75rem' }}>{member.sub_dept || 'N/A'}</td>
-                  <td style={{ padding: '0.75rem' }}>
-                    <span style={{ backgroundColor: '#e2e8f0', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', textTransform: 'capitalize' }}>
-                      {member.role || 'member'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem' }}>
-                    <button onClick={() => handleEditClick(member)} style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.4rem', fontSize: '0.85rem' }}>
-                      Edit
-                    </button>
-                    <button onClick={() => handleDeleteMember(member.id)} style={{ backgroundColor: '#dc3545', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                      Delete
-                    </button>
+              {members.length === 0 ? (
+                <tr>
+                  <td colSpan="8" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                    No member records found in the database.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                members.map((member) => (
+                  <tr key={member.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '0.75rem' }}>
+                      {member.photo_url ? (
+                        <img src={member.photo_url} alt={member.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: '#475569', fontWeight: 'bold' }}>
+                          No Pic
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.75rem', fontWeight: 'bold', color: '#0f172a' }}>{member.name || 'N/A'}</td>
+                    <td style={{ padding: '0.75rem', color: '#475569' }}>{member.email || 'N/A'}</td>
+                    <td style={{ padding: '0.75rem' }}>{member.phone || 'N/A'}</td>
+                    <td style={{ padding: '0.75rem', color: '#0d6efd', fontWeight: '600' }}>{member.core_dept || 'N/A'}</td>
+                    <td style={{ padding: '0.75rem' }}>{member.sub_dept || 'N/A'}</td>
+                    <td style={{ padding: '0.75rem' }}>
+                      <span style={{ backgroundColor: '#e2e8f0', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', textTransform: 'capitalize' }}>
+                        {member.role || 'member'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem' }}>
+                      <button onClick={() => handleEditClick(member)} style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.4rem', fontSize: '0.85rem' }}>
+                        Edit
+                      </button>
+                      <button onClick={() => handleDeleteMember(member.id)} style={{ backgroundColor: '#dc3545', color: '#fff', border: 'none', padding: '0.35rem 0.7rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
