@@ -8,29 +8,16 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, padding: 0, fontFamily: 'sans-serif' }}>
-        <header
-          style={{
-            backgroundColor: '#0070f3',
-            padding: '12px 24px',
-            display: 'flex',
-            justify: 'space-between',
-            alignItems: 'center',
-            color: '#fff',
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: '20px' }}>Gracepoint CHMS</h1>
-          <nav style={{ display: 'flex', gap: '16px' }}>
-            <Link href="/register" style={{ color: '#fff', textDecoration: 'none', fontWeight: 'bold' }}>
-              Register
-            </Link>
-            <Link href="/dashboard" style={{ color: '#fff', textDecoration: 'none', fontWeight: 'bold' }}>
-              Dashboard
-            </Link>
+      <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif', backgroundColor: '#f4f6f8' }}>
+        <header style={{ background: '#0052cc', padding: '1rem 2rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 style={{ margin: 0, fontSize: '1.25rem' }}>Gracepoint CHMS</h1>
+          <nav style={{ display: 'flex', gap: '1.2rem' }}>
+            <Link href="/register" style={{ color: '#fff', textDecoration: 'none', fontWeight: 'bold' }}>Register</Link>
+            <Link href="/login" style={{ color: '#fff', textDecoration: 'none', fontWeight: 'bold' }}>Login</Link>
+            <Link href="/dashboard" style={{ color: '#fff', textDecoration: 'none', fontWeight: 'bold' }}>Dashboard</Link>
           </nav>
         </header>
-
-        <main>{children}</main>
+        <main style={{ padding: '1rem' }}>{children}</main>
       </body>
     </html>
   );
