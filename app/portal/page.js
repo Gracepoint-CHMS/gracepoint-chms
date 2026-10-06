@@ -2,7 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+
+// Safe relative import to prevent Vercel module resolution errors
+let supabase;
+try {
+  supabase = require('../../lib/supabaseClient').supabase;
+} catch (e1) {
+  try {
+    supabase = require('../../lib/supabase').supabase;
+  } catch (e2) {
+    supabase = require('@/lib/supabaseClient').supabase;
+  }
+}
 
 export default function MemberPortalPage() {
   const [member, setMember] = useState(null);
@@ -32,7 +43,6 @@ export default function MemberPortalPage() {
     }
   };
 
-  // Photo Upload Handler
   const handlePhotoUpload = async (e) => {
     try {
       const file = e.target.files[0];
@@ -43,21 +53,18 @@ export default function MemberPortalPage() {
       const fileName = `${member.id}-${Date.now()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
-      // Upload image to Supabase Storage bucket 'avatars'
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath);
 
       const publicUrl = urlData.publicUrl;
 
-      // Update URL in database
       const { error: updateError } = await supabase
         .from('members')
         .update({ photo_url: publicUrl })
@@ -85,7 +92,7 @@ export default function MemberPortalPage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f4f6f9', fontFamily: 'sans-serif' }}>
-      {/* 1. Header Navigation */}
+      {/* Top Header Navigation */}
       <nav style={{ backgroundColor: '#0d6efd', padding: '1rem 2rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '1.2rem', margin: 0 }}>Gracepoint CHMS</h1>
         <div>
@@ -101,7 +108,7 @@ export default function MemberPortalPage() {
         </div>
       </nav>
 
-      {/* 2. Member Profile Card */}
+      {/* Member Profile Card */}
       <div style={{ maxWidth: '420px', margin: '2rem auto', padding: '1.5rem', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' }}>
         <h2 style={{ color: '#1a365d', marginBottom: '1.5rem' }}>Member Portal</h2>
 
@@ -111,7 +118,7 @@ export default function MemberPortalPage() {
             <img 
               src={member.photo_url} 
               alt={member?.name || 'Member Photo'} 
-              style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0d6efd' }} 
+              style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0d6efd', margin: '0 auto' }} 
             />
           ) : (
             <div style={{ width: '100px', height: '100px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155', fontWeight: 'bold', margin: '0 auto' }}>
@@ -119,8 +126,7 @@ export default function MemberPortalPage() {
             </div>
           )}
 
-          {/* Hidden File Input + Button */}
-          <label style={{ display: 'inline-block', marginTop: '0.5rem', fontSize: '0.8rem', color: '#0d6efd', cursor: 'pointer', fontWeight: 'bold' }}>
+          <label style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.8rem', color: '#0d6efd', cursor: 'pointer', fontWeight: 'bold' }}>
             {uploading ? 'Uploading...' : 'Change Photo'}
             <input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={uploading} style={{ display: 'none' }} />
           </label>
@@ -128,7 +134,7 @@ export default function MemberPortalPage() {
 
         <h3 style={{ color: '#0f172a', marginBottom: '1.2rem', marginTop: '0.5rem' }}>{member?.name || 'Member'}</h3>
 
-        {/* Profile Attributes */}
+        {/* Member Profile Details */}
         <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '6px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.95rem' }}>
           <div><strong>Email:</strong> {member?.email}</div>
           <div><strong>Phone:</strong> {member?.phone || 'N/A'}</div>
