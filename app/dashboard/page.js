@@ -9,7 +9,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Form state for member editing
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -20,7 +19,6 @@ export default function DashboardPage() {
   });
   const [newPassword, setNewPassword] = useState('');
 
-  // Fetch all members on mount
   const fetchMembers = async () => {
     try {
       const res = await fetch('/api/admin/members');
@@ -37,15 +35,14 @@ export default function DashboardPage() {
     fetchMembers();
   }, []);
 
-  // Open Edit Modal
   const handleEditClick = (member) => {
     setSelectedMember(member);
     setFormData({
-      name: member.name || '',
+      name: member.full_name || member.name || '',
       phone: member.phone || '',
       email: member.email || '',
-      coreDept: member.core_dept || '',
-      subDept: member.sub_dept || '',
+      coreDept: member.core_dept || member.coreDept || '',
+      subDept: member.sub_dept || member.subDept || '',
       role: member.role || 'Member',
     });
     setNewPassword('');
@@ -53,7 +50,6 @@ export default function DashboardPage() {
     setIsEditModalOpen(true);
   };
 
-  // Close Modal
   const handleCloseModal = () => {
     setIsEditModalOpen(false);
     setSelectedMember(null);
@@ -61,12 +57,10 @@ export default function DashboardPage() {
     setErrorMsg('');
   };
 
-  // Handle Form Change
   const handleFormChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Save Member Details & Reset Password
   const handleSaveChanges = async (e) => {
     e.preventDefault();
     if (!selectedMember) return;
@@ -75,7 +69,6 @@ export default function DashboardPage() {
     setErrorMsg('');
 
     try {
-      // 1. Update basic member info
       const updateRes = await fetch(`/api/admin/members/${selectedMember.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -87,7 +80,6 @@ export default function DashboardPage() {
         throw new Error(errData.message || 'Failed to update member profile.');
       }
 
-      // 2. If a new password was provided, trigger password reset API route
       if (newPassword.trim().length > 0) {
         if (newPassword.trim().length < 6) {
           throw new Error('Password must be at least 6 characters long.');
@@ -111,7 +103,7 @@ export default function DashboardPage() {
 
       setLoading(false);
       handleCloseModal();
-      fetchMembers(); // Refresh directory list
+      fetchMembers();
     } catch (err) {
       setLoading(false);
       setErrorMsg(err.message);
@@ -119,51 +111,45 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Church Members Directory</h1>
-      </div>
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>Church Members Directory</h1>
 
-      {/* Directory Table */}
-      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-            <tr>
-              <th className="p-3">Photo</th>
-              <th className="p-3">Name</th>
-              <th className="p-3">Email</th>
-              <th className="p-3">Phone</th>
-              <th className="p-3">Core Dept</th>
-              <th className="p-3">Sub Dept</th>
-              <th className="p-3">Role</th>
-              <th className="p-3 text-right">Actions</th>
+      <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+          <thead>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ padding: '12px' }}>Photo</th>
+              <th style={{ padding: '12px' }}>Name</th>
+              <th style={{ padding: '12px' }}>Email</th>
+              <th style={{ padding: '12px' }}>Phone</th>
+              <th style={{ padding: '12px' }}>Core Dept</th>
+              <th style={{ padding: '12px' }}>Sub Dept</th>
+              <th style={{ padding: '12px' }}>Role</th>
+              <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {members.map((m) => (
-              <tr key={m.id} className="hover:bg-slate-50">
-                <td className="p-3">
-                  <img
-                    src={m.photo || '/placeholder.png'}
-                    alt={m.name}
-                    className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                  />
+              <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '12px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#cbd5e1', overflow: 'hidden' }}>
+                    {m.photo ? <img src={m.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  </div>
                 </td>
-                <td className="p-3 font-semibold text-slate-800">{m.name}</td>
-                <td className="p-3">{m.email}</td>
-                <td className="p-3">{m.phone}</td>
-                <td className="p-3 text-blue-600 font-medium">{m.core_dept || m.coreDept}</td>
-                <td className="p-3">{m.sub_dept || m.subDept}</td>
-                <td className="p-3">
-                  <span className="px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-600">
+                <td style={{ padding: '12px', fontWeight: 'bold' }}>{m.full_name || m.name || '—'}</td>
+                <td style={{ padding: '12px' }}>{m.email}</td>
+                <td style={{ padding: '12px' }}>{m.phone || '—'}</td>
+                <td style={{ padding: '12px' }}>{m.core_dept || m.coreDept || '—'}</td>
+                <td style={{ padding: '12px' }}>{m.sub_dept || m.subDept || '—'}</td>
+                <td style={{ padding: '12px' }}>
+                  <span style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>
                     {m.role || 'Member'}
                   </span>
                 </td>
-                <td className="p-3 text-right space-x-2">
+                <td style={{ padding: '12px', textAlign: 'right' }}>
                   <button
                     onClick={() => handleEditClick(m)}
-                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
                   >
                     Edit
                   </button>
@@ -174,122 +160,110 @@ export default function DashboardPage() {
         </table>
       </div>
 
-      {/* Edit Member Modal */}
       {isEditModalOpen && selectedMember && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4 text-center">Edit Member Details</h2>
-
-            {/* Photo Header */}
-            <div className="flex flex-col items-center mb-4">
-              <div className="w-20 h-20 rounded-full overflow-hidden mb-2 border-2 border-blue-500">
-                <img
-                  src={selectedMember.photo || '/placeholder.png'}
-                  alt={selectedMember.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <button type="button" className="text-sm text-blue-600 hover:underline font-medium">
-                Upload / Change Photo
-              </button>
-            </div>
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px'
+        }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '420px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', textAlign: 'center' }}>Edit Member Details</h2>
 
             {errorMsg && (
-              <div className="mb-4 p-3 bg-red-100 text-red-700 text-sm rounded-md">
+              <div style={{ padding: '10px', background: '#fee2e2', color: '#dc2626', borderRadius: '6px', fontSize: '13px', marginBottom: '12px' }}>
                 {errorMsg}
               </div>
             )}
 
-            <form onSubmit={handleSaveChanges} className="space-y-3">
+            <form onSubmit={handleSaveChanges} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Full Name</label>
                 <input
                   type="text"
                   name="name"
                   value={formData.name}
                   onChange={handleFormChange}
                   required
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Phone Number</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Phone Number</label>
                 <input
                   type="text"
                   name="phone"
                   value={formData.phone}
                   onChange={handleFormChange}
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Email</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email</label>
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleFormChange}
                   required
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Core Department</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Core Department</label>
                 <input
                   type="text"
                   name="coreDept"
                   value={formData.coreDept}
                   onChange={handleFormChange}
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Sub Department</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Sub Department</label>
                 <input
                   type="text"
                   name="subDept"
                   value={formData.subDept}
                   onChange={handleFormChange}
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Role</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
                 <select
                   name="role"
                   value={formData.role}
                   onChange={handleFormChange}
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', background: '#fff', boxSizing: 'border-box' }}
                 >
                   <option value="Member">Member</option>
                   <option value="Super_admin">Super_admin</option>
                 </select>
               </div>
 
-              {/* Password Reset Section */}
-              <div className="pt-2 border-t border-slate-200">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Reset Password <span className="text-slate-400 font-normal">(Leave blank to keep current)</span>
+              <div style={{ paddingTop: '8px', borderTop: '1px solid #eee' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  Reset Password <span style={{ fontWeight: 'normal', color: '#666' }}>(Leave blank to keep current)</span>
                 </label>
                 <input
                   type="password"
                   placeholder="Enter new password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '6px', boxSizing: 'border-box' }}
                 />
               </div>
 
-              <div className="flex gap-3 pt-3">
+              <div style={{ display: 'flex', gap: '8px', paddingTop: '10px' }}>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-emerald-700 text-white py-2 rounded-md font-medium text-sm hover:bg-emerald-800 disabled:opacity-50"
+                  style={{ flex: 1, background: '#059669', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   {loading ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -297,7 +271,7 @@ export default function DashboardPage() {
                   type="button"
                   onClick={handleCloseModal}
                   disabled={loading}
-                  className="flex-1 bg-slate-500 text-white py-2 rounded-md font-medium text-sm hover:bg-slate-600 disabled:opacity-50"
+                  style={{ flex: 1, background: '#6b7280', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
