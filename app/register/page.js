@@ -73,20 +73,17 @@ export default function Register() {
         }
       }
 
-      // Create Supabase Auth account for Login
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // 1. Create Supabase Auth user
+      const { error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
       });
 
       if (authError) throw new Error(authError.message);
 
-      const authUserId = authData.user ? authData.user.id : null;
-
-      // Save complete record into database
+      // 2. Insert record into 'members' table using existing column names
       const { error: insertError } = await supabase.from('members').insert([
         {
-          auth_id: authUserId,
           first_name: formData.firstName,
           last_name: formData.lastName,
           email: formData.email,
