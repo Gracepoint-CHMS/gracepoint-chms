@@ -15,8 +15,8 @@ export default function Register() {
     maritalStatus: '',
     hometown: '',
     homeAddress: '',
-    coreDepartment: '', // Mandatory
-    subDepartment: '',  // Optional
+    coreDepartment: '',
+    subDepartment: '',
     dateJoined: '',
     baptismDate: '',
     emergencyName: '',
@@ -42,12 +42,12 @@ export default function Register() {
     e.preventDefault();
 
     if (!formData.coreDepartment) {
-      setMessage({ type: 'error', text: 'Core Department is required. Please select one.' });
+      setMessage({ type: 'error', text: 'Core Department is required.' });
       return;
     }
 
-    if (!formData.password || formData.password.length < 6) {
-      setMessage({ type: 'error', text: 'Password must be at least 6 characters long.' });
+    if (!formData.email || !formData.password || formData.password.length < 6) {
+      setMessage({ type: 'error', text: 'Email and password (min 6 characters) are required.' });
       return;
     }
 
@@ -57,7 +57,6 @@ export default function Register() {
     try {
       let photoUrl = '';
 
-      // 1. Upload Photo if provided
       if (file) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -66,9 +65,7 @@ export default function Register() {
           .from('passport-photos')
           .upload(fileName, file);
 
-        if (uploadError) {
-          console.warn('Photo upload error:', uploadError.message);
-        } else if (uploadData) {
+        if (!uploadError && uploadData) {
           const { data: publicUrlData } = supabase.storage
             .from('passport-photos')
             .getPublicUrl(fileName);
@@ -76,22 +73,17 @@ export default function Register() {
         }
       }
 
-      // 2. Sign up user in Supabase Auth
-      let authUserId = null;
-      if (formData.email) {
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-        });
+      // Create Supabase Auth account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+      });
 
-        if (authError) {
-          console.warn('Auth creation warning:', authError.message);
-        } else if (authData.user) {
-          authUserId = authData.user.id;
-        }
-      }
+      if (authError) throw new Error(authError.message);
 
-      // 3. Insert record into members table
+      const authUserId = authData.user ? authData.user.id : null;
+
+      // Save member profile into 'members' table
       const { error: insertError } = await supabase.from('members').insert([
         {
           auth_id: authUserId,
@@ -114,59 +106,34 @@ export default function Register() {
         },
       ]);
 
-      if (insertError) {
-        throw new Error(insertError.message);
-      }
+      if (insertError) throw new Error(insertError.message);
 
-      setMessage({ type: 'success', text: 'Member registered successfully!' });
+      setMessage({ type: 'success', text: 'Registration successful! You can now log in.' });
       setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        phone: '',
-        gender: '',
-        dob: '',
-        maritalStatus: '',
-        hometown: '',
-        homeAddress: '',
-        coreDepartment: '',
-        subDepartment: '',
-        dateJoined: '',
-        baptismDate: '',
-        emergencyName: '',
-        emergencyPhone: '',
+        firstName: '', lastName: '', email: '', password: '', phone: '',
+        gender: '', dob: '', maritalStatus: '', hometown: '', homeAddress: '',
+        coreDepartment: '', subDepartment: '', dateJoined: '', baptismDate: '',
+        emergencyName: '', emergencyPhone: '',
       });
       setFile(null);
     } catch (err) {
-      setMessage({ type: 'error', text: `Error: ${err.message}` });
+      setMessage({ type: 'error', text: err.message });
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '650px', margin: '2rem auto', padding: '2rem', background: '#ffffff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+    <div style={{ maxWidth: '650px', margin: '2rem auto', padding: '2rem', background: '#fff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
       <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#1a365d' }}>Member Registration</h2>
 
       {message.text && (
-        <div
-          style={{
-            padding: '0.8rem',
-            marginBottom: '1.2rem',
-            borderRadius: '6px',
-            backgroundColor: message.type === 'error' ? '#fed7d7' : '#c6f6d5',
-            color: message.type === 'error' ? '#9b2c2c' : '#22543d',
-            textAlign: 'center',
-            fontWeight: '600',
-          }}
-        >
+        <div style={{ padding: '0.8rem', marginBottom: '1.2rem', borderRadius: '6px', backgroundColor: message.type === 'error' ? '#fed7d7' : '#c6f6d5', color: message.type === 'error' ? '#9b2c2c' : '#22543d', textAlign: 'center', fontWeight: '600' }}>
           {message.text}
         </div>
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-        {/* Name Fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>First Name *</label>
@@ -178,7 +145,7 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Account Credentials Section */}
+        {/* Account Credentials */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
           <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Account Credentials</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -193,7 +160,6 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Contact & Personal */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Phone Number *</label>
@@ -209,41 +175,11 @@ export default function Register() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Birth</label>
-            <input type="date" name="dob" value={formData.dob} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Marital Status</label>
-            <select name="maritalStatus" value={formData.maritalStatus} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
-              <option value="">Select Status</option>
-              <option value="Single">Single</option>
-              <option value="Married">Married</option>
-              <option value="Widowed">Widowed</option>
-              <option value="Divorced">Divorced</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Hometown</label>
-            <input type="text" name="hometown" value={formData.hometown} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Home Address</label>
-            <input type="text" name="homeAddress" value={formData.homeAddress} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-        </div>
-
-        {/* Church & Departments */}
-        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', marginTop: '0.5rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: '#2b6cb0' }}>Church & Department Details</h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Church & Department Details</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Core Department * (Compulsory)</label>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Core Department *</label>
               <select name="coreDepartment" required value={formData.coreDepartment} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '2px solid #3182ce', borderRadius: '4px', background: '#ebf8ff' }}>
                 <option value="">-- Select Core Dept --</option>
                 <option value="LOVE">LOVE</option>
@@ -267,54 +203,15 @@ export default function Register() {
               </select>
             </div>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date Joined Church</label>
-              <input type="date" name="dateJoined" value={formData.dateJoined} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Baptism</label>
-              <input type="date" name="baptismDate" value={formData.baptismDate} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-            </div>
-          </div>
         </div>
 
-        {/* Emergency & Photo */}
-        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', marginTop: '0.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Name</label>
-              <input type="text" name="emergencyName" value={formData.emergencyName} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Phone</label>
-              <input type="tel" name="emergencyPhone" value={formData.emergencyPhone} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Passport Photo</label>
-            <input type="file" accept="image/*" onChange={handleFileChange} style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
+        <div>
+          <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Passport Photo</label>
+          <input type="file" accept="image/*" onChange={handleFileChange} style={{ width: '100%', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }} />
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            marginTop: '1rem',
-            padding: '0.8rem',
-            fontSize: '1rem',
-            fontWeight: 'bold',
-            color: '#fff',
-            backgroundColor: submitting ? '#a0aec0' : '#2b6cb0',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: submitting ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {submitting ? 'Registering Member...' : 'Register Member'}
+        <button type="submit" disabled={submitting} style={{ marginTop: '1rem', padding: '0.8rem', fontSize: '1rem', fontWeight: 'bold', color: '#fff', backgroundColor: submitting ? '#a0aec0' : '#2b6cb0', border: 'none', borderRadius: '6px', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+          {submitting ? 'Registering...' : 'Register Member'}
         </button>
       </form>
     </div>
