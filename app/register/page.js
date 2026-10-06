@@ -12,15 +12,7 @@ export default function Register() {
     phone: '',
     gender: '',
     dob: '',
-    maritalStatus: '',
-    hometown: '',
-    homeAddress: '',
     coreDepartment: '',
-    subDepartment: '',
-    dateJoined: '',
-    baptismDate: '',
-    emergencyName: '',
-    emergencyPhone: '',
   });
 
   const [file, setFile] = useState(null);
@@ -68,17 +60,17 @@ export default function Register() {
         }
       }
 
-      // Try Auth signUp, but don't stop registration if rate-limited
+      // Try Auth signUp (bypasses if rate-limited)
       try {
         await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
         });
       } catch (authErr) {
-        console.warn('Auth sign-up skipped due to rate limit:', authErr);
+        console.warn('Auth sign-up skipped:', authErr);
       }
 
-      // Save complete record directly to database
+      // Save directly into existing table columns only
       const { error: insertError } = await supabase.from('members').insert([
         {
           first_name: formData.firstName,
@@ -86,28 +78,18 @@ export default function Register() {
           email: formData.email,
           phone: formData.phone,
           gender: formData.gender,
-          dob: formData.dob,
-          marital_status: formData.maritalStatus,
-          hometown: formData.hometown,
-          home_address: formData.homeAddress,
+          dob: formData.dob || null,
           core_department: formData.coreDepartment,
-          sub_department: formData.subDepartment,
-          date_joined: formData.dateJoined,
-          baptism_date: formData.baptismDate,
-          emergency_name: formData.emergencyName,
-          emergency_phone: formData.emergencyPhone,
           photo_url: photoUrl,
         },
       ]);
 
       if (insertError) throw new Error(insertError.message);
 
-      setMessage({ type: 'success', text: 'Registration successful! Member record has been created.' });
+      setMessage({ type: 'success', text: 'Registration successful! Member record has been saved.' });
       setFormData({
         firstName: '', lastName: '', email: '', password: '', phone: '',
-        gender: '', dob: '', maritalStatus: '', hometown: '', homeAddress: '',
-        coreDepartment: '', subDepartment: '', dateJoined: '', baptismDate: '',
-        emergencyName: '', emergencyPhone: '',
+        gender: '', dob: '', coreDepartment: '',
       });
       setFile(null);
     } catch (err) {
@@ -118,7 +100,7 @@ export default function Register() {
   };
 
   return (
-    <div style={{ maxWidth: '700px', margin: '2rem auto', padding: '2rem', background: '#fff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+    <div style={{ maxWidth: '600px', margin: '2rem auto', padding: '2rem', background: '#fff', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
       <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#1a365d' }}>Member Registration</h2>
 
       {message.text && (
@@ -171,88 +153,23 @@ export default function Register() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Birth</label>
-            <input type="date" name="dob" value={formData.dob} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Marital Status</label>
-            <select name="maritalStatus" value={formData.maritalStatus} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
-              <option value="">Select Status</option>
-              <option value="Single">Single</option>
-              <option value="Married">Married</option>
-              <option value="Divorced">Divorced</option>
-              <option value="Widowed">Widowed</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Hometown</label>
-            <input type="text" name="hometown" value={formData.hometown} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Home Address</label>
-            <input type="text" name="homeAddress" value={formData.homeAddress} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
+        <div>
+          <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Birth</label>
+          <input type="date" name="dob" value={formData.dob} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
         </div>
 
         {/* Church & Department Details */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Church & Department Details</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Core Department *</label>
-              <select name="coreDepartment" required value={formData.coreDepartment} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '2px solid #3182ce', borderRadius: '4px', background: '#ebf8ff' }}>
-                <option value="">-- Select Core Dept --</option>
-                <option value="LOVE">LOVE</option>
-                <option value="UNITY">UNITY</option>
-                <option value="CARE">CARE</option>
-                <option value="RESPECT">RESPECT</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Sub Department (Optional)</label>
-              <select name="subDepartment" value={formData.subDepartment} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
-                <option value="">-- Select Sub Dept --</option>
-                <option value="Ushering">Ushering</option>
-                <option value="Choir / Music">Choir / Music</option>
-                <option value="Prayer Warriors">Prayer Warriors</option>
-                <option value="Evangelical">Evangelical</option>
-                <option value="Women Ministry">Women Ministry</option>
-                <option value="Men Ministry">Men Ministry</option>
-                <option value="Youth Ministry">Youth Ministry</option>
-                <option value="Children Ministry">Children Ministry</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Church Department</h3>
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date Joined</label>
-            <input type="date" name="dateJoined" value={formData.dateJoined} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Date of Baptism</label>
-            <input type="date" name="baptismDate" value={formData.baptismDate} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-          </div>
-        </div>
-
-        {/* Emergency Contact */}
-        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem', color: '#2b6cb0' }}>Emergency Contact</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Name</label>
-              <input type="text" name="emergencyName" value={formData.emergencyName} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Emergency Contact Phone</label>
-              <input type="tel" name="emergencyPhone" value={formData.emergencyPhone} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-            </div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.3rem' }}>Core Department *</label>
+            <select name="coreDepartment" required value={formData.coreDepartment} onChange={handleChange} style={{ width: '100%', padding: '0.6rem', border: '2px solid #3182ce', borderRadius: '4px', background: '#ebf8ff' }}>
+              <option value="">-- Select Core Dept --</option>
+              <option value="LOVE">LOVE</option>
+              <option value="UNITY">UNITY</option>
+              <option value="CARE">CARE</option>
+              <option value="RESPECT">RESPECT</option>
+            </select>
           </div>
         </div>
 
