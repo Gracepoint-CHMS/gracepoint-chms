@@ -259,13 +259,28 @@ export default function AdminDashboard() {
               members.map(m => (
                 <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
-                    {m.photo_url ? (
-                      <img src={m.photo_url} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#3730a3' }}>
-                        {m.first_name?.[0] || 'M'}
-                      </div>
-                    )}
+                    {m.photo_url && m.photo_url.startsWith('http') ? (
+                      <img 
+                        src={m.photo_url} 
+                        alt="Profile" 
+                        style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
+                        onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                      />
+                    ) : null}
+                    <div style={{ 
+                      display: (m.photo_url && m.photo_url.startsWith('http')) ? 'none' : 'flex', 
+                      width: '36px', 
+                      height: '36px', 
+                      borderRadius: '50%', 
+                      backgroundColor: '#e0e7ff', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      fontSize: '14px', 
+                      fontWeight: 'bold', 
+                      color: '#3730a3' 
+                    }}>
+                      {m.first_name?.[0] || 'M'}
+                    </div>
                   </td>
                   <td style={{ padding: '12px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
                   <td style={{ padding: '12px' }}>
