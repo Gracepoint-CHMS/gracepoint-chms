@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase';
 
 export default function RootLayout({ children }) {
   const [role, setRole] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function checkUserSession() {
@@ -21,12 +20,10 @@ export default function RootLayout({ children }) {
       } else {
         setRole(null);
       }
-      setLoading(false);
     }
 
     checkUserSession();
 
-    // Listen for auth state changes (login / logout)
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         supabase
