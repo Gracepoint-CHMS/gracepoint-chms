@@ -27,23 +27,24 @@ export default function AdminDashboard() {
     setLoading(false);
   }
 
-  async function handleDelete(id) {
+  async function handleDelete(email) {
     if (!confirm('Are you sure you want to delete this member?')) return;
 
     const { error } = await supabase
       .from('members')
       .delete()
-      .eq('id', id);
+      .eq('email', email);
 
     if (error) {
       alert('Error deleting member: ' + error.message);
     } else {
-      setMembers(members.filter(m => m.id !== id));
+      setMembers(members.filter(m => m.email !== email));
     }
   }
 
   async function handleUpdate(e) {
     e.preventDefault();
+    
     const { error } = await supabase
       .from('members')
       .update({
@@ -54,7 +55,8 @@ export default function AdminDashboard() {
         phone: editingMember.phone,
         core_department: editingMember.core_department,
         sub_department: editingMember.sub_department,
-        role: editingMember.role
+        role: editingMember.role,
+        avatar_url: editingMember.avatar_url
       })
       .eq('id', editingMember.id);
 
@@ -166,6 +168,15 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Photo URL</label>
+              <input
+                type="text"
+                value={editingMember.avatar_url || ''}
+                onChange={e => setEditingMember({ ...editingMember, avatar_url: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              />
+            </div>
+            <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Role</label>
               <select
                 value={editingMember.role || 'member'}
@@ -193,6 +204,7 @@ export default function AdminDashboard() {
         <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderRadius: '8px', overflow: 'hidden' }}>
           <thead>
             <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
+              <th style={{ padding: '12px' }}>Photo</th>
               <th style={{ padding: '12px' }}>Name</th>
               <th style={{ padding: '12px' }}>Email</th>
               <th style={{ padding: '12px' }}>Department</th>
@@ -204,11 +216,20 @@ export default function AdminDashboard() {
           <tbody>
             {members.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>No members found in the database.</td>
+                <td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>No members found in the database.</td>
               </tr>
             ) : (
               members.map(m => (
                 <tr key={m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <td style={{ padding: '12px' }}>
+                    {m.avatar_url ? (
+                      <img src={m.avatar_url} alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
+                        {m.first_name?.[0] || 'M'}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: '12px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
                   <td style={{ padding: '12px' }}>{m.email}</td>
                   <td style={{ padding: '12px' }}>{m.core_department} / {m.sub_department}</td>
@@ -226,7 +247,7 @@ export default function AdminDashboard() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(m.id)}
+                      onClick={() => handleDelete(m.email)}
                       style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                     >
                       Delete
