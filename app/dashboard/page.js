@@ -69,6 +69,8 @@ export default function DashboardPage() {
         return;
       }
 
+      // Remove member from display immediately
+      setMembers((prev) => prev.filter((m) => m.id !== member.id));
       fetchMembers();
     } catch (err) {
       alert(`Error: ${err.message}`);
