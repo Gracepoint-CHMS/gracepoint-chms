@@ -12,14 +12,19 @@ export async function PUT(req, { params }) {
     const body = await req.json();
 
     const updatePayload = {
-      full_name: body.name,
+      full_name: body.name || body.full_name,
       phone: body.phone,
       email: body.email,
-      core_dept: body.coreDept,
-      sub_dept: body.subDept,
       role: body.role,
-      photo: body.photo,
+      core_dept: body.coreDept || body.core_dept || body.department,
+      sub_dept: body.subDept || body.sub_dept,
+      photo: body.photo || body.photo_url,
     };
+
+    // Remove undefined values
+    Object.keys(updatePayload).forEach(
+      (key) => updatePayload[key] === undefined && delete updatePayload[key]
+    );
 
     const { data, error } = await supabase
       .from('members')
@@ -28,6 +33,7 @@ export async function PUT(req, { params }) {
       .select();
 
     if (error) {
+      console.error('Supabase Update Error:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
@@ -47,6 +53,7 @@ export async function DELETE(req, { params }) {
       .eq('id', id);
 
     if (error) {
+      console.error('Supabase Delete Error:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
