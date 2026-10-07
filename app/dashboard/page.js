@@ -63,7 +63,7 @@ export default function AdminDashboard() {
       core_department: editingMember.core_department || '',
       sub_department: editingMember.sub_department || '',
       role: editingMember.role || 'member',
-      avatar_url: editingMember.avatar_url || ''
+      photo_url: editingMember.photo_url || ''
     };
 
     let query = supabase.from('members').update(updateData);
@@ -81,7 +81,7 @@ export default function AdminDashboard() {
     } else {
       alert('Member updated successfully!');
       setEditingMember(null);
-      await fetchMembers(); // Refresh the table list immediately
+      await fetchMembers(); // Refresh table immediately
     }
   }
 
@@ -208,8 +208,8 @@ export default function AdminDashboard() {
               <input
                 type="text"
                 placeholder="Paste image link here"
-                value={editingMember.avatar_url || ''}
-                onChange={e => setEditingMember({ ...editingMember, avatar_url: e.target.value })}
+                value={editingMember.photo_url || ''}
+                onChange={e => setEditingMember({ ...editingMember, photo_url: e.target.value })}
                 style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
@@ -259,8 +259,8 @@ export default function AdminDashboard() {
               members.map(m => (
                 <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
-                    {m.avatar_url ? (
-                      <img src={m.avatar_url} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                    {m.photo_url ? (
+                      <img src={m.photo_url} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
                       <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#3730a3' }}>
                         {m.first_name?.[0] || 'M'}
