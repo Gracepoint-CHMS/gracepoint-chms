@@ -10,7 +10,6 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [editingMember, setEditingMember] = useState(null);
 
-  // Fetch all members on load
   useEffect(() => {
     fetchMembers();
   }, []);
@@ -28,7 +27,6 @@ export default function AdminDashboard() {
     setLoading(false);
   }
 
-  // Delete member
   async function handleDelete(id) {
     if (!confirm('Are you sure you want to delete this member?')) return;
 
@@ -44,7 +42,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Save edited member
   async function handleUpdate(e) {
     e.preventDefault();
     const { error } = await supabase
@@ -64,6 +61,7 @@ export default function AdminDashboard() {
     if (error) {
       alert('Error updating member: ' + error.message);
     } else {
+      alert('Member updated successfully!');
       setEditingMember(null);
       fetchMembers();
     }
@@ -100,7 +98,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Edit Modal / Form */}
       {editingMember && (
         <div style={{ backgroundColor: '#f9fafb', border: '1px solid #d1d5db', padding: '20px', borderRadius: '8px', marginBottom: '25px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Edit Member Details</h3>
@@ -151,6 +148,24 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Core Department</label>
+              <input
+                type="text"
+                value={editingMember.core_department || ''}
+                onChange={e => setEditingMember({ ...editingMember, core_department: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Sub Department</label>
+              <input
+                type="text"
+                value={editingMember.sub_department || ''}
+                onChange={e => setEditingMember({ ...editingMember, sub_department: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              />
+            </div>
+            <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Role</label>
               <select
                 value={editingMember.role || 'member'}
@@ -174,7 +189,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Members Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderRadius: '8px', overflow: 'hidden' }}>
           <thead>
