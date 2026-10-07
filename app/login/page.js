@@ -1,71 +1,113 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(null);
+  const [error, setError] = useState('');
+  const router = useRouter();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMsg(null);
+    setError('');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // 1. Sign in with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
 
-      if (data.user) {
+      const userId = authData.user.id;
+
+      // 2. Fetch the user's role from the members table
+      const { data: memberData, error: memberError } = await supabase
+        .from('members')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (memberError && memberError.code !== 'PGRST116') {
+        console.error('Error fetching member role:', memberError);
+      }
+
+      const role = memberData?.role || 'member';
+
+      // 3. Route user based on their assigned role
+      if (role === 'super_admin' || role === 'admin') {
         router.push('/dashboard');
+      } else {
+        router.push('/portal');
       }
     } catch (err) {
-      console.error('Login error:', err);
-      if (err.message.includes('Email not confirmed')) {
-        setErrorMsg('Email address is not confirmed. Please disable Email Confirmation in Supabase settings or check your inbox.');
-      } else {
-        setErrorMsg(err.message || 'Invalid login credentials');
-      }
+      setError(err.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', padding: '1rem', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: '#fff', padding: '2rem', borderRadius: '8px', maxWidth: '380px', width: '100%', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-        <h2 style={{ color: '#0f172a', marginTop: 0, textAlign: 'center', marginBottom: '1.5rem' }}>Member Login</h2>
+    <div style={{ padding: '20px', maxWidth: '400px', margin: '40px auto', fontFamily: 'sans-serif' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px', textAlign: 'center' }}>
+        Login to CHMS
+      </h1>
 
-        {errorMsg && (
-          <div style={{ backgroundColor: '#f8d7da', color: '#842029', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem', textAlign: 'center' }}>
-            {errorMsg}
-          </div>
-        )}
+      {error && (
+        <div style={{ padding: '10px', backgroundColor: '#fee2e2', color: '#dc2626', borderRadius: '6px', fontSize: '14px', marginBottom: '16px' }}>
+          {error}
+        </div>
+      )}
 
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#334155' }}>Email Address</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="duutmathew60@gmail.com" style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
-          </div>
+      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '6px' }}>
+            Email Address
+          </label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+          />
+        </div>
 
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#334155' }}>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', marginTop: '0.25rem' }} />
-          </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '6px' }}>
+            Password
+          </label>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+          />
+        </div>
 
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#0d6efd', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-            {loading ? 'Signing In...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            backgroundColor: '#2563eb',
+            color: '#ffffff',
+            padding: '12px',
+            borderRadius: '6px',
+            border: 'none',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+          }}
+        >
+          {loading ? 'Signing in...' : 'Login'}
+        </button>
+      </form>
     </div>
   );
 }
