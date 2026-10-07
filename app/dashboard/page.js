@@ -9,7 +9,6 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingMember, setEditingMember] = useState(null);
-  const [originalEmail, setOriginalEmail] = useState('');
 
   useEffect(() => {
     fetchMembers();
@@ -30,49 +29,59 @@ export default function AdminDashboard() {
     setLoading(false);
   }
 
-  async function handleDelete(email) {
-    if (!confirm(`Are you sure you want to delete ${email}?`)) return;
+  async function handleDelete(id, email) {
+    if (!confirm(`Are you sure you want to delete ${email || 'this member'}?`)) return;
 
-    const { error } = await supabase
-      .from('members')
-      .delete()
-      .eq('email', email);
+    let query = supabase.from('members').delete();
+    if (id) {
+      query = query.eq('id', id);
+    } else {
+      query = query.eq('email', email);
+    }
+
+    const { error } = await query;
 
     if (error) {
       alert('Error deleting member: ' + error.message);
     } else {
-      setMembers(members.filter(m => m.email !== email));
+      setMembers(members.filter(m => (id ? m.id !== id : m.email !== email)));
     }
   }
 
   async function handleUpdate(e) {
     e.preventDefault();
-    
-    const targetEmail = originalEmail || editingMember.email;
+    if (!editingMember) return;
 
-    const { error } = await supabase
-      .from('members')
-      .update({
-        prefix: editingMember.prefix || '',
-        first_name: editingMember.first_name || '',
-        last_name: editingMember.last_name || '',
-        email: editingMember.email,
-        phone: editingMember.phone || '',
-        date_of_birth: editingMember.date_of_birth || '',
-        home_address: editingMember.home_address || '',
-        core_department: editingMember.core_department || '',
-        sub_department: editingMember.sub_department || '',
-        role: editingMember.role || 'member'
-      })
-      .eq('email', targetEmail);
+    const updateData = {
+      prefix: editingMember.prefix || '',
+      first_name: editingMember.first_name || '',
+      last_name: editingMember.last_name || '',
+      email: editingMember.email || '',
+      phone: editingMember.phone || '',
+      date_of_birth: editingMember.date_of_birth || '',
+      home_address: editingMember.home_address || '',
+      core_department: editingMember.core_department || '',
+      sub_department: editingMember.sub_department || '',
+      role: editingMember.role || 'member',
+      avatar_url: editingMember.avatar_url || ''
+    };
+
+    let query = supabase.from('members').update(updateData);
+    
+    if (editingMember.id) {
+      query = query.eq('id', editingMember.id);
+    } else {
+      query = query.eq('email', editingMember.email);
+    }
+
+    const { error } = await query;
 
     if (error) {
       alert('Error updating member: ' + error.message);
     } else {
       alert('Member updated successfully!');
       setEditingMember(null);
-      setOriginalEmail('');
-      fetchMembers();
+      await fetchMembers(); // Refresh the table list immediately
     }
   }
 
@@ -195,6 +204,16 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Photo URL</label>
+              <input
+                type="text"
+                placeholder="Paste image link here"
+                value={editingMember.avatar_url || ''}
+                onChange={e => setEditingMember({ ...editingMember, avatar_url: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              />
+            </div>
+            <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
               <select
                 value={editingMember.role || 'member'}
@@ -210,7 +229,7 @@ export default function AdminDashboard() {
               <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Save Changes
               </button>
-              <button type="button" onClick={() => { setEditingMember(null); setOriginalEmail(''); }} style={{ padding: '10px 20px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              <button type="button" onClick={() => setEditingMember(null)} style={{ padding: '10px 20px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Cancel
               </button>
             </div>
@@ -238,11 +257,15 @@ export default function AdminDashboard() {
               </tr>
             ) : (
               members.map(m => (
-                <tr key={m.email || m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#3730a3' }}>
-                      {m.first_name?.[0] || 'M'}
-                    </div>
+                    {m.avatar_url ? (
+                      <img src={m.avatar_url} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#3730a3' }}>
+                        {m.first_name?.[0] || 'M'}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: '12px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
                   <td style={{ padding: '12px' }}>
@@ -261,16 +284,13 @@ export default function AdminDashboard() {
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <button
-                      onClick={() => {
-                        setEditingMember({ ...m });
-                        setOriginalEmail(m.email);
-                      }}
+                      onClick={() => setEditingMember({ ...m })}
                       style={{ marginRight: '8px', padding: '6px 10px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(m.email)}
+                      onClick={() => handleDelete(m.id, m.email)}
                       style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                     >
                       Delete
