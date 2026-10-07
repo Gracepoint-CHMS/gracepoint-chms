@@ -21,10 +21,20 @@ export default function AdminDashboard() {
   // Add Member Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMember, setNewMember] = useState({
+    prefix: '',
     first_name: '',
     last_name: '',
     email: '',
     phone: '',
+    home_address: '',
+    hometown: '',
+    emergency_contact_person: '',
+    emergency_contact_phone: '',
+    date_of_birth: '',
+    date_joined: '',
+    date_of_baptism: '',
+    gender: '',
+    marital_status: '',
     core_department: '',
     sub_department: '',
     role: 'member'
@@ -80,10 +90,20 @@ export default function AdminDashboard() {
       alert('Member added successfully!');
       setShowAddModal(false);
       setNewMember({
+        prefix: '',
         first_name: '',
         last_name: '',
         email: '',
         phone: '',
+        home_address: '',
+        hometown: '',
+        emergency_contact_person: '',
+        emergency_contact_phone: '',
+        date_of_birth: '',
+        date_joined: '',
+        date_of_baptism: '',
+        gender: '',
+        marital_status: '',
         core_department: '',
         sub_department: '',
         role: 'member'
@@ -112,7 +132,9 @@ export default function AdminDashboard() {
 
       const { data } = supabase.storage.from('member-photos').getPublicUrl(filePath);
 
-      setEditingMember({ ...editingMember, photo_url: data.publicUrl });
+      if (editingMember) {
+        setEditingMember({ ...editingMember, photo_url: data.publicUrl });
+      }
       alert('Image uploaded successfully!');
     } catch (error) {
       alert('Error uploading image: ' + error.message);
@@ -125,21 +147,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!editingMember) return;
 
-    const updateData = {
-      prefix: editingMember.prefix || '',
-      first_name: editingMember.first_name || '',
-      last_name: editingMember.last_name || '',
-      email: editingMember.email || '',
-      phone: editingMember.phone || '',
-      date_of_birth: editingMember.date_of_birth || '',
-      home_address: editingMember.home_address || '',
-      core_department: editingMember.core_department || '',
-      sub_department: editingMember.sub_department || '',
-      role: editingMember.role || 'member',
-      photo_url: editingMember.photo_url || ''
-    };
-
-    let query = supabase.from('members').update(updateData);
+    let query = supabase.from('members').update(editingMember);
     if (editingMember.id) {
       query = query.eq('id', editingMember.id);
     } else {
@@ -219,10 +227,10 @@ export default function AdminDashboard() {
           style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
         >
           <option value="">All Departments</option>
+          <option value="LOVE">LOVE</option>
+          <option value="UNITY">UNITY</option>
           <option value="CARE">CARE</option>
-          <option value="Worship">Worship</option>
-          <option value="Protocol">Protocol</option>
-          <option value="Media">Media</option>
+          <option value="RESPECT">RESPECT</option>
         </select>
         <select
           value={roleFilter}
@@ -239,65 +247,98 @@ export default function AdminDashboard() {
       {/* Add New Member Modal */}
       {showAddModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '450px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '15px' }}>Add New Member</h2>
-            <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <input
-                type="text"
-                placeholder="First Name"
-                required
-                value={newMember.first_name}
-                onChange={(e) => setNewMember({ ...newMember, first_name: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <input
-                type="text"
-                placeholder="Last Name"
-                required
-                value={newMember.last_name}
-                onChange={(e) => setNewMember({ ...newMember, last_name: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <input
-                type="email"
-                placeholder="Email Address"
-                required
-                value={newMember.email}
-                onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <input
-                type="text"
-                placeholder="Phone Number"
-                value={newMember.phone}
-                onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <input
-                type="text"
-                placeholder="Core Department (e.g. CARE)"
-                value={newMember.core_department}
-                onChange={(e) => setNewMember({ ...newMember, core_department: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <input
-                type="text"
-                placeholder="Sub Department"
-                value={newMember.sub_department}
-                onChange={(e) => setNewMember({ ...newMember, sub_department: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <select
-                value={newMember.role}
-                onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-                <option value="super_admin">Super Admin</option>
-              </select>
+          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '600px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '15px' }}>Register / Add New Member</h2>
+            <form onSubmit={handleAddMember} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Prefix</label>
+                <select value={newMember.prefix} onChange={(e) => setNewMember({ ...newMember, prefix: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                  <option value="">Select Prefix</option>
+                  <option value="Mr">Mr</option>
+                  <option value="Mrs">Mrs</option>
+                  <option value="Ms">Ms</option>
+                  <option value="Prophet">Prophet</option>
+                  <option value="Osofo Maame">Osofo Maame</option>
+                  <option value="Pastor">Pastor</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>First Name *</label>
+                <input type="text" required value={newMember.first_name} onChange={(e) => setNewMember({ ...newMember, first_name: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Last Name *</label>
+                <input type="text" required value={newMember.last_name} onChange={(e) => setNewMember({ ...newMember, last_name: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email Address *</label>
+                <input type="email" required value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Phone Number</label>
+                <input type="text" value={newMember.phone} onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Gender</label>
+                <select value={newMember.gender} onChange={(e) => setNewMember({ ...newMember, gender: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Marital Status</label>
+                <select value={newMember.marital_status} onChange={(e) => setNewMember({ ...newMember, marital_status: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                  <option value="">Select Marital Status</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Widowed">Widowed</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Birth</label>
+                <input type="date" value={newMember.date_of_birth} onChange={(e) => setNewMember({ ...newMember, date_of_birth: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date Joined</label>
+                <input type="date" value={newMember.date_joined} onChange={(e) => setNewMember({ ...newMember, date_joined: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Baptism</label>
+                <input type="date" value={newMember.date_of_baptism} onChange={(e) => setNewMember({ ...newMember, date_of_baptism: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Home Address</label>
+                <input type="text" placeholder="e.g. Plot 12, Block B, Techiman" value={newMember.home_address} onChange={(e) => setNewMember({ ...newMember, home_address: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Hometown</label>
+                <input type="text" placeholder="e.g. Wenchi" value={newMember.hometown} onChange={(e) => setNewMember({ ...newMember, hometown: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Core Department</label>
+                <select value={newMember.core_department} onChange={(e) => setNewMember({ ...newMember, core_department: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                  <option value="">Select Core Department</option>
+                  <option value="LOVE">LOVE</option>
+                  <option value="UNITY">UNITY</option>
+                  <option value="CARE">CARE</option>
+                  <option value="RESPECT">RESPECT</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Sub Department</label>
+                <input type="text" placeholder="e.g. Ushering department" value={newMember.sub_department} onChange={(e) => setNewMember({ ...newMember, sub_department: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
+                <select value={newMember.role} onChange={(e) => setNewMember({ ...newMember, role: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button type="submit" style={{ flex: 1, backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Save Member</button>
                 <button type="button" onClick={() => setShowAddModal(false)} style={{ flex: 1, backgroundColor: '#6b7280', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
               </div>
@@ -335,13 +376,31 @@ export default function AdminDashboard() {
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Birth</label>
               <input type="date" value={editingMember.date_of_birth || ''} onChange={(e) => setEditingMember({ ...editingMember, date_of_birth: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
             </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date Joined</label>
+              <input type="date" value={editingMember.date_joined || ''} onChange={(e) => setEditingMember({ ...editingMember, date_joined: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Baptism</label>
+              <input type="date" value={editingMember.date_of_baptism || ''} onChange={(e) => setEditingMember({ ...editingMember, date_of_baptism: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Home Address</label>
               <input type="text" value={editingMember.home_address || ''} onChange={(e) => setEditingMember({ ...editingMember, home_address: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
             </div>
             <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Hometown</label>
+              <input type="text" value={editingMember.hometown || ''} onChange={(e) => setEditingMember({ ...editingMember, hometown: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Core Department</label>
-              <input type="text" value={editingMember.core_department || ''} onChange={(e) => setEditingMember({ ...editingMember, core_department: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              <select value={editingMember.core_department || ''} onChange={(e) => setEditingMember({ ...editingMember, core_department: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <option value="">Select Core Department</option>
+                <option value="LOVE">LOVE</option>
+                <option value="UNITY">UNITY</option>
+                <option value="CARE">CARE</option>
+                <option value="RESPECT">RESPECT</option>
+              </select>
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Sub Department</label>
@@ -378,7 +437,7 @@ export default function AdminDashboard() {
               <th style={{ padding: '12px' }}>Avatar</th>
               <th style={{ padding: '12px' }}>Name</th>
               <th style={{ padding: '12px' }}>Email & Phone</th>
-              <th style={{ padding: '12px' }}>Address</th>
+              <th style={{ padding: '12px' }}>Address & Hometown</th>
               <th style={{ padding: '12px' }}>Department</th>
               <th style={{ padding: '12px' }}>Role</th>
               <th style={{ padding: '12px', textAlign: 'center' }}>Actions</th>
@@ -408,7 +467,7 @@ export default function AdminDashboard() {
                   </td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ fontSize: '13px' }}>{m.home_address || 'N/A'}</div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>DOB: {m.date_of_birth || 'N/A'}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Hometown: {m.hometown || 'N/A'}</div>
                   </td>
                   <td style={{ padding: '12px' }}>{m.core_department} / {m.sub_department}</td>
                   <td style={{ padding: '12px' }}>
