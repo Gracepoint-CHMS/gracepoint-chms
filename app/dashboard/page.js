@@ -2,16 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
     async function verifyAndFetch() {
-      // 1. Get current active session
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
@@ -19,7 +16,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // 2. Fetch logged in user's role
       const { data: member, error } = await supabase
         .from('members')
         .select('role')
@@ -27,12 +23,10 @@ export default function DashboardPage() {
         .single();
 
       if (error || (member?.role !== 'super_admin' && member?.role !== 'admin')) {
-        // Not an admin -> force redirect to user portal
         window.location.href = '/portal';
         return;
       }
 
-      // 3. Fetch members directory for admins
       const res = await fetch('/api/admin/members');
       const data = await res.json();
       if (data.members) setMembers(data.members);
