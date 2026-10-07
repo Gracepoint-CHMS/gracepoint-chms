@@ -11,6 +11,10 @@ export default function RegisterPage() {
     last_name: '',
     prefix: '',
     phone: '',
+    address: '',
+    hometown: '',
+    emergency_contact_person: '',
+    emergency_contact: '',
     gender: '',
     marital_status: '',
     dob: '',
@@ -51,6 +55,10 @@ export default function RegisterPage() {
             last_name: formData.last_name.trim(),
             prefix: formData.prefix,
             phone: formData.phone,
+            address: formData.address,
+            hometown: formData.hometown,
+            emergency_contact_person: formData.emergency_contact_person,
+            emergency_contact: formData.emergency_contact,
             gender: formData.gender,
             marital_status: formData.marital_status,
             dob: formData.dob || null,
@@ -77,6 +85,10 @@ export default function RegisterPage() {
           last_name: '',
           prefix: '',
           phone: '',
+          address: '',
+          hometown: '',
+          emergency_contact_person: '',
+          emergency_contact: '',
           gender: '',
           marital_status: '',
           dob: '',
@@ -201,6 +213,55 @@ export default function RegisterPage() {
             placeholder="0541509621"
             style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
           />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Home Address</label>
+          <input
+            type="text"
+            name="address"
+            value={formData.address}
+            onChange={handleChange}
+            placeholder="e.g. Plot 12, Block B, Techiman"
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Hometown</label>
+          <input
+            type="text"
+            name="hometown"
+            value={formData.hometown}
+            onChange={handleChange}
+            placeholder="e.g. Wenchi"
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Emergency Contact Person</label>
+            <input
+              type="text"
+              name="emergency_contact_person"
+              value={formData.emergency_contact_person}
+              onChange={handleChange}
+              placeholder="Full Name"
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Emergency Contact Phone</label>
+            <input
+              type="tel"
+              name="emergency_contact"
+              value={formData.emergency_contact}
+              onChange={handleChange}
+              placeholder="024XXXXXXX"
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
         </div>
 
         <div>
