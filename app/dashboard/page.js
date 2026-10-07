@@ -9,6 +9,7 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingMember, setEditingMember] = useState(null);
+  const [originalEmail, setOriginalEmail] = useState('');
 
   useEffect(() => {
     fetchMembers();
@@ -21,14 +22,16 @@ export default function AdminDashboard() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
+    if (error) {
+      console.error('Error fetching members:', error.message);
+    } else if (data) {
       setMembers(data);
     }
     setLoading(false);
   }
 
   async function handleDelete(email) {
-    if (!confirm('Are you sure you want to delete this member?')) return;
+    if (!confirm(`Are you sure you want to delete ${email}?`)) return;
 
     const { error } = await supabase
       .from('members')
@@ -45,26 +48,30 @@ export default function AdminDashboard() {
   async function handleUpdate(e) {
     e.preventDefault();
     
+    // Use originalEmail as the anchor in case the user changes the email address field during edit
+    const targetEmail = originalEmail || editingMember.email;
+
     const { error } = await supabase
       .from('members')
       .update({
-        prefix: editingMember.prefix,
-        first_name: editingMember.first_name,
-        last_name: editingMember.last_name,
+        prefix: editingMember.prefix || '',
+        first_name: editingMember.first_name || '',
+        last_name: editingMember.last_name || '',
         email: editingMember.email,
-        phone: editingMember.phone,
-        core_department: editingMember.core_department,
-        sub_department: editingMember.sub_department,
-        role: editingMember.role,
-        avatar_url: editingMember.avatar_url
+        phone: editingMember.phone || '',
+        core_department: editingMember.core_department || '',
+        sub_department: editingMember.sub_department || '',
+        role: editingMember.role || 'member',
+        avatar_url: editingMember.avatar_url || ''
       })
-      .eq('id', editingMember.id);
+      .eq('email', targetEmail);
 
     if (error) {
       alert('Error updating member: ' + error.message);
     } else {
       alert('Member updated successfully!');
       setEditingMember(null);
+      setOriginalEmail('');
       fetchMembers();
     }
   }
@@ -101,11 +108,13 @@ export default function AdminDashboard() {
       </div>
 
       {editingMember && (
-        <div style={{ backgroundColor: '#f9fafb', border: '1px solid #d1d5db', padding: '20px', borderRadius: '8px', marginBottom: '25px' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Edit Member Details</h3>
-          <form onSubmit={handleUpdate} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+        <div style={{ backgroundColor: '#f9fafb', border: '1px solid #d1d5db', padding: '20px', borderRadius: '8px', marginBottom: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#1f2937' }}>
+            Edit Member: {editingMember.first_name} {editingMember.last_name}
+          </h3>
+          <form onSubmit={handleUpdate} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Prefix</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Prefix</label>
               <input
                 type="text"
                 value={editingMember.prefix || ''}
@@ -114,7 +123,7 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>First Name</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>First Name</label>
               <input
                 type="text"
                 value={editingMember.first_name || ''}
@@ -123,7 +132,7 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Last Name</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Last Name</label>
               <input
                 type="text"
                 value={editingMember.last_name || ''}
@@ -132,16 +141,16 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Email</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email (Unique Identifier)</label>
               <input
                 type="email"
                 value={editingMember.email || ''}
                 onChange={e => setEditingMember({ ...editingMember, email: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff' }}
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Phone</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Phone</label>
               <input
                 type="text"
                 value={editingMember.phone || ''}
@@ -150,7 +159,7 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Core Department</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Core Department</label>
               <input
                 type="text"
                 value={editingMember.core_department || ''}
@@ -159,7 +168,7 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Sub Department</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Sub Department</label>
               <input
                 type="text"
                 value={editingMember.sub_department || ''}
@@ -168,16 +177,17 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Photo URL</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Photo URL</label>
               <input
                 type="text"
+                placeholder="Paste image link here"
                 value={editingMember.avatar_url || ''}
                 onChange={e => setEditingMember({ ...editingMember, avatar_url: e.target.value })}
                 style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Role</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
               <select
                 value={editingMember.role || 'member'}
                 onChange={e => setEditingMember({ ...editingMember, role: e.target.value })}
@@ -189,10 +199,10 @@ export default function AdminDashboard() {
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="submit" style={{ padding: '8px 16px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Save Changes
               </button>
-              <button type="button" onClick={() => setEditingMember(null)} style={{ padding: '8px 16px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              <button type="button" onClick={() => { setEditingMember(null); setOriginalEmail(''); }} style={{ padding: '10px 20px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Cancel
               </button>
             </div>
@@ -220,7 +230,7 @@ export default function AdminDashboard() {
               </tr>
             ) : (
               members.map(m => (
-                <tr key={m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                <tr key={m.email || m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
                     {m.avatar_url ? (
                       <img src={m.avatar_url} alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
@@ -241,7 +251,10 @@ export default function AdminDashboard() {
                   <td style={{ padding: '12px' }}>{m.phone || 'N/A'}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <button
-                      onClick={() => setEditingMember(m)}
+                      onClick={() => {
+                        setEditingMember({ ...m });
+                        setOriginalEmail(m.email);
+                      }}
                       style={{ marginRight: '8px', padding: '6px 10px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                     >
                       Edit
