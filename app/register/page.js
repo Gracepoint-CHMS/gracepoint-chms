@@ -36,6 +36,8 @@ export default function RegisterPage() {
   });
 
   const [selectedSubDepts, setSelectedSubDepts] = useState([]);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [subDeptError, setSubDeptError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -51,6 +53,14 @@ export default function RegisterPage() {
       setSelectedSubDepts([...selectedSubDepts, deptName]);
     }
     if (subDeptError) setSubDeptError('');
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
   };
 
   const handleRegister = async (e) => {
@@ -74,7 +84,27 @@ export default function RegisterPage() {
       if (signUpError) throw signUpError;
 
       if (data?.user) {
-        // 2. Insert member profile details into public.members table
+        let avatarUrl = null;
+
+        // 2. Upload Profile Photo if provided
+        if (photoFile) {
+          const fileExt = photoFile.name.split('.').pop();
+          const fileName = `${data.user.id}-${Date.now()}.${fileExt}`;
+          const filePath = `avatars/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('member-photos')
+            .upload(filePath, photoFile);
+
+          if (!uploadError) {
+            const { data: publicUrlData } = supabase.storage
+              .from('member-photos')
+              .getPublicUrl(filePath);
+            avatarUrl = publicUrlData.publicUrl;
+          }
+        }
+
+        // 3. Insert member profile details into public.members table
         const { error: profileError } = await supabase.from('members').insert([
           {
             id: data.user.id,
@@ -94,6 +124,7 @@ export default function RegisterPage() {
             date_of_baptism: formData.date_of_baptism || null,
             core_dept: formData.core_dept,
             sub_dept: selectedSubDepts.join(', '),
+            photo_url: avatarUrl,
             role: 'member',
           },
         ]);
@@ -125,6 +156,8 @@ export default function RegisterPage() {
           core_dept: '',
         });
         setSelectedSubDepts([]);
+        setPhotoFile(null);
+        setPhotoPreview(null);
       }
     } catch (err) {
       setMessage({
@@ -157,6 +190,39 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        
+        {/* Profile Photo Upload Section */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+          <div
+            style={{
+              width: '96px',
+              height: '96px',
+              borderRadius: '50%',
+              backgroundColor: '#f3f4f6',
+              border: '2px dashed #ccc',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            {photoPreview ? (
+              <img src={photoPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center' }}>Member Photo</span>
+            )}
+          </div>
+          <label style={{ fontSize: '0.875rem', color: '#2563eb', cursor: 'pointer', fontWeight: '500' }}>
+            Upload Profile Photo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              style={{ display: 'none' }}
+            />
+          </label>
+        </div>
+
         <div>
           <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Prefix</label>
           <select
