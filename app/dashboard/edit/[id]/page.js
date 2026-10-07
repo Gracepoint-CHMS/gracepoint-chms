@@ -17,11 +17,13 @@ export default function EditMemberPage() {
     phone: '',
     core_department: '',
     sub_department: '',
-    role: 'member'
+    role: 'member',
+    photo_url: ''
   });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     async function fetchMember() {
@@ -48,7 +50,8 @@ export default function EditMemberPage() {
           phone: data.phone || '',
           core_department: data.core_department || '',
           sub_department: data.sub_department || '',
-          role: data.role || 'member'
+          role: data.role || 'member',
+          photo_url: data.photo_url || ''
         });
       }
       setLoading(false);
@@ -59,6 +62,33 @@ export default function EditMemberPage() {
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${id}-${Date.now()}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('member-photos')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      alert('Photo upload failed: ' + uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('member-photos')
+      .getPublicUrl(filePath);
+
+    setForm((prev) => ({ ...prev, photo_url: publicUrlData.publicUrl }));
+    setUploading(false);
   };
 
   const handleSubmit = async (e) => {
@@ -77,6 +107,7 @@ export default function EditMemberPage() {
     } else {
       alert('Member updated successfully!');
       router.push('/dashboard');
+      router.refresh(); // Forces Next.js to re-fetch dashboard data
     }
   };
 
@@ -110,6 +141,40 @@ export default function EditMemberPage() {
       </h1>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        {/* Photo Display & Upload Section */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
+          <div style={{
+            width: '70px',
+            height: '70px',
+            borderRadius: '50%',
+            backgroundColor: '#e5e7eb',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid #ccc'
+          }}>
+            {form.photo_url ? (
+              <img src={form.photo_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ color: '#6b7280', fontSize: '12px' }}>No Photo</span>
+            )}
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', marginBottom: '4px', fontWeight: 'bold' }}>
+              Profile Photo
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              disabled={uploading}
+              style={{ fontSize: '13px' }}
+            />
+            {uploading && <p style={{ fontSize: '12px', color: '#2563eb' }}>Uploading photo...</p>}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '10px' }}>
           <div style={{ flex: '1' }}>
             <label style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>Prefix</label>
@@ -206,16 +271,16 @@ export default function EditMemberPage() {
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || uploading}
           style={{
             marginTop: '10px',
             padding: '10px',
-            backgroundColor: saving ? '#9ca3af' : '#2563eb',
+            backgroundColor: saving || uploading ? '#9ca3af' : '#2563eb',
             color: '#fff',
             border: 'none',
             borderRadius: '4px',
             fontWeight: 'bold',
-            cursor: saving ? 'not-allowed' : 'pointer'
+            cursor: saving || uploading ? 'not-allowed' : 'pointer'
           }}
         >
           {saving ? 'Saving...' : 'Update Member'}
