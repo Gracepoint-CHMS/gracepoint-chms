@@ -58,7 +58,7 @@ export default function PortalPage() {
         <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Gracepoint CHMS Portal</h1>
         <div>
           <button
-            onClick={() => router.push('/dashboard/admin')}
+            onClick={() => router.push('/dashboard')}
             style={{ marginRight: '10px', padding: '8px 12px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
           >
             Admin Dashboard
