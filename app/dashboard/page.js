@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   });
 
   const [newEvent, setNewEvent] = useState({
-    title: '', description: '', event_date: '', location: ''
+    title: '', description: '', event_date: '', start_time: '', location: ''
   });
 
   const [newAnnouncement, setNewAnnouncement] = useState({
@@ -379,7 +379,7 @@ export default function AdminDashboard() {
               <div key={ev.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>{ev.title}</h3>
                 <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '8px' }}>{ev.description}</p>
-                <div style={{ fontSize: '12px', color: '#2563eb', fontWeight: 'bold' }}>📅 {new Date(ev.event_date).toLocaleString()}</div>
+                <div style={{ fontSize: '12px', color: '#2563eb', fontWeight: 'bold' }}>📅 {ev.event_date} {ev.start_time ? `at ${ev.start_time}` : ''}</div>
                 <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>📍 {ev.location || 'Church Auditorium'}</div>
                 <button onClick={() => handleDeleteEvent(ev.id)} style={{ marginTop: '12px', padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete Event</button>
               </div>
@@ -416,9 +416,16 @@ export default function AdminDashboard() {
             <form onSubmit={handleAddEvent} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
               <input type="text" placeholder="Event Title" required value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              <input type="datetime-local" required value={newEvent.event_date} onChange={e => setNewEvent({...newEvent, event_date: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151' }}>Event Date:</label>
+              <input type="date" required value={newEvent.event_date} onChange={e => setNewEvent({...newEvent, event_date: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151' }}>Start Time:</label>
+              <input type="time" required value={newEvent.start_time} onChange={e => setNewEvent({...newEvent, start_time: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              
               <input type="text" placeholder="Location" value={newEvent.location} onChange={e => setNewEvent({...newEvent, location: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>Save Event</button>
+              
+              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '5px' }}>Save Event</button>
               <button type="button" onClick={() => setShowEventModal(false)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px' }}>Cancel</button>
             </form>
           </div>
