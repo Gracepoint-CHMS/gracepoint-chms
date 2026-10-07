@@ -62,8 +62,7 @@ export default function AdminDashboard() {
         home_address: editingMember.home_address || '',
         core_department: editingMember.core_department || '',
         sub_department: editingMember.sub_department || '',
-        role: editingMember.role || 'member',
-        avatar_url: editingMember.avatar_url || ''
+        role: editingMember.role || 'member'
       })
       .eq('email', targetEmail);
 
@@ -196,16 +195,6 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Photo URL</label>
-              <input
-                type="text"
-                placeholder="Paste image link here"
-                value={editingMember.avatar_url || ''}
-                onChange={e => setEditingMember({ ...editingMember, avatar_url: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-              />
-            </div>
-            <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
               <select
                 value={editingMember.role || 'member'}
@@ -233,7 +222,7 @@ export default function AdminDashboard() {
         <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderRadius: '8px', overflow: 'hidden' }}>
           <thead>
             <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-              <th style={{ padding: '12px' }}>Photo</th>
+              <th style={{ padding: '12px' }}>Avatar</th>
               <th style={{ padding: '12px' }}>Name</th>
               <th style={{ padding: '12px' }}>Email & Phone</th>
               <th style={{ padding: '12px' }}>Address & DOB</th>
@@ -251,13 +240,9 @@ export default function AdminDashboard() {
               members.map(m => (
                 <tr key={m.email || m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
-                    {m.avatar_url ? (
-                      <img src={m.avatar_url} alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
-                        {m.first_name?.[0] || 'M'}
-                      </div>
-                    )}
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#3730a3' }}>
+                      {m.first_name?.[0] || 'M'}
+                    </div>
                   </td>
                   <td style={{ padding: '12px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
                   <td style={{ padding: '12px' }}>
