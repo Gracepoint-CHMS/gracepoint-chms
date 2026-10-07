@@ -141,6 +141,21 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleUpdateMember(e) {
+    e.preventDefault();
+    let query = supabase.from('members').update(editingMember);
+    if (editingMember.id) query = query.eq('id', editingMember.id);
+    else query = query.eq('email', editingMember.email);
+
+    const { error } = await query;
+    if (error) alert('Error updating member: ' + error.message);
+    else {
+      alert('Member updated successfully!');
+      setEditingMember(null);
+      fetchMembers();
+    }
+  }
+
   async function handleAddContribution(e) {
     e.preventDefault();
     const targetMember = members.find(m => m.email === newContribution.member_email);
@@ -262,7 +277,8 @@ export default function AdminDashboard() {
               <thead>
                 <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
                   <th style={{ padding: '12px' }}>Name</th>
-                  <th style={{ padding: '12px' }}>Email & Phone</th>
+                  <th style={{ padding: '12px' }}>Contact & Address</th>
+                  <th style={{ padding: '12px' }}>Background</th>
                   <th style={{ padding: '12px' }}>Department</th>
                   <th style={{ padding: '12px' }}>Role</th>
                   <th style={{ padding: '12px', textAlign: 'center' }}>Actions</th>
@@ -272,7 +288,16 @@ export default function AdminDashboard() {
                 {filteredMembers.map(m => (
                   <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <td style={{ padding: '12px', fontWeight: '500' }}>{m.prefix} {m.first_name} {m.last_name}</td>
-                    <td style={{ padding: '12px' }}><div>{m.email}</div><div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone}</div></td>
+                    <td style={{ padding: '12px' }}>
+                      <div>{m.email}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone}</div>
+                      <div style={{ fontSize: '11px', color: '#4b5563' }}>📍 {m.home_address || 'N/A'}, {m.hometown || ''}</div>
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '12px', color: '#4b5563' }}>
+                      <div>Gender: {m.gender || 'N/A'}</div>
+                      <div>Marital: {m.marital_status || 'N/A'}</div>
+                      <div>Emergency: {m.emergency_contact_person || 'N/A'} ({m.emergency_contact_phone || 'N/A'})</div>
+                    </td>
                     <td style={{ padding: '12px' }}>{m.core_department} / {m.sub_department}</td>
                     <td style={{ padding: '12px' }}><span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', backgroundColor: '#f3f4f6' }}>{m.role}</span></td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -408,39 +433,42 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODALS */}
-      {showEventModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '450px' }}>
-            <h3>Create Event</h3>
-            <form onSubmit={handleAddEvent} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              <input type="text" placeholder="Event Title" required value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+      {/* MODAL: EDIT MEMBER */}
+      {editingMember && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, overflowY: 'auto', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3>Edit Member Details</h3>
+            <form onSubmit={handleUpdateMember} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>First Name</label>
+              <input type="text" value={editingMember.first_name || ''} onChange={e => setEditingMember({...editingMember, first_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               
-              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151' }}>Event Date:</label>
-              <input type="date" required value={newEvent.event_date} onChange={e => setNewEvent({...newEvent, event_date: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Last Name</label>
+              <input type="text" value={editingMember.last_name || ''} onChange={e => setEditingMember({...editingMember, last_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               
-              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151' }}>Start Time:</label>
-              <input type="time" required value={newEvent.start_time} onChange={e => setNewEvent({...newEvent, start_time: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Phone</label>
+              <input type="text" value={editingMember.phone || ''} onChange={e => setEditingMember({...editingMember, phone: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               
-              <input type="text" placeholder="Location" value={newEvent.location} onChange={e => setNewEvent({...newEvent, location: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              
-              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '5px' }}>Save Event</button>
-              <button type="button" onClick={() => setShowEventModal(false)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px' }}>Cancel</button>
-            </form>
-          </div>
-        </div>
-      )}
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Home Address</label>
+              <input type="text" value={editingMember.home_address || ''} onChange={e => setEditingMember({...editingMember, home_address: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
 
-      {showAnnouncementModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '450px' }}>
-            <h3>Post Announcement</h3>
-            <form onSubmit={handleAddAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              <input type="text" placeholder="Title" required value={newAnnouncement.title} onChange={e => setNewAnnouncement({...newAnnouncement, title: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              <textarea placeholder="Content..." required value={newAnnouncement.content} onChange={e => setNewAnnouncement({...newAnnouncement, content: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', height: '100px' }} />
-              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>Broadcast</button>
-              <button type="button" onClick={() => setShowAnnouncementModal(false)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px' }}>Cancel</button>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Hometown</label>
+              <input type="text" value={editingMember.hometown || ''} onChange={e => setEditingMember({...editingMember, hometown: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Emergency Contact Person</label>
+              <input type="text" value={editingMember.emergency_contact_person || ''} onChange={e => setEditingMember({...editingMember, emergency_contact_person: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Emergency Contact Phone</label>
+              <input type="text" value={editingMember.emergency_contact_phone || ''} onChange={e => setEditingMember({...editingMember, emergency_contact_phone: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Role</label>
+              <select value={editingMember.role || 'member'} onChange={e => setEditingMember({...editingMember, role: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+
+              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>Update Member</button>
+              <button type="button" onClick={() => setEditingMember(null)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
             </form>
           </div>
         </div>
