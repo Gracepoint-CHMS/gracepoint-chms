@@ -9,6 +9,7 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingMember, setEditingMember] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetchMembers();
@@ -48,6 +49,37 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleFileUpload(e) {
+    try {
+      setUploading(true);
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Upload file to 'member-photos' bucket in Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('member-photos')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data } = supabase.storage.from('member-photos').getPublicUrl(filePath);
+
+      setEditingMember({ ...editingMember, photo_url: data.publicUrl });
+      alert('Image uploaded successfully!');
+    } catch (error) {
+      alert('Error uploading image: ' + error.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleUpdate(e) {
     e.preventDefault();
     if (!editingMember) return;
@@ -81,7 +113,7 @@ export default function AdminDashboard() {
     } else {
       alert('Member updated successfully!');
       setEditingMember(null);
-      await fetchMembers(); // Refresh table immediately
+      await fetchMembers();
     }
   }
 
@@ -203,14 +235,23 @@ export default function AdminDashboard() {
                 style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Photo URL</label>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Upload Photo / Photo URL</label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  style={{ padding: '6px', border: '1px solid #ccc', borderRadius: '4px', background: '#fff', flex: 1 }}
+                />
+                {uploading && <span style={{ fontSize: '12px', color: '#4b5563' }}>Uploading...</span>}
+              </div>
               <input
                 type="text"
-                placeholder="Paste image link here"
+                placeholder="Or paste image link here"
                 value={editingMember.photo_url || ''}
                 onChange={e => setEditingMember({ ...editingMember, photo_url: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '8px' }}
               />
             </div>
             <div>
