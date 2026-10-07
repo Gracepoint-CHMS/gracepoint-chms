@@ -105,8 +105,7 @@ export default function EditMemberPage() {
       alert('Failed to update member: ' + error.message);
     } else {
       alert('Member updated successfully!');
-      // Force full reload back to dashboard so new values appear immediately
-      window.location.href = '/dashboard';
+      router.push('/dashboard');
     }
   };
 
@@ -153,12 +152,11 @@ export default function EditMemberPage() {
             justifyContent: 'center',
             border: '1px solid #ccc'
           }}>
-            {form.photo_url && (form.photo_url.startsWith('http://') || form.photo_url.startsWith('https://')) ? (
+            {form.photo_url ? (
               <img
                 src={form.photo_url}
                 alt="Profile"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
               />
             ) : (
               <span style={{ color: '#6b7280', fontSize: '11px', textAlign: 'center' }}>No Photo</span>
