@@ -475,7 +475,13 @@ export default function AdminDashboard() {
               </div>
 
               <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Profile Photo URL</label>
-              <input type="text" placeholder="https://..." value={editingMember.photo_url || ''} onChange={e => setEditingMember({...editingMember, photo_url: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+              <input 
+                type="text" 
+                placeholder="https://..." 
+                value={editingMember.photo_url || ''} 
+                onChange={e => setEditingMember({...editingMember, photo_url: e.target.value})} 
+                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }} 
+              />
 
               <label style={{ fontSize: '12px', fontWeight: 'bold' }}>First Name</label>
               <input type="text" value={editingMember.first_name || ''} onChange={e => setEditingMember({...editingMember, first_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
