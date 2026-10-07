@@ -106,10 +106,13 @@ export default function AdminDashboard() {
       query = query.eq('email', editingMember.email);
     }
 
-    const { error } = await query;
+    // .select() forces Supabase to return the updated rows to verify the write operation
+    const { data, error } = await query.select();
 
     if (error) {
       alert('Error updating member: ' + error.message);
+    } else if (!data || data.length === 0) {
+      alert('Update failed: 0 rows were updated. Please check if your Supabase table has an UPDATE policy enabled in RLS.');
     } else {
       alert('Member updated successfully!');
       setEditingMember(null);
