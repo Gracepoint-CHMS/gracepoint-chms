@@ -7,11 +7,15 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    full_name: '',
+    first_name: '',
+    last_name: '',
     prefix: '',
     phone: '',
     gender: '',
     marital_status: '',
+    dob: '',
+    date_joined: '',
+    date_of_baptism: '',
     core_dept: '',
     sub_dept: '',
   });
@@ -38,22 +42,20 @@ export default function RegisterPage() {
       if (signUpError) throw signUpError;
 
       if (data?.user) {
-        // Split full_name into first_name and last_name for members table schema
-        const nameParts = formData.full_name.trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-
         // 2. Insert member profile details into public.members table
         const { error: profileError } = await supabase.from('members').insert([
           {
             id: data.user.id,
             email: formData.email,
-            first_name: firstName,
-            last_name: lastName,
+            first_name: formData.first_name.trim(),
+            last_name: formData.last_name.trim(),
             prefix: formData.prefix,
             phone: formData.phone,
             gender: formData.gender,
             marital_status: formData.marital_status,
+            dob: formData.dob || null,
+            date_joined: formData.date_joined || null,
+            date_of_baptism: formData.date_of_baptism || null,
             core_dept: formData.core_dept,
             sub_dept: formData.sub_dept,
             role: 'member',
@@ -64,18 +66,22 @@ export default function RegisterPage() {
 
         setMessage({
           type: 'success',
-          text: 'Registration successful! Check your email to confirm or log in.',
+          text: 'Registration successful! You can now log in.',
         });
 
         // Clear form
         setFormData({
           email: '',
           password: '',
-          full_name: '',
+          first_name: '',
+          last_name: '',
           prefix: '',
           phone: '',
           gender: '',
           marital_status: '',
+          dob: '',
+          date_joined: '',
+          date_of_baptism: '',
           core_dept: '',
           sub_dept: '',
         });
@@ -91,7 +97,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div style={{ maxWidth: '480px', margin: '2rem auto', padding: '1rem' }}>
+    <div style={{ maxWidth: '480px', margin: '2rem auto', padding: '1rem', fontFamily: 'sans-serif' }}>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', textAlign: 'center' }}>
         Member Registration
       </h2>
@@ -132,17 +138,31 @@ export default function RegisterPage() {
           </select>
         </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Full Name *</label>
-          <input
-            type="text"
-            name="full_name"
-            required
-            value={formData.full_name}
-            onChange={handleChange}
-            placeholder="e.g. Florence Serwaa"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-          />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>First Name *</label>
+            <input
+              type="text"
+              name="first_name"
+              required
+              value={formData.first_name}
+              onChange={handleChange}
+              placeholder="Florence"
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Last Name *</label>
+            <input
+              type="text"
+              name="last_name"
+              required
+              value={formData.last_name}
+              onChange={handleChange}
+              placeholder="Serwaa"
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
         </div>
 
         <div>
@@ -154,7 +174,7 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={handleChange}
             placeholder="florence@gmail.com"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -167,7 +187,7 @@ export default function RegisterPage() {
             minLength={6}
             value={formData.password}
             onChange={handleChange}
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -179,8 +199,42 @@ export default function RegisterPage() {
             value={formData.phone}
             onChange={handleChange}
             placeholder="0541509621"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
           />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Date of Birth</label>
+          <input
+            type="date"
+            name="dob"
+            value={formData.dob}
+            onChange={handleChange}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Date Joined</label>
+            <input
+              type="date"
+              name="date_joined"
+              value={formData.date_joined}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Date of Baptism</label>
+            <input
+              type="date"
+              name="date_of_baptism"
+              value={formData.date_of_baptism}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+            />
+          </div>
         </div>
 
         <div>
@@ -214,26 +268,28 @@ export default function RegisterPage() {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Core Department</label>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Core Department *</label>
           <input
             type="text"
             name="core_dept"
+            required
             value={formData.core_dept}
             onChange={handleChange}
             placeholder="e.g. CARE"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
           />
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Sub Department</label>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Sub Department *</label>
           <input
             type="text"
             name="sub_dept"
+            required
             value={formData.sub_dept}
             onChange={handleChange}
             placeholder="e.g. Women Ministry"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
           />
         </div>
 
