@@ -3,6 +3,18 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
+const SUB_DEPTS_LIST = [
+  'General Assembly',
+  'Choir/Music department',
+  'Pastoral ministry',
+  'Ushering department',
+  'Women ministry',
+  'Men Ministry',
+  'Evangelical department',
+  'Children ministry',
+  'Prayer Warriors',
+];
+
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     email: '',
@@ -21,9 +33,10 @@ export default function RegisterPage() {
     date_joined: '',
     date_of_baptism: '',
     core_dept: '',
-    sub_dept: '',
   });
 
+  const [selectedSubDepts, setSelectedSubDepts] = useState([]);
+  const [subDeptError, setSubDeptError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
@@ -31,8 +44,23 @@ export default function RegisterPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleSubDeptCheckbox = (deptName) => {
+    if (selectedSubDepts.includes(deptName)) {
+      setSelectedSubDepts(selectedSubDepts.filter((item) => item !== deptName));
+    } else {
+      setSelectedSubDepts([...selectedSubDepts, deptName]);
+    }
+    if (subDeptError) setSubDeptError('');
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
+
+    if (selectedSubDepts.length === 0) {
+      setSubDeptError('Please select at least one sub-department.');
+      return;
+    }
+
     setLoading(true);
     setMessage({ type: '', text: '' });
 
@@ -65,7 +93,7 @@ export default function RegisterPage() {
             date_joined: formData.date_joined || null,
             date_of_baptism: formData.date_of_baptism || null,
             core_dept: formData.core_dept,
-            sub_dept: formData.sub_dept,
+            sub_dept: selectedSubDepts.join(', '),
             role: 'member',
           },
         ]);
@@ -95,8 +123,8 @@ export default function RegisterPage() {
           date_joined: '',
           date_of_baptism: '',
           core_dept: '',
-          sub_dept: '',
         });
+        setSelectedSubDepts([]);
       }
     } catch (err) {
       setMessage({
@@ -329,29 +357,57 @@ export default function RegisterPage() {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Core Department *</label>
-          <input
-            type="text"
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem', fontWeight: 'bold' }}>
+            Core Department *
+          </label>
+          <select
             name="core_dept"
             required
             value={formData.core_dept}
             onChange={handleChange}
-            placeholder="e.g. CARE"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-          />
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+          >
+            <option value="">Select Core Department</option>
+            <option value="LOVE">LOVE</option>
+            <option value="UNITY">UNITY</option>
+            <option value="CARE">CARE</option>
+            <option value="RESPECT">RESPECT</option>
+          </select>
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Sub Department *</label>
-          <input
-            type="text"
-            name="sub_dept"
-            required
-            value={formData.sub_dept}
-            onChange={handleChange}
-            placeholder="e.g. Women Ministry"
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-          />
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+            Sub Department * (Select one or more)
+          </label>
+          <div
+            style={{
+              border: subDeptError ? '1px solid #dc2626' : '1px solid #ccc',
+              borderRadius: '4px',
+              padding: '0.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+              maxHeight: '200px',
+              overflowY: 'auto',
+            }}
+          >
+            {SUB_DEPTS_LIST.map((dept) => (
+              <label key={dept} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  value={dept}
+                  checked={selectedSubDepts.includes(dept)}
+                  onChange={() => handleSubDeptCheckbox(dept)}
+                />
+                {dept}
+              </label>
+            ))}
+          </div>
+          {subDeptError && (
+            <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+              {subDeptError}
+            </span>
+          )}
         </div>
 
         <button
