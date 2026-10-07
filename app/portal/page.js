@@ -1,143 +1,110 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function MemberPortalPage() {
   const [member, setMember] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchMemberProfile();
-  }, []);
+    async function fetchMemberData() {
+      const { data: { session } } = await supabase.auth.getSession();
 
-  const fetchMemberProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data, error } = await supabase
-          .from('members')
-          .select('*')
-          .eq('email', user.email)
-          .single();
-
-        if (data) setMember(data);
+      if (!session) {
+        window.location.href = '/login';
+        return;
       }
-    } catch (err) {
-      console.error('Error fetching member profile:', err);
-    } finally {
+
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching member portal data:', error);
+      } else {
+        setMember(data);
+      }
       setLoading(false);
     }
-  };
 
-  const handlePhotoUpload = async (e) => {
-    try {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      setUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${member?.id || 'user'}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      const publicUrl = urlData.publicUrl;
-
-      const { error: updateError } = await supabase
-        .from('members')
-        .update({ photo_url: publicUrl })
-        .eq('id', member.id);
-
-      if (updateError) throw updateError;
-
-      setMember((prev) => ({ ...prev, photo_url: publicUrl }));
-      alert('Profile photo updated successfully!');
-    } catch (err) {
-      alert('Error uploading photo: ' + err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
+    fetchMemberData();
+  }, []);
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading profile...</div>;
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <h3>Loading your member profile...</h3>
+      </div>
+    );
+  }
+
+  if (!member) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <p>Member profile not found.</p>
+      </div>
+    );
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f4f6f9', fontFamily: 'sans-serif' }}>
-      {/* Top Header Navigation */}
-      <nav style={{ backgroundColor: '#0d6efd', padding: '1rem 2rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '1.2rem', margin: 0 }}>Gracepoint CHMS</h1>
-        <div>
-          <Link href="/dashboard" style={{ color: '#fff', marginRight: '1rem', textDecoration: 'none', fontWeight: 'bold' }}>
-            Dashboard
-          </Link>
-          <button 
-            onClick={handleSignOut} 
-            style={{ background: 'transparent', border: '1px solid #fff', color: '#fff', padding: '0.3rem 0.8rem', borderRadius: '4px', cursor: 'pointer' }}
-          >
-            Sign Out
-          </button>
-        </div>
-      </nav>
-
-      {/* Profile Card */}
-      <div style={{ maxWidth: '420px', margin: '2rem auto', padding: '1.5rem', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' }}>
-        <h2 style={{ color: '#1a365d', marginBottom: '1.5rem' }}>Member Portal</h2>
-
-        {/* Photo Box & Avatar Upload */}
-        <div style={{ position: 'relative', width: '110px', height: '110px', margin: '0 auto 1rem auto' }}>
-          {member?.photo_url ? (
-            <img 
-              src={member.photo_url} 
-              alt={member?.name || 'Member Photo'} 
-              style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #0d6efd', margin: '0 auto' }} 
+    <div style={{ maxWidth: '600px', margin: '40px auto', padding: '20px', fontFamily: 'sans-serif' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
+          {member.photo ? (
+            <img
+              src={member.photo}
+              alt={member.full_name}
+              style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }}
             />
           ) : (
-            <div style={{ width: '100px', height: '100px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155', fontWeight: 'bold', margin: '0 auto' }}>
-              No Pic
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold' }}>
+              {member.full_name ? member.full_name.charAt(0) : 'M'}
             </div>
           )}
-
-          <label style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.8rem', color: '#0d6efd', cursor: 'pointer', fontWeight: 'bold' }}>
-            {uploading ? 'Uploading...' : 'Change Photo'}
-            <input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={uploading} style={{ display: 'none' }} />
-          </label>
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: 'bold', margin: 0 }}>
+              {member.prefix ? `${member.prefix} ` : ''}{member.full_name}
+            </h1>
+            <p style={{ color: '#6b7280', margin: '4px 0 0 0' }}>{member.email}</p>
+            <span style={{ display: 'inline-block', marginTop: '6px', padding: '2px 8px', backgroundColor: '#e0e7ff', color: '#3730a3', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>
+              Role: {member.role || 'member'}
+            </span>
+          </div>
         </div>
 
-        <h3 style={{ color: '#0f172a', marginBottom: '1.2rem', marginTop: '0.5rem' }}>{member?.name || 'Member'}</h3>
+        <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '20px 0' }} />
 
-        {/* Profile Details */}
-        <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '6px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.95rem' }}>
-          <div><strong>Email:</strong> {member?.email}</div>
-          <div><strong>Phone:</strong> {member?.phone || 'N/A'}</div>
-          <div><strong>Core Department:</strong> {member?.core_dept || 'N/A'}</div>
-          <div><strong>Sub Department:</strong> {member?.sub_dept || 'N/A'}</div>
-          <div><strong>Role:</strong> <span style={{ textTransform: 'capitalize', fontWeight: 'bold', color: '#0d6efd' }}>{member?.role || 'member'}</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div>
+            <strong style={{ display: 'block', fontSize: '12px', color: '#6b7280', textTransform: 'uppercase' }}>Phone</strong>
+            <span style={{ fontSize: '15px' }}>{member.phone || 'N/A'}</span>
+          </div>
+          <div>
+            <strong style={{ display: 'block', fontSize: '12px', color: '#6b7280', textTransform: 'uppercase' }}>Gender</strong>
+            <span style={{ fontSize: '15px' }}>{member.gender || 'N/A'}</span>
+          </div>
+          <div>
+            <strong style={{ display: 'block', fontSize: '12px', color: '#6b7280', textTransform: 'uppercase' }}>Core Department</strong>
+            <span style={{ fontSize: '15px' }}>{member.core_dept || '—'}</span>
+          </div>
+          <div>
+            <strong style={{ display: 'block', fontSize: '12px', color: '#6b7280', textTransform: 'uppercase' }}>Sub Department</strong>
+            <span style={{ fontSize: '15px' }}>{member.sub_dept || '—'}</span>
+          </div>
+          <div>
+            <strong style={{ display: 'block', fontSize: '12px', color: '#6b7280', textTransform: 'uppercase' }}>Marital Status</strong>
+            <span style={{ fontSize: '15px' }}>{member.marital_status || 'N/A'}</span>
+          </div>
+          <div>
+            <strong style={{ display: 'block', fontSize: '12px', color: '#6b7280', textTransform: 'uppercase' }}>Date Joined</strong>
+            <span style={{ fontSize: '15px' }}>{member.date_joined || 'N/A'}</span>
+          </div>
         </div>
-
-        <button 
-          onClick={handleSignOut} 
-          style={{ width: '100%', backgroundColor: '#dc3545', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', marginTop: '1.5rem' }}
-        >
-          Sign Out
-        </button>
       </div>
     </div>
   );
