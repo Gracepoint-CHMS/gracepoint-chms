@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabase'; // Adjust relative path if needed (e.g. '@/lib/supabase')
+import { supabase } from '../../lib/supabase';
 
 export default function DashboardPage() {
   const router = useRouter();
