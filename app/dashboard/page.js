@@ -48,7 +48,6 @@ export default function AdminDashboard() {
   async function handleUpdate(e) {
     e.preventDefault();
     
-    // Use originalEmail as the anchor in case the user changes the email address field during edit
     const targetEmail = originalEmail || editingMember.email;
 
     const { error } = await supabase
@@ -59,6 +58,8 @@ export default function AdminDashboard() {
         last_name: editingMember.last_name || '',
         email: editingMember.email,
         phone: editingMember.phone || '',
+        date_of_birth: editingMember.date_of_birth || '',
+        home_address: editingMember.home_address || '',
         core_department: editingMember.core_department || '',
         sub_department: editingMember.sub_department || '',
         role: editingMember.role || 'member',
@@ -141,12 +142,12 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email (Unique Identifier)</label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email</label>
               <input
                 type="email"
                 value={editingMember.email || ''}
                 onChange={e => setEditingMember({ ...editingMember, email: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
             <div>
@@ -155,6 +156,24 @@ export default function AdminDashboard() {
                 type="text"
                 value={editingMember.phone || ''}
                 onChange={e => setEditingMember({ ...editingMember, phone: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Birth</label>
+              <input
+                type="date"
+                value={editingMember.date_of_birth || ''}
+                onChange={e => setEditingMember({ ...editingMember, date_of_birth: e.target.value })}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Home Address</label>
+              <input
+                type="text"
+                value={editingMember.home_address || ''}
+                onChange={e => setEditingMember({ ...editingMember, home_address: e.target.value })}
                 style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
@@ -216,10 +235,10 @@ export default function AdminDashboard() {
             <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
               <th style={{ padding: '12px' }}>Photo</th>
               <th style={{ padding: '12px' }}>Name</th>
-              <th style={{ padding: '12px' }}>Email</th>
+              <th style={{ padding: '12px' }}>Email & Phone</th>
+              <th style={{ padding: '12px' }}>Address & DOB</th>
               <th style={{ padding: '12px' }}>Department</th>
               <th style={{ padding: '12px' }}>Role</th>
-              <th style={{ padding: '12px' }}>Phone</th>
               <th style={{ padding: '12px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
@@ -241,14 +260,20 @@ export default function AdminDashboard() {
                     )}
                   </td>
                   <td style={{ padding: '12px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
-                  <td style={{ padding: '12px' }}>{m.email}</td>
+                  <td style={{ padding: '12px' }}>
+                    <div style={{ fontSize: '13px' }}>{m.email}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone || 'N/A'}</div>
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <div style={{ fontSize: '13px' }}>{m.home_address || 'N/A'}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>DOB: {m.date_of_birth || 'N/A'}</div>
+                  </td>
                   <td style={{ padding: '12px' }}>{m.core_department} / {m.sub_department}</td>
                   <td style={{ padding: '12px' }}>
                     <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '12px', backgroundColor: m.role === 'super_admin' ? '#fee2e2' : '#e0e7ff', color: m.role === 'super_admin' ? '#991b1b' : '#3730a3', fontWeight: 'bold' }}>
                       {m.role}
                     </span>
                   </td>
-                  <td style={{ padding: '12px' }}>{m.phone || 'N/A'}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <button
                       onClick={() => {
