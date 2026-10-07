@@ -37,7 +37,7 @@ export default function AdminDashboard() {
     prefix: '', first_name: '', last_name: '', email: '', phone: '',
     home_address: '', hometown: '', emergency_contact_person: '', emergency_contact_phone: '',
     date_of_birth: '', date_joined: '', date_of_baptism: '', gender: '',
-    marital_status: '', core_department: '', sub_department: '', role: 'member'
+    marital_status: '', core_department: '', sub_department: '', role: 'member', photo_url: ''
   });
 
   const [newContribution, setNewContribution] = useState({
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
   });
 
   const [newAttendance, setNewAttendance] = useState({
-    member_id: '', service_date: '', department: '', status: 'Present'
+    member_email: '', service_date: '', department: 'General', status: 'Present'
   });
 
   const [newEvent, setNewEvent] = useState({
@@ -115,6 +115,13 @@ export default function AdminDashboard() {
     else setContributions(contributions.filter(c => c.id !== id));
   }
 
+  async function handleDeleteAttendance(id) {
+    if (!confirm('Delete this attendance record?')) return;
+    const { error } = await supabase.from('attendance').delete().eq('id', id);
+    if (error) alert('Error: ' + error.message);
+    else setAttendance(attendance.filter(a => a.id !== id));
+  }
+
   async function handleDeleteEvent(id) {
     if (!confirm('Delete this event?')) return;
     const { error } = await supabase.from('events').delete().eq('id', id);
@@ -176,10 +183,15 @@ export default function AdminDashboard() {
 
   async function handleAddAttendance(e) {
     e.preventDefault();
-    const { error } = await supabase.from('attendance').insert([newAttendance]);
+    const targetMember = members.find(m => m.email === newAttendance.member_email);
+    const payload = {
+      ...newAttendance,
+      member_id: targetMember ? targetMember.id : null
+    };
+    const { error } = await supabase.from('attendance').insert([payload]);
     if (error) alert('Error: ' + error.message);
     else {
-      alert('Attendance logged!');
+      alert('Attendance logged successfully!');
       setShowAttendanceModal(false);
       fetchAttendance();
     }
@@ -276,7 +288,7 @@ export default function AdminDashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                  <th style={{ padding: '12px' }}>Name</th>
+                  <th style={{ padding: '12px' }}>Photo & Name</th>
                   <th style={{ padding: '12px' }}>Contact & Address</th>
                   <th style={{ padding: '12px' }}>Background</th>
                   <th style={{ padding: '12px' }}>Department</th>
@@ -287,7 +299,16 @@ export default function AdminDashboard() {
               <tbody>
                 {filteredMembers.map(m => (
                   <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px', fontWeight: '500' }}>{m.prefix} {m.first_name} {m.last_name}</td>
+                    <td style={{ padding: '12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {m.photo_url ? (
+                        <img src={m.photo_url} alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
+                          {(m.first_name?.[0] || '') + (m.last_name?.[0] || '')}
+                        </div>
+                      )}
+                      <div>{m.prefix} {m.first_name} {m.last_name}</div>
+                    </td>
                     <td style={{ padding: '12px' }}>
                       <div>{m.email}</div>
                       <div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone}</div>
@@ -374,16 +395,22 @@ export default function AdminDashboard() {
               <thead>
                 <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
                   <th style={{ padding: '12px' }}>Service Date</th>
+                  <th style={{ padding: '12px' }}>Member Email</th>
                   <th style={{ padding: '12px' }}>Department</th>
                   <th style={{ padding: '12px' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'center' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {attendance.map(a => (
                   <tr key={a.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <td style={{ padding: '12px' }}>{a.service_date}</td>
+                    <td style={{ padding: '12px' }}>{a.member_email || 'General'}</td>
                     <td style={{ padding: '12px' }}>{a.department || 'General'}</td>
                     <td style={{ padding: '12px', color: '#166534', fontWeight: 'bold' }}>{a.status}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <button onClick={() => handleDeleteAttendance(a.id)} style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -439,6 +466,17 @@ export default function AdminDashboard() {
           <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3>Edit Member Details</h3>
             <form onSubmit={handleUpdateMember} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                {editingMember.photo_url ? (
+                  <img src={editingMember.photo_url} alt="Profile Preview" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', margin: '0 auto', border: '2px solid #e5e7eb' }} />
+                ) : (
+                  <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', color: '#6b7280', fontSize: '14px' }}>No Photo</div>
+                )}
+              </div>
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Profile Photo URL</label>
+              <input type="text" placeholder="https://..." value={editingMember.photo_url || ''} onChange={e => setEditingMember({...editingMember, photo_url: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+
               <label style={{ fontSize: '12px', fontWeight: 'bold' }}>First Name</label>
               <input type="text" value={editingMember.first_name || ''} onChange={e => setEditingMember({...editingMember, first_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               
@@ -469,6 +507,41 @@ export default function AdminDashboard() {
 
               <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>Update Member</button>
               <button type="button" onClick={() => setEditingMember(null)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: LOG ATTENDANCE */}
+      {showAttendanceModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '450px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3>Log Attendance</h3>
+            <form onSubmit={handleAddAttendance} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Member Email</label>
+              <input type="email" required placeholder="member@email.com" value={newAttendance.member_email} onChange={e => setNewAttendance({...newAttendance, member_email: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Service Date</label>
+              <input type="date" required value={newAttendance.service_date} onChange={e => setNewAttendance({...newAttendance, service_date: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Department / Group</label>
+              <select value={newAttendance.department} onChange={e => setNewAttendance({...newAttendance, department: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <option value="General">General Service</option>
+                <option value="LOVE">LOVE</option>
+                <option value="UNITY">UNITY</option>
+                <option value="CARE">CARE</option>
+                <option value="RESPECT">RESPECT</option>
+              </select>
+
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Status</label>
+              <select value={newAttendance.status} onChange={e => setNewAttendance({...newAttendance, status: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+                <option value="Excused">Excused</option>
+              </select>
+
+              <button type="submit" style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>Save Attendance</button>
+              <button type="button" onClick={() => setShowAttendanceModal(false)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
             </form>
           </div>
         </div>
