@@ -10,46 +10,52 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    checkAdminAndFetchMembers();
+    async function verifyAndFetch() {
+      // 1. Get current active session
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        window.location.href = '/login';
+        return;
+      }
+
+      // 2. Fetch logged in user's role
+      const { data: member, error } = await supabase
+        .from('members')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error || (member?.role !== 'super_admin' && member?.role !== 'admin')) {
+        // Not an admin -> force redirect to user portal
+        window.location.href = '/portal';
+        return;
+      }
+
+      // 3. Fetch members directory for admins
+      const res = await fetch('/api/admin/members');
+      const data = await res.json();
+      if (data.members) setMembers(data.members);
+      setLoading(false);
+    }
+
+    verifyAndFetch();
   }, []);
 
-  const checkAdminAndFetchMembers = async () => {
-    // 1. Get current session
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      router.push('/login');
-      return;
-    }
-
-    // 2. Verify if logged in user is admin/super_admin
-    const { data: member, error } = await supabase
-      .from('members')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (error || (member?.role !== 'super_admin' && member?.role !== 'admin')) {
-      // Redirect regular members to member portal
-      router.push('/portal');
-      return;
-    }
-
-    // 3. Fetch all members if authorized
-    const res = await fetch('/api/admin/members');
-    const data = await res.json();
-    if (data.members) setMembers(data.members);
-    setLoading(false);
-  };
-
-  if (loading) return <p style={{ padding: '20px', textAlign: 'center' }}>Loading dashboard...</p>;
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <h3>Checking access permissions...</h3>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>
-        Admin Dashboard - Church Members Directory
+        Church Members Directory
       </h1>
-      
+
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
