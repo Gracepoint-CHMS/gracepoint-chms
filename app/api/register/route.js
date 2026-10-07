@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Use Service Role Key to bypass client limitations
+// Use Service Role Key to bypass RLS limitations
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(req) {
@@ -24,7 +24,7 @@ export async function POST(req) {
 
     const userId = authData.user.id;
 
-    // 2. Insert member record into 'members' table
+    // 2. Build member payload capturing all possible frontend field naming variants
     const memberPayload = {
       id: userId,
       user_id: userId,
@@ -34,13 +34,13 @@ export async function POST(req) {
       prefix: body.prefix,
       gender: body.gender,
       dob: body.dob,
-      marital_status: body.maritalStatus,
-      date_joined: body.dateJoined,
-      date_baptized: body.dateBaptized,
-      core_dept: body.coreDept || body.department,
-      sub_dept: body.subDept,
-      emergency_contact: body.emergencyContact,
-      emergency_phone: body.emergencyPhone,
+      marital_status: body.maritalStatus || body.marital_status,
+      date_joined: body.dateJoined || body.date_joined,
+      date_baptized: body.dateBaptized || body.date_baptized,
+      core_dept: body.coreDept || body.core_dept || body.department,
+      sub_dept: body.subDept || body.sub_dept || body.subDepartment,
+      emergency_contact: body.emergencyContact || body.emergency_contact,
+      emergency_phone: body.emergencyPhone || body.emergency_phone,
       photo: body.photo || body.photoUrl,
       role: 'member',
     };
@@ -50,6 +50,7 @@ export async function POST(req) {
       (key) => memberPayload[key] === undefined && delete memberPayload[key]
     );
 
+    // 3. Upsert record into 'members' table
     const { error: dbError } = await supabase
       .from('members')
       .upsert(memberPayload);
