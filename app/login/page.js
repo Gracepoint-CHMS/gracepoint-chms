@@ -2,14 +2,12 @@
 
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -17,7 +15,6 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // 1. Sign in with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -27,24 +24,18 @@ export default function LoginPage() {
 
       const userId = authData.user.id;
 
-      // 2. Fetch the user's role from the members table
-      const { data: memberData, error: memberError } = await supabase
+      const { data: memberData } = await supabase
         .from('members')
         .select('role')
         .eq('id', userId)
         .single();
 
-      if (memberError && memberError.code !== 'PGRST116') {
-        console.error('Error fetching member role:', memberError);
-      }
-
       const role = memberData?.role || 'member';
 
-      // 3. Route user based on their assigned role
       if (role === 'super_admin' || role === 'admin') {
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       } else {
-        router.push('/portal');
+        window.location.href = '/portal';
       }
     } catch (err) {
       setError(err.message || 'Invalid email or password.');
