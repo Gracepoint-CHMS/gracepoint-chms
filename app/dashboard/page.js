@@ -36,6 +36,17 @@ export default function DashboardPage() {
     verifyAndFetch();
   }, []);
 
+  const handleDelete = async (id) => {
+    if (!confirm('Are you sure you want to delete this member?')) return;
+
+    const { error } = await supabase.from('members').delete().eq('id', id);
+    if (error) {
+      alert('Error deleting member: ' + error.message);
+    } else {
+      setMembers(members.filter((m) => m.id !== id));
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -46,28 +57,22 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>
         Church Members Directory
       </h1>
 
-      {/* 
-         Here is the edit: A container with horizontal scrolling.
-      */}
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        
-        {/*
-           Table must have a minWidth to enforce scrolling.
-        */}
-        <table style={{ minWidth: '850px', width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ minWidth: '950px', width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ backgroundColor: '#f3f4f6' }}>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Photo</th>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Email</th>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Phone</th>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Core Dept</th>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Sub Dept</th>
-              <th style={{ padding: '10px', textAlign: 'left' }}>Role</th>
+            <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left' }}>
+              <th style={{ padding: '12px 10px' }}>Photo</th>
+              <th style={{ padding: '12px 10px' }}>Name</th>
+              <th style={{ padding: '12px 10px' }}>Email</th>
+              <th style={{ padding: '12px 10px' }}>Phone</th>
+              <th style={{ padding: '12px 10px' }}>Core Dept</th>
+              <th style={{ padding: '12px 10px' }}>Sub Dept</th>
+              <th style={{ padding: '12px 10px' }}>Role</th>
+              <th style={{ padding: '12px 10px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -75,20 +80,82 @@ export default function DashboardPage() {
               <tr key={m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                 <td style={{ padding: '10px' }}>
                   {m.photo ? (
-                    <img src={m.photo} alt={m.full_name} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+                    <img
+                      src={m.photo}
+                      alt={`${m.first_name || ''} ${m.last_name || ''}`}
+                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
                   ) : (
-                    '-'
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        backgroundColor: '#e5e7eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        color: '#6b7280'
+                      }}
+                    >
+                      N/A
+                    </div>
                   )}
                 </td>
-                <td style={{ padding: '10px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
-                <td style={{ padding: '10px' }}>{m.email}</td>
-                <td style={{ padding: '10px' }}>{m.phone}</td>
-                <td style={{ padding: '10px' }}>{m.core_department}</td>
-                <td style={{ padding: '10px' }}>{m.sub_department}</td>
+                <td style={{ padding: '10px', fontWeight: '500' }}>
+                  {`${m.prefix || ''} ${m.first_name || ''} ${m.last_name || ''}`.trim() || '—'}
+                </td>
+                <td style={{ padding: '10px' }}>{m.email || '—'}</td>
+                <td style={{ padding: '10px' }}>{m.phone || '—'}</td>
+                <td style={{ padding: '10px' }}>{m.core_department || '—'}</td>
+                <td style={{ padding: '10px' }}>{m.sub_department || '—'}</td>
                 <td style={{ padding: '10px' }}>
-                    <span style={{ textTransform: 'uppercase', fontSize: '12px', background: '#ddd', padding: '3px 6px', borderRadius: '4px'}}>
-                        {m.role}
-                    </span>
+                  <span
+                    style={{
+                      textTransform: 'uppercase',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      background: m.role === 'super_admin' ? '#e0e7ff' : '#f3f4f6',
+                      color: m.role === 'super_admin' ? '#3730a3' : '#374151',
+                      padding: '4px 8px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    {m.role}
+                  </span>
+                </td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                    <button
+                      onClick={() => (window.location.href = `/dashboard/edit/${m.id}`)}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#2563eb',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(m.id)}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#dc2626',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
