@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabase';
 
-export default function EditMemberPage({ params }) {
+export default function EditMemberPage() {
   const router = useRouter();
-  const { id } = use(params);
+  const params = useParams();
+  const id = params?.id;
 
   const [form, setForm] = useState({
     prefix: '',
@@ -24,6 +25,8 @@ export default function EditMemberPage({ params }) {
 
   useEffect(() => {
     async function fetchMember() {
+      if (!id) return;
+
       const { data, error } = await supabase
         .from('members')
         .select('*')
@@ -51,7 +54,7 @@ export default function EditMemberPage({ params }) {
       setLoading(false);
     }
 
-    if (id) fetchMember();
+    fetchMember();
   }, [id, router]);
 
   const handleChange = (e) => {
