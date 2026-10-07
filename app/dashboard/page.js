@@ -8,8 +8,27 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Search & Filters state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+
+  // Editing & Upload state
   const [editingMember, setEditingMember] = useState(null);
   const [uploading, setUploading] = useState(false);
+
+  // Add Member Modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMember, setNewMember] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    core_department: '',
+    sub_department: '',
+    role: 'member'
+  });
 
   useEffect(() => {
     fetchMembers();
@@ -31,7 +50,7 @@ export default function AdminDashboard() {
   }
 
   async function handleDelete(id, email) {
-    if (!confirm(`Are you sure you want to delete ${email || 'this member'}?`)) return;
+    if (!confirm(`Are you sure you want to delete ${email}?`)) return;
 
     let query = supabase.from('members').delete();
     if (id) {
@@ -49,6 +68,30 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleAddMember(e) {
+    e.preventDefault();
+    const { error } = await supabase
+      .from('members')
+      .insert([newMember]);
+
+    if (error) {
+      alert('Error adding member: ' + error.message);
+    } else {
+      alert('Member added successfully!');
+      setShowAddModal(false);
+      setNewMember({
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        core_department: '',
+        sub_department: '',
+        role: 'member'
+      });
+      fetchMembers();
+    }
+  }
+
   async function handleFileUpload(e) {
     try {
       setUploading(true);
@@ -59,7 +102,6 @@ export default function AdminDashboard() {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Upload file to 'member-photos' bucket in Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('member-photos')
         .upload(filePath, file);
@@ -68,7 +110,6 @@ export default function AdminDashboard() {
         throw uploadError;
       }
 
-      // Get public URL
       const { data } = supabase.storage.from('member-photos').getPublicUrl(filePath);
 
       setEditingMember({ ...editingMember, photo_url: data.publicUrl });
@@ -99,20 +140,16 @@ export default function AdminDashboard() {
     };
 
     let query = supabase.from('members').update(updateData);
-    
     if (editingMember.id) {
       query = query.eq('id', editingMember.id);
     } else {
       query = query.eq('email', editingMember.email);
     }
 
-    // .select() forces Supabase to return the updated rows to verify the write operation
-    const { data, error } = await query.select();
+    const { error } = await query;
 
     if (error) {
       alert('Error updating member: ' + error.message);
-    } else if (!data || data.length === 0) {
-      alert('Update failed: 0 rows were updated. Please check if your Supabase table has an UPDATE policy enabled in RLS.');
     } else {
       alert('Member updated successfully!');
       setEditingMember(null);
@@ -120,9 +157,19 @@ export default function AdminDashboard() {
     }
   }
 
+  // Filter logic for search & dropdowns
+  const filteredMembers = members.filter((m) => {
+    const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
+    const email = (m.email || '').toLowerCase();
+    const matchesSearch = fullName.includes(searchQuery.toLowerCase()) || email.includes(searchQuery.toLowerCase());
+    const matchesDept = departmentFilter ? m.core_department === departmentFilter : true;
+    const matchesRole = roleFilter ? m.role === roleFilter : true;
+    return matchesSearch && matchesDept && matchesRole;
+  });
+
   if (loading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <div style={{ padding: '40px', textAlign: 'center' }}>
         <p>Loading Admin Dashboard...</p>
       </div>
     );
@@ -131,11 +178,17 @@ export default function AdminDashboard() {
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '15px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Admin Dashboard - All Members</h1>
-        <div>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Admin Dashboard - Church Members</h1>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => setShowAddModal(true)}
+            style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            + Add New Member
+          </button>
           <button
             onClick={() => router.push('/portal')}
-            style={{ marginRight: '10px', padding: '8px 12px', backgroundColor: '#4b5563', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ backgroundColor: '#4f46e5', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
           >
             My Portal
           </button>
@@ -144,192 +197,214 @@ export default function AdminDashboard() {
               await supabase.auth.signOut();
               router.push('/login');
             }}
-            style={{ padding: '8px 12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ backgroundColor: '#ef4444', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
           >
             Logout
           </button>
         </div>
       </div>
 
-      {editingMember && (
-        <div style={{ backgroundColor: '#f9fafb', border: '1px solid #d1d5db', padding: '20px', borderRadius: '8px', marginBottom: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#1f2937' }}>
-            Edit Member: {editingMember.first_name} {editingMember.last_name}
-          </h3>
-          <form onSubmit={handleUpdate} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Prefix</label>
+      {/* Search and Filters Bar */}
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', flex: '1', minWidth: '220px' }}
+        />
+        <select
+          value={departmentFilter}
+          onChange={(e) => setDepartmentFilter(e.target.value)}
+          style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+        >
+          <option value="">All Departments</option>
+          <option value="CARE">CARE</option>
+          <option value="Worship">Worship</option>
+          <option value="Protocol">Protocol</option>
+          <option value="Media">Media</option>
+        </select>
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+        >
+          <option value="">All Roles</option>
+          <option value="super_admin">Super Admin</option>
+          <option value="admin">Admin</option>
+          <option value="member">Member</option>
+        </select>
+      </div>
+
+      {/* Add New Member Modal */}
+      {showAddModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '450px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '15px' }}>Add New Member</h2>
+            <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <input
                 type="text"
-                value={editingMember.prefix || ''}
-                onChange={e => setEditingMember({ ...editingMember, prefix: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="First Name"
+                required
+                value={newMember.first_name}
+                onChange={(e) => setNewMember({ ...newMember, first_name: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>First Name</label>
               <input
                 type="text"
-                value={editingMember.first_name || ''}
-                onChange={e => setEditingMember({ ...editingMember, first_name: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="Last Name"
+                required
+                value={newMember.last_name}
+                onChange={(e) => setNewMember({ ...newMember, last_name: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Last Name</label>
-              <input
-                type="text"
-                value={editingMember.last_name || ''}
-                onChange={e => setEditingMember({ ...editingMember, last_name: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email</label>
               <input
                 type="email"
-                value={editingMember.email || ''}
-                onChange={e => setEditingMember({ ...editingMember, email: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="Email Address"
+                required
+                value={newMember.email}
+                onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Phone</label>
               <input
                 type="text"
-                value={editingMember.phone || ''}
-                onChange={e => setEditingMember({ ...editingMember, phone: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="Phone Number"
+                value={newMember.phone}
+                onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Birth</label>
-              <input
-                type="date"
-                value={editingMember.date_of_birth || ''}
-                onChange={e => setEditingMember({ ...editingMember, date_of_birth: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Home Address</label>
               <input
                 type="text"
-                value={editingMember.home_address || ''}
-                onChange={e => setEditingMember({ ...editingMember, home_address: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="Core Department (e.g. CARE)"
+                value={newMember.core_department}
+                onChange={(e) => setNewMember({ ...newMember, core_department: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Core Department</label>
               <input
                 type="text"
-                value={editingMember.core_department || ''}
-                onChange={e => setEditingMember({ ...editingMember, core_department: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="Sub Department"
+                value={newMember.sub_department}
+                onChange={(e) => setNewMember({ ...newMember, sub_department: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Sub Department</label>
-              <input
-                type="text"
-                value={editingMember.sub_department || ''}
-                onChange={e => setEditingMember({ ...editingMember, sub_department: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Upload Photo / Photo URL</label>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  style={{ padding: '6px', border: '1px solid #ccc', borderRadius: '4px', background: '#fff', flex: 1 }}
-                />
-                {uploading && <span style={{ fontSize: '12px', color: '#4b5563' }}>Uploading...</span>}
-              </div>
-              <input
-                type="text"
-                placeholder="Or paste image link here"
-                value={editingMember.photo_url || ''}
-                onChange={e => setEditingMember({ ...editingMember, photo_url: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '8px' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
               <select
-                value={editingMember.role || 'member'}
-                onChange={e => setEditingMember({ ...editingMember, role: e.target.value })}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                value={newMember.role}
+                onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
               >
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
                 <option value="super_admin">Super Admin</option>
               </select>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="submit" style={{ flex: 1, backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Save Member</button>
+                <button type="button" onClick={() => setShowAddModal(false)} style={{ flex: 1, backgroundColor: '#6b7280', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Panel */}
+      {editingMember && (
+        <div style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Edit Member: {editingMember.first_name} {editingMember.last_name}</h3>
+          <form onSubmit={handleUpdate} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Prefix</label>
+              <input type="text" value={editingMember.prefix || ''} onChange={(e) => setEditingMember({ ...editingMember, prefix: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>First Name</label>
+              <input type="text" value={editingMember.first_name || ''} onChange={(e) => setEditingMember({ ...editingMember, first_name: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Last Name</label>
+              <input type="text" value={editingMember.last_name || ''} onChange={(e) => setEditingMember({ ...editingMember, last_name: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Email</label>
+              <input type="email" value={editingMember.email || ''} onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Phone</label>
+              <input type="text" value={editingMember.phone || ''} onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Date of Birth</label>
+              <input type="date" value={editingMember.date_of_birth || ''} onChange={(e) => setEditingMember({ ...editingMember, date_of_birth: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Home Address</label>
+              <input type="text" value={editingMember.home_address || ''} onChange={(e) => setEditingMember({ ...editingMember, home_address: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Core Department</label>
+              <input type="text" value={editingMember.core_department || ''} onChange={(e) => setEditingMember({ ...editingMember, core_department: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Sub Department</label>
+              <input type="text" value={editingMember.sub_department || ''} onChange={(e) => setEditingMember({ ...editingMember, sub_department: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Role</label>
+              <select value={editingMember.role || 'member'} onChange={(e) => setEditingMember({ ...editingMember, role: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Profile Photo</label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input type="file" accept="image/*" onChange={handleFileUpload} style={{ padding: '6px' }} />
+                {uploading && <span>Uploading...</span>}
+              </div>
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                Save Changes
-              </button>
-              <button type="button" onClick={() => setEditingMember(null)} style={{ padding: '10px 20px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                Cancel
-              </button>
+              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Save Changes</button>
+              <button type="button" onClick={() => setEditingMember(null)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
             </div>
           </form>
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderRadius: '8px', overflow: 'hidden' }}>
+      {/* Members Table */}
+      <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
-            <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
+            <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
               <th style={{ padding: '12px' }}>Avatar</th>
               <th style={{ padding: '12px' }}>Name</th>
               <th style={{ padding: '12px' }}>Email & Phone</th>
-              <th style={{ padding: '12px' }}>Address & DOB</th>
+              <th style={{ padding: '12px' }}>Address</th>
               <th style={{ padding: '12px' }}>Department</th>
               <th style={{ padding: '12px' }}>Role</th>
               <th style={{ padding: '12px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {members.length === 0 ? (
+            {filteredMembers.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>No members found in the database.</td>
+                <td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>No members found.</td>
               </tr>
             ) : (
-              members.map(m => (
+              filteredMembers.map((m) => (
                 <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
-                    {m.photo_url && m.photo_url.startsWith('http') ? (
-                      <img 
-                        src={m.photo_url} 
-                        alt="Profile" 
-                        style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
-                        onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                      />
-                    ) : null}
-                    <div style={{ 
-                      display: (m.photo_url && m.photo_url.startsWith('http')) ? 'none' : 'flex', 
-                      width: '36px', 
-                      height: '36px', 
-                      borderRadius: '50%', 
-                      backgroundColor: '#e0e7ff', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      fontSize: '14px', 
-                      fontWeight: 'bold', 
-                      color: '#3730a3' 
-                    }}>
-                      {m.first_name?.[0] || 'M'}
-                    </div>
+                    {m.photo_url ? (
+                      <img src={m.photo_url} alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#3730a3' }}>
+                        {m.first_name?.[0] || 'M'}
+                      </div>
+                    )}
                   </td>
-                  <td style={{ padding: '12px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
+                  <td style={{ padding: '12px', fontWeight: '500' }}>{m.prefix} {m.first_name} {m.last_name}</td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ fontSize: '13px' }}>{m.email}</div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone || 'N/A'}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone}</div>
                   </td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ fontSize: '13px' }}>{m.home_address || 'N/A'}</div>
@@ -337,20 +412,20 @@ export default function AdminDashboard() {
                   </td>
                   <td style={{ padding: '12px' }}>{m.core_department} / {m.sub_department}</td>
                   <td style={{ padding: '12px' }}>
-                    <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '12px', backgroundColor: m.role === 'super_admin' ? '#fee2e2' : '#e0e7ff', color: m.role === 'super_admin' ? '#991b1b' : '#3730a3', fontWeight: 'bold' }}>
+                    <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', backgroundColor: m.role === 'super_admin' ? '#fee2e2' : m.role === 'admin' ? '#e0e7ff' : '#f3f4f6', color: m.role === 'super_admin' ? '#dc2626' : m.role === 'admin' ? '#4f46e5' : '#374151' }}>
                       {m.role}
                     </span>
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <button
                       onClick={() => setEditingMember({ ...m })}
-                      style={{ marginRight: '8px', padding: '6px 10px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                      style={{ marginRight: '8px', padding: '6px 10px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(m.id, m.email)}
-                      style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                      style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
                     >
                       Delete
                     </button>
