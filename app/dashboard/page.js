@@ -211,7 +211,11 @@ export default function AdminDashboard() {
     .reduce((sum, c) => sum + Number(c.amount), 0);
 
   const totalTithesCollected = contributions
-    .filter(c => c.contribution_type !== 'Welfare')
+    .filter(c => c.contribution_type === 'Tithe')
+    .reduce((sum, c) => sum + Number(c.amount), 0);
+
+  const totalOtherGiving = contributions
+    .filter(c => c.contribution_type !== 'Welfare' && c.contribution_type !== 'Tithe')
     .reduce((sum, c) => sum + Number(c.amount), 0);
 
   if (loading) {
@@ -362,14 +366,19 @@ export default function AdminDashboard() {
           {/* Summary Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px' }}>
             <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ fontSize: '14px', color: '#1e40af', marginBottom: '5px' }}>Total Weekly Welfare Collected</h4>
+              <h4 style={{ fontSize: '14px', color: '#1e40af', marginBottom: '5px' }}>Total Weekly Welfare</h4>
               <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {totalWelfareCollected.toFixed(2)}</p>
               <span style={{ fontSize: '11px', color: '#3b82f6' }}>Compulsory Weekly Contributions</span>
             </div>
             <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ fontSize: '14px', color: '#166534', marginBottom: '5px' }}>Total Tithes & Other Giving</h4>
+              <h4 style={{ fontSize: '14px', color: '#166534', marginBottom: '5px' }}>Total Tithes</h4>
               <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#14532d' }}>GHS {totalTithesCollected.toFixed(2)}</p>
-              <span style={{ fontSize: '11px', color: '#22c55e' }}>Offerings, Tithes & Dues</span>
+              <span style={{ fontSize: '11px', color: '#22c55e' }}>Direct Tithe Payments</span>
+            </div>
+            <div style={{ backgroundColor: '#fdf4ff', border: '1px solid #f5d0fe', padding: '15px', borderRadius: '8px' }}>
+              <h4 style={{ fontSize: '14px', color: '#86198f', marginBottom: '5px' }}>Other Giving & Dues</h4>
+              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#701a75' }}>GHS {totalOtherGiving.toFixed(2)}</p>
+              <span style={{ fontSize: '11px', color: '#d946ef' }}>Offerings, Dues & Donations</span>
             </div>
           </div>
 
