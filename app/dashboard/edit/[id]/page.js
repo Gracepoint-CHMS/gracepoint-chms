@@ -37,7 +37,7 @@ export default function EditMemberPage() {
 
       if (error) {
         alert('Error fetching member details: ' + error.message);
-        router.push('/dashboard');
+        router.push('/dashboard/admin');
         return;
       }
 
@@ -105,7 +105,7 @@ export default function EditMemberPage() {
       alert('Failed to update member: ' + error.message);
     } else {
       alert('Member updated successfully!');
-      router.push('/dashboard');
+      router.push('/dashboard/admin');
     }
   };
 
@@ -120,7 +120,7 @@ export default function EditMemberPage() {
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <button
-        onClick={() => router.push('/dashboard')}
+        onClick={() => router.push('/dashboard/admin')}
         style={{
           marginBottom: '20px',
           padding: '8px 16px',
