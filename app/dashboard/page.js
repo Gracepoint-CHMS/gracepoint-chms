@@ -125,7 +125,8 @@ export default function AdminDashboard() {
     const payload = {
       ...newContribution,
       member_id: targetMember ? targetMember.id : null,
-      amount: parseFloat(newContribution.amount)
+      amount: parseFloat(newContribution.amount),
+      week_ending: newContribution.week_ending ? newContribution.week_ending : null
     };
 
     const { error } = await supabase.from('contributions').insert([payload]);
@@ -210,7 +211,7 @@ export default function AdminDashboard() {
     .reduce((sum, c) => sum + Number(c.amount), 0);
 
   const totalTithesCollected = contributions
-    .filter(c => c.contribution_type === 'Tithe')
+    .filter(c => c.contribution_type !== 'Welfare')
     .reduce((sum, c) => sum + Number(c.amount), 0);
 
   if (loading) {
@@ -366,9 +367,9 @@ export default function AdminDashboard() {
               <span style={{ fontSize: '11px', color: '#3b82f6' }}>Compulsory Weekly Contributions</span>
             </div>
             <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ fontSize: '14px', color: '#166534', marginBottom: '5px' }}>Total Tithes & Offerings</h4>
+              <h4 style={{ fontSize: '14px', color: '#166534', marginBottom: '5px' }}>Total Tithes & Other Giving</h4>
               <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#14532d' }}>GHS {totalTithesCollected.toFixed(2)}</p>
-              <span style={{ fontSize: '11px', color: '#22c55e' }}>General Giving & Offerings</span>
+              <span style={{ fontSize: '11px', color: '#22c55e' }}>Offerings, Tithes & Dues</span>
             </div>
           </div>
 
@@ -410,7 +411,7 @@ export default function AdminDashboard() {
                   <th style={{ padding: '12px' }}>Member Email</th>
                   <th style={{ padding: '12px' }}>Type</th>
                   <th style={{ padding: '12px' }}>Amount (GHS)</th>
-                  <th style={{ padding: '12px' }}>Week Ending</th>
+                  <th style={{ padding: '12px' }}>Date / Week Ending</th>
                   <th style={{ padding: '12px' }}>Method</th>
                   <th style={{ padding: '12px' }}>Notes</th>
                   <th style={{ padding: '12px', textAlign: 'center' }}>Action</th>
@@ -473,12 +474,18 @@ export default function AdminDashboard() {
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Amount (GHS) *</label>
                 <input type="number" step="0.01" required placeholder="e.g. 50.00" value={newContribution.amount} onChange={(e) => setNewContribution({ ...newContribution, amount: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               </div>
-              {newContribution.contribution_type === 'Welfare' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Week Ending Date *</label>
-                  <input type="date" required value={newContribution.week_ending} onChange={(e) => setNewContribution({ ...newContribution, week_ending: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-                </div>
-              )}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  {newContribution.contribution_type === 'Welfare' ? 'Week Ending Date *' : 'Transaction Date (Optional)'}
+                </label>
+                <input 
+                  type="date" 
+                  required={newContribution.contribution_type === 'Welfare'} 
+                  value={newContribution.week_ending} 
+                  onChange={(e) => setNewContribution({ ...newContribution, week_ending: e.target.value })} 
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} 
+                />
+              </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Payment Method</label>
                 <select value={newContribution.payment_method} onChange={(e) => setNewContribution({ ...newContribution, payment_method: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
@@ -489,7 +496,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>Notes (Optional)</label>
-                <input type="text" placeholder="e.g. Week 1 & 2 combined" value={newContribution.notes} onChange={(e) => setNewContribution({ ...newContribution, notes: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+                <input type="text" placeholder="e.g. Special seed offering" value={newContribution.notes} onChange={(e) => setNewContribution({ ...newContribution, notes: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button type="submit" style={{ flex: 1, backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Save Record</button>
