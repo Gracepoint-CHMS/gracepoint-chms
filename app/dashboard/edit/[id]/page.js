@@ -71,11 +71,10 @@ export default function EditMemberPage() {
     setUploading(true);
     const fileExt = file.name.split('.').pop();
     const fileName = `${id}-${Date.now()}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from('member-photos')
-      .upload(filePath, file, { upsert: true });
+      .upload(fileName, file, { upsert: true });
 
     if (uploadError) {
       alert('Photo upload failed: ' + uploadError.message);
@@ -85,7 +84,7 @@ export default function EditMemberPage() {
 
     const { data: publicUrlData } = supabase.storage
       .from('member-photos')
-      .getPublicUrl(filePath);
+      .getPublicUrl(fileName);
 
     setForm((prev) => ({ ...prev, photo_url: publicUrlData.publicUrl }));
     setUploading(false);
@@ -106,8 +105,8 @@ export default function EditMemberPage() {
       alert('Failed to update member: ' + error.message);
     } else {
       alert('Member updated successfully!');
-      router.push('/dashboard');
-      router.refresh(); // Forces Next.js to re-fetch dashboard data
+      // Force full reload back to dashboard so new values appear immediately
+      window.location.href = '/dashboard';
     }
   };
 
@@ -154,10 +153,15 @@ export default function EditMemberPage() {
             justifyContent: 'center',
             border: '1px solid #ccc'
           }}>
-            {form.photo_url ? (
-              <img src={form.photo_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {form.photo_url && (form.photo_url.startsWith('http://') || form.photo_url.startsWith('https://')) ? (
+              <img
+                src={form.photo_url}
+                alt="Profile"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
             ) : (
-              <span style={{ color: '#6b7280', fontSize: '12px' }}>No Photo</span>
+              <span style={{ color: '#6b7280', fontSize: '11px', textAlign: 'center' }}>No Photo</span>
             )}
           </div>
           <div>
