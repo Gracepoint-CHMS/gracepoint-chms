@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <div style={{ padding: '40px', textAlign: 'center' }}>
         <h3>Checking access permissions...</h3>
       </div>
     );
@@ -46,21 +46,28 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>
         Church Members Directory
       </h1>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* 
+         Here is the edit: A container with horizontal scrolling.
+      */}
+      <div style={{ overflowX: 'auto', width: '100%' }}>
+        
+        {/*
+           Table must have a minWidth to enforce scrolling.
+        */}
+        <table style={{ minWidth: '850px', width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left' }}>
-              <th style={{ padding: '10px' }}>Photo</th>
-              <th style={{ padding: '10px' }}>Name</th>
-              <th style={{ padding: '10px' }}>Email</th>
-              <th style={{ padding: '10px' }}>Phone</th>
-              <th style={{ padding: '10px' }}>Core Dept</th>
-              <th style={{ padding: '10px' }}>Sub Dept</th>
-              <th style={{ padding: '10px' }}>Role</th>
+            <tr style={{ backgroundColor: '#f3f4f6' }}>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Photo</th>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Email</th>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Phone</th>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Core Dept</th>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Sub Dept</th>
+              <th style={{ padding: '10px', textAlign: 'left' }}>Role</th>
             </tr>
           </thead>
           <tbody>
@@ -68,17 +75,21 @@ export default function DashboardPage() {
               <tr key={m.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                 <td style={{ padding: '10px' }}>
                   {m.photo ? (
-                    <img src={m.photo} alt={m.full_name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={m.photo} alt={m.full_name} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
                   ) : (
-                    '—'
+                    '-'
                   )}
                 </td>
-                <td style={{ padding: '10px', fontWeight: '600' }}>{m.full_name}</td>
+                <td style={{ padding: '10px' }}>{m.prefix} {m.first_name} {m.last_name}</td>
                 <td style={{ padding: '10px' }}>{m.email}</td>
-                <td style={{ padding: '10px' }}>{m.phone || '—'}</td>
-                <td style={{ padding: '10px' }}>{m.core_dept || '—'}</td>
-                <td style={{ padding: '10px' }}>{m.sub_dept || '—'}</td>
-                <td style={{ padding: '10px' }}>{m.role}</td>
+                <td style={{ padding: '10px' }}>{m.phone}</td>
+                <td style={{ padding: '10px' }}>{m.core_department}</td>
+                <td style={{ padding: '10px' }}>{m.sub_department}</td>
+                <td style={{ padding: '10px' }}>
+                    <span style={{ textTransform: 'uppercase', fontSize: '12px', background: '#ddd', padding: '3px 6px', borderRadius: '4px'}}>
+                        {m.role}
+                    </span>
+                </td>
               </tr>
             ))}
           </tbody>
