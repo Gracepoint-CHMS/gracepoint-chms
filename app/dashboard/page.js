@@ -9,10 +9,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Official Church Logo Base64 Data URI
-const CHURCH_LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAAsACwBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="; 
-// (Note: Using a clean SVG/Image container wrapper for guaranteed display across all mobile & desktop PDF printers)
-
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -579,7 +575,7 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
         </head>
         <body>
           <div class="report-header">
-            <img src="https://i.ibb.co/3yk71vC/church-logo.png" class="church-logo" onerror="this.style.display='none'" />
+            <img src="https://i.ibb.co/6y4t4bS/correct-church-logo.png" class="church-logo" />
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
             <div style="font-size: 12px; color: #475569; margin-top: 3px; font-weight: bold;">THE JESUS HOME CHURCH</div>
             <div class="report-subtitle" style="margin-top: 10px;">Official Balance Sheet Report</div>
@@ -688,7 +684,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
         </head>
         <body>
           <div class="report-header">
-            <img src="https://i.ibb.co/3yk71vC/church-logo.png" class="church-logo" onerror="this.style.display='none'" />
+            <img src="https://i.ibb.co/6y4t4bS/correct-church-logo.png" class="church-logo" />
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
             <div style="font-size: 12px; color: #475569; margin-top: 3px; font-weight: bold;">THE JESUS HOME CHURCH</div>
             <div class="report-subtitle" style="margin-top: 10px;">Official Account Statement Ledger</div>
