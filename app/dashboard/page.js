@@ -15,18 +15,22 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('members'); 
   const [activeFinanceView, setActiveFinanceView] = useState('hub'); 
 
-  // Finance states & form states
-  const [openingBalance, setOpeningBalance] = useState('2,484.32');
+  // Finance global ledger states
+  const [openingBalance, setOpeningBalance] = useState(2484.32);
   const [isEditingBalance, setIsEditingBalance] = useState(false);
-  const [newBalanceInput, setNewBalanceInput] = useState('2,484.32');
+  const [newBalanceInput, setNewBalanceInput] = useState('2484.32');
 
+  const [incomes, setIncomes] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [tithes, setTithes] = useState([]);
+  const [pledges, setPledges] = useState([]);
+  const [welfareData, setWelfareData] = useState({});
+
+  // Form states
   const [incomeForm, setIncomeForm] = useState({ description: '', amount: '', date: '' });
   const [expenseForm, setExpenseForm] = useState({ description: '', qty: '', rate: '', date: '', approver: '' });
   const [titheForm, setTitheForm] = useState({ member: '', amount: '', date: '' });
   const [pledgeForm, setPledgeForm] = useState({ member: '', purpose: '', amount: '' });
-
-  // Welfare matrix interactive state
-  const [welfareData, setWelfareData] = useState({});
   const [selectedWelfareMember, setSelectedWelfareMember] = useState(null);
 
   // Admin Data states
@@ -34,16 +38,13 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
 
-  // New item states for non-finance tabs
+  // Non-finance tab states
   const [attendanceList, setAttendanceList] = useState([]);
   const [attendanceForm, setAttendanceForm] = useState({ service: '', date: '', count: '' });
-
   const [eventsList, setEventsList] = useState([]);
   const [eventForm, setEventForm] = useState({ title: '', date: '', location: '' });
-
   const [announcementsList, setAnnouncementsList] = useState([]);
   const [announcementForm, setAnnouncementForm] = useState({ title: '', message: '' });
-
   const [newMemberForm, setNewMemberForm] = useState({ first_name: '', last_name: '', email: '', phone: '', department: 'Choir' });
   const [showAddMember, setShowAddMember] = useState(false);
 
@@ -54,10 +55,8 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
       const { data: memberData } = await supabase.from('members').select('*');
       if (memberData) setMembers(memberData);
-
       setLoading(false);
     }
     checkAdmin();
@@ -80,6 +79,16 @@ export default function AdminDashboard() {
       alert('Member added successfully!');
     }
   }
+
+  // Calculate totals for Balance Sheet & Ledger
+  const totalIncome = incomes.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) +
+                      tithes.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) +
+                      pledges.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) +
+                      Object.values(welfareData).reduce((acc, curr) => acc + Number(curr || 0), 0);
+
+  const totalExpenses = expenses.reduce((acc, curr) => acc + (Number(curr.qty || 0) * Number(curr.rate || 0)), 0);
+  const closingBalance = openingBalance + totalIncome - totalExpenses;
+  const netMovement = totalIncome - totalExpenses;
 
   if (loading) {
     return (
@@ -197,7 +206,7 @@ export default function AdminDashboard() {
                   {isEditingBalance && (
                     <div style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '8px', marginTop: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', display: 'flex', gap: '10px' }}>
                       <input type="text" value={newBalanceInput} onChange={(e)=>setNewBalanceInput(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }} />
-                      <button onClick={() => { setOpeningBalance(newBalanceInput); setIsEditingBalance(false); }} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
+                      <button onClick={() => { setOpeningBalance(Number(newBalanceInput) || 0); setIsEditingBalance(false); }} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
                     </div>
                   )}
                 </div>
@@ -207,7 +216,7 @@ export default function AdminDashboard() {
 
                 <div style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                   <span style={{ color: '#4b5563', fontWeight: '600' }}>Opening balance:</span>
-                  <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>GHS {openingBalance}</span>
+                  <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>GHS {openingBalance.toFixed(2)}</span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '15px' }}>
@@ -223,14 +232,14 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {activeFinanceView === 'income' && <FinanceSubView title="Record Income" onBack={() => setActiveFinanceView('hub')}><IncomeForm incomeForm={incomeForm} setIncomeForm={setIncomeForm} /></FinanceSubView>}
-            {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm expenseForm={expenseForm} setExpenseForm={setExpenseForm} /></FinanceSubView>}
-            {activeFinanceView === 'tithes' && <FinanceSubView title="Record Tithes" onBack={() => setActiveFinanceView('hub')}><TitheForm titheForm={titheForm} setTitheForm={setTitheForm} members={members} /></FinanceSubView>}
+            {activeFinanceView === 'income' && <FinanceSubView title="Record Income" onBack={() => setActiveFinanceView('hub')}><IncomeForm incomeForm={incomeForm} setIncomeForm={setIncomeForm} incomes={incomes} setIncomes={setIncomes} /></FinanceSubView>}
+            {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenses={expenses} setExpenses={setExpenses} /></FinanceSubView>}
+            {activeFinanceView === 'tithes' && <FinanceSubView title="Record Tithes" onBack={() => setActiveFinanceView('hub')}><TitheForm titheForm={titheForm} setTitheForm={setTitheForm} members={members} tithes={tithes} setTithes={setTithes} /></FinanceSubView>}
             {activeFinanceView === 'budget' && <FinanceSubView title="Approve Budgets" onBack={() => setActiveFinanceView('hub')}><BudgetApproval /></FinanceSubView>}
-            {activeFinanceView === 'tracker' && <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}><ContributionTracker members={members} pledgeForm={pledgeForm} setPledgeForm={setPledgeForm} /></FinanceSubView>}
+            {activeFinanceView === 'tracker' && <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}><ContributionTracker members={members} pledgeForm={pledgeForm} setPledgeForm={setPledgeForm} pledges={pledges} setPledges={setPledges} /></FinanceSubView>}
             {activeFinanceView === 'welfare' && <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}><WelfareMatrix members={members} welfareData={welfareData} setWelfareData={setWelfareData} selectedWelfareMember={selectedWelfareMember} setSelectedWelfareMember={setSelectedWelfareMember} /></FinanceSubView>}
-            {activeFinanceView === 'balance-sheet' && <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}><BalanceSheet /></FinanceSubView>}
-            {activeFinanceView === 'report' && <FinanceSubView title="Account Report" onBack={() => setActiveFinanceView('hub')}><AccountReport /></FinanceSubView>}
+            {activeFinanceView === 'balance-sheet' && <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}><BalanceSheet totalIncome={totalIncome} totalExpenses={totalExpenses} closingBalance={closingBalance} /></FinanceSubView>}
+            {activeFinanceView === 'report' && <FinanceSubView title="Account Report" onBack={() => setActiveFinanceView('hub')}><AccountReport openingBalance={openingBalance} closingBalance={closingBalance} netMovement={netMovement} incomes={incomes} expenses={expenses} tithes={tithes} pledges={pledges} welfareData={welfareData} /></FinanceSubView>}
           </div>
         )}
 
@@ -268,7 +277,7 @@ export default function AdminDashboard() {
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Church Events</h2>
             <div style={{ marginBottom: '20px' }}>
               <label style={labelStyle}>Event Title</label>
-              <input type="text" placeholder="e.p. Youth Vigil" style={inputStyle} value={eventForm.title} onChange={(e)=>setEventForm({...eventForm, title: e.target.value})} />
+              <input type="text" placeholder="e.g. Youth Vigil" style={inputStyle} value={eventForm.title} onChange={(e)=>setEventForm({...eventForm, title: e.target.value})} />
               <label style={labelStyle}>Date</label>
               <input type="date" style={inputStyle} value={eventForm.date} onChange={(e)=>setEventForm({...eventForm, date: e.target.value})} />
               <label style={labelStyle}>Location</label>
@@ -337,7 +346,7 @@ function FinanceSubView({ title, onBack, children }) {
   );
 }
 
-function IncomeForm({ incomeForm, setIncomeForm }) {
+function IncomeForm({ incomeForm, setIncomeForm, incomes, setIncomes }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <label style={labelStyle}>Source / Description</label>
@@ -346,12 +355,12 @@ function IncomeForm({ incomeForm, setIncomeForm }) {
       <input type="number" placeholder="0.00" style={inputStyle} value={incomeForm.amount} onChange={(e)=>setIncomeForm({...incomeForm, amount: e.target.value})} />
       <label style={labelStyle}>Date</label>
       <input type="date" style={inputStyle} value={incomeForm.date} onChange={(e)=>setIncomeForm({...incomeForm, date: e.target.value})} />
-      <button onClick={() => alert('Income saved successfully!')} style={primaryBtnStyle}>Save Income</button>
+      <button onClick={() => { if(incomeForm.description && incomeForm.amount){ setIncomes([...incomes, incomeForm]); setIncomeForm({ description: '', amount: '', date: '' }); alert('Income saved and reflected in reports!'); } }} style={primaryBtnStyle}>Save Income</button>
     </div>
   );
 }
 
-function ExpenseForm({ expenseForm, setExpenseForm }) {
+function ExpenseForm({ expenseForm, setExpenseForm, expenses, setExpenses }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <label style={labelStyle}>Description</label>
@@ -364,12 +373,12 @@ function ExpenseForm({ expenseForm, setExpenseForm }) {
       <label style={labelStyle}>Date & Approved By</label>
       <input type="date" style={inputStyle} value={expenseForm.date} onChange={(e)=>setExpenseForm({...expenseForm, date: e.target.value})} />
       <input type="text" placeholder="Approver Name" style={inputStyle} value={expenseForm.approver} onChange={(e)=>setExpenseForm({...expenseForm, approver: e.target.value})} />
-      <button onClick={() => alert('Expense saved successfully!')} style={primaryBtnStyle}>Save Expense</button>
+      <button onClick={() => { if(expenseForm.description && expenseForm.qty && expenseForm.rate){ setExpenses([...expenses, expenseForm]); setExpenseForm({ description: '', qty: '', rate: '', date: '', approver: '' }); alert('Expense saved and reflected in reports!'); }}} style={primaryBtnStyle}>Save Expense</button>
     </div>
   );
 }
 
-function TitheForm({ titheForm, setTitheForm, members }) {
+function TitheForm({ titheForm, setTitheForm, members, tithes, setTithes }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <label style={labelStyle}>Select Member</label>
@@ -381,7 +390,7 @@ function TitheForm({ titheForm, setTitheForm, members }) {
       <input type="number" placeholder="0.00" style={inputStyle} value={titheForm.amount} onChange={(e)=>setTitheForm({...titheForm, amount: e.target.value})} />
       <label style={labelStyle}>Date</label>
       <input type="date" style={inputStyle} value={titheForm.date} onChange={(e)=>setTitheForm({...titheForm, date: e.target.value})} />
-      <button onClick={() => alert('Tithe recorded successfully!')} style={primaryBtnStyle}>Save Tithe</button>
+      <button onClick={() => { if(titheForm.member && titheForm.amount){ setTithes([...tithes, titheForm]); setTitheForm({ member: '', amount: '', date: '' }); alert('Tithe saved and reflected in reports!'); }}} style={primaryBtnStyle}>Save Tithe</button>
     </div>
   );
 }
@@ -395,7 +404,7 @@ function BudgetApproval() {
   );
 }
 
-function ContributionTracker({ members, pledgeForm, setPledgeForm }) {
+function ContributionTracker({ members, pledgeForm, setPledgeForm, pledges, setPledges }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <h3 style={{ fontSize: '15px', color: '#2563eb', marginBottom: '15px' }}>New Pledge</h3>
@@ -408,7 +417,7 @@ function ContributionTracker({ members, pledgeForm, setPledgeForm }) {
       <input type="text" placeholder="e.g. Building fund" style={inputStyle} value={pledgeForm.purpose} onChange={(e)=>setPledgeForm({...pledgeForm, purpose: e.target.value})} />
       <label style={labelStyle}>Amount</label>
       <input type="number" placeholder="0.00" style={inputStyle} value={pledgeForm.amount} onChange={(e)=>setPledgeForm({...pledgeForm, amount: e.target.value})} />
-      <button onClick={() => alert('Pledge created successfully!')} style={primaryBtnStyle}>Create Pledge</button>
+      <button onClick={() => { if(pledgeForm.member && pledgeForm.amount){ setPledges([...pledges, pledgeForm]); setPledgeForm({ member: '', purpose: '', amount: '' }); alert('Pledge saved and reflected in reports!'); }}} style={primaryBtnStyle}>Create Pledge</button>
     </div>
   );
 }
@@ -418,7 +427,7 @@ function WelfareMatrix({ members, welfareData, setWelfareData, selectedWelfareMe
 
   const handleInputChange = (month, week, value) => {
     const key = `${selectedWelfareMember}-${month}-${week}`;
-    setWelfareData(prev => ({ ...prev, [key]: value }));
+    setWelfareData(prev => ({ ...prev, [key]: Number(value) || 0 }));
   };
 
   return !selectedWelfareMember ? (
@@ -454,10 +463,10 @@ function WelfareMatrix({ members, welfareData, setWelfareData, selectedWelfareMe
           </thead>
           <tbody>
             {months.map((month, idx) => {
-              const w1 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W1`] || 0);
-              const w2 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W2`] || 0);
-              const w3 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W3`] || 0);
-              const w4 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W4`] || 0);
+              const w1 = welfareData[`${selectedWelfareMember}-${month}-W1`] || 0;
+              const w2 = welfareData[`${selectedWelfareMember}-${month}-W2`] || 0;
+              const w3 = welfareData[`${selectedWelfareMember}-${month}-W3`] || 0;
+              const w4 = welfareData[`${selectedWelfareMember}-${month}-W4`] || 0;
               const rowTotal = w1 + w2 + w3 + w4;
 
               return (
@@ -481,25 +490,150 @@ function WelfareMatrix({ members, welfareData, setWelfareData, selectedWelfareMe
           </tbody>
         </table>
       </div>
-      <button onClick={() => alert('Welfare entries saved successfully!')} style={{ ...primaryBtnStyle, marginTop: '20px' }}>Save Welfare Contributions</button>
+      <button onClick={() => alert('Welfare entries saved and reflected in reports!')} style={{ ...primaryBtnStyle, marginTop: '20px' }}>Save Welfare Contributions</button>
     </div>
   );
 }
 
-function BalanceSheet() {
+function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-      <p style={{ fontWeight: 'bold', fontSize: '16px' }}>Current Balance: GHS 2,672.32</p>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: '#1e293b' }}>Balance Sheet Summary</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+        <div style={{ padding: '15px', backgroundColor: '#f0fdf4', borderRadius: '8px' }}>
+          <p style={{ fontSize: '12px', color: '#166534', margin: '0 0 5px 0' }}>Total Income</p>
+          <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#16a34a', margin: 0 }}>GHS {totalIncome.toFixed(2)}</p>
+        </div>
+        <div style={{ padding: '15px', backgroundColor: '#fef2f2', borderRadius: '8px' }}>
+          <p style={{ fontSize: '12px', color: '#991b1b', margin: '0 0 5px 0' }}>Total Expenses</p>
+          <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc2626', margin: 0 }}>GHS {totalExpenses.toFixed(2)}</p>
+        </div>
+      </div>
+      <div style={{ padding: '15px', backgroundColor: '#eff6ff', borderRadius: '8px', textAlign: 'center' }}>
+        <p style={{ fontSize: '13px', color: '#1e40af', margin: '0 0 5px 0' }}>Current Closing Balance</p>
+        <p style={{ fontSize: '22px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>GHS {closingBalance.toFixed(2)}</p>
+      </div>
     </div>
   );
 }
 
-function AccountReport() {
+function AccountReport({ openingBalance, closingBalance, netMovement, incomes, expenses, tithes, pledges, welfareData }) {
+  let runningBalance = openingBalance;
+
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-      <p style={{ fontWeight: 'bold', marginBottom: '10px' }}>Financial Statement Summary</p>
-      <p style={{ color: '#64748b', fontSize: '13px' }}>Opening Balance: GHS 2,484.32</p>
-      <p style={{ color: '#64748b', fontSize: '13px' }}>Closing Balance: GHS 11,010.32</p>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: '#1e293b' }}>Official Account Statement Ledger</h3>
+      
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px', textAlign: 'center' }}>
+        <div style={{ padding: '12px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Opening Balance</span>
+          <strong style={{ fontSize: '14px', color: '#1e293b' }}>GHS {openingBalance.toFixed(2)}</strong>
+        </div>
+        <div style={{ padding: '12px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Net Movement</span>
+          <strong style={{ fontSize: '14px', color: netMovement >= 0 ? '#16a34a' : '#dc2626' }}>GHS {netMovement.toFixed(2)}</strong>
+        </div>
+        <div style={{ padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#0369a1', display: 'block' }}>Closing Balance</span>
+          <strong style={{ fontSize: '14px', color: '#0284c7' }}>GHS {closingBalance.toFixed(2)}</strong>
+        </div>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#1e293b', color: '#fff', textAlign: 'left' }}>
+              <th style={{ padding: '8px' }}>DATE</th>
+              <th style={{ padding: '8px' }}>DESCRIPTION</th>
+              <th style={{ padding: '8px' }}>INCOME</th>
+              <th style={{ padding: '8px' }}>EXPENSES</th>
+              <th style={{ padding: '8px' }}>BALANCE</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <td style={{ padding: '8px' }}>Initial</td>
+              <td style={{ padding: '8px', fontWeight: 'bold' }}>Opening Balance</td>
+              <td style={{ padding: '8px' }}>-</td>
+              <td style={{ padding: '8px' }}>-</td>
+              <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {openingBalance.toFixed(2)}</td>
+            </tr>
+
+            {/* Tithes */}
+            {tithes.map((t, idx) => {
+              runningBalance += Number(t.amount || 0);
+              return (
+                <tr key={`tithe-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px' }}>{t.date || 'N/A'}</td>
+                  <td style={{ padding: '8px' }}>Tithe ({t.member})</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(t.amount).toFixed(2)}</td>
+                  <td style={{ padding: '8px' }}>-</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+
+            {/* Incomes */}
+            {incomes.map((inc, idx) => {
+              runningBalance += Number(inc.amount || 0);
+              return (
+                <tr key={`inc-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px' }}>{inc.date || 'N/A'}</td>
+                  <td style={{ padding: '8px' }}>Income ({inc.description})</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(inc.amount).toFixed(2)}</td>
+                  <td style={{ padding: '8px' }}>-</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+
+            {/* Pledges */}
+            {pledges.map((p, idx) => {
+              runningBalance += Number(p.amount || 0);
+              return (
+                <tr key={`pledge-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px' }}>Current</td>
+                  <td style={{ padding: '8px' }}>Pledge ({p.member} - {p.purpose})</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(p.amount).toFixed(2)}</td>
+                  <td style={{ padding: '8px' }}>-</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+
+            {/* Welfare Entries */}
+            {Object.entries(welfareData).map(([key, val], idx) => {
+              if (!val || Number(val) === 0) return null;
+              runningBalance += Number(val);
+              const [mem, mon, wk] = key.split('-');
+              return (
+                <tr key={`welf-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px' }}>{mon} ({wk})</td>
+                  <td style={{ padding: '8px' }}>Welfare ({mem})</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(val).toFixed(2)}</td>
+                  <td style={{ padding: '8px' }}>-</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+
+            {/* Expenses */}
+            {expenses.map((exp, idx) => {
+              const expTotal = Number(exp.qty || 0) * Number(exp.rate || 0);
+              runningBalance -= expTotal;
+              return (
+                <tr key={`exp-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px' }}>{exp.date || 'N/A'}</td>
+                  <td style={{ padding: '8px' }}>Expense ({exp.description})</td>
+                  <td style={{ padding: '8px' }}>-</td>
+                  <td style={{ padding: '8px', color: '#dc2626', fontWeight: 'bold' }}>GHS {expTotal.toFixed(2)}</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
