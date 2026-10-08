@@ -223,7 +223,8 @@ export default function AdminDashboard() {
     e.preventDefault();
     const targetMember = members.find(m => m.email === newAttendance.member_email);
     const payload = {
-      ...newAttendance,
+      service_date: newAttendance.service_date,
+      status: newAttendance.status,
       member_id: targetMember ? targetMember.id : null
     };
     const { error } = await supabase.from('attendance').insert([payload]);
@@ -307,9 +308,17 @@ export default function AdminDashboard() {
         html5QrCodeInstance.pause();
 
         const todayStr = new Date().toISOString().split('T')[0];
-        const { error } = await supabase.from('attendance').insert([
-          { member_email: decodedText, service_date: todayStr, status: 'Present' }
-        ]);
+        
+        // Match decodedText (email) to member object to retrieve member_id
+        const matchedMember = members.find(m => m.email === decodedText || m.id === decodedText);
+
+        const payload = {
+          service_date: todayStr,
+          status: 'Present',
+          member_id: matchedMember ? matchedMember.id : null
+        };
+
+        const { error } = await supabase.from('attendance').insert([payload]);
 
         if (error) {
           alert("Error saving attendance: " + error.message);
@@ -543,11 +552,14 @@ export default function AdminDashboard() {
               <p style={{ color: '#6b7280', fontSize: '14px' }}>No attendance yet for today.</p>
             ) : (
               <ul style={{ paddingLeft: '20px', margin: '0' }}>
-                {todaysAttendanceRecords.map(rec => (
-                  <li key={rec.id} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                    <b>{rec.member_email || 'General Member'}</b> - <span style={{ color: '#166534' }}>{rec.status}</span>
-                  </li>
-                ))}
+                {todaysAttendanceRecords.map(rec => {
+                  const matchedMem = members.find(m => m.id === rec.member_id);
+                  return (
+                    <li key={rec.id} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                      <b>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'General Member')}</b> - <span style={{ color: '#166534' }}>{rec.status}</span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -573,7 +585,7 @@ export default function AdminDashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                    <th style={{ padding: '10px' }}>MEMBER EMAIL</th>
+                    <th style={{ padding: '10px' }}>MEMBER</th>
                     <th style={{ padding: '10px' }}>DATE</th>
                     <th style={{ padding: '10px' }}>STATUS</th>
                     <th style={{ padding: '10px', textAlign: 'center' }}>ACTION</th>
@@ -585,16 +597,19 @@ export default function AdminDashboard() {
                       <td colSpan="4" style={{ padding: '15px', textAlign: 'center', color: '#6b7280' }}>No records found.</td>
                     </tr>
                   ) : (
-                    filteredAttendanceRecords.map(rec => (
-                      <tr key={rec.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                        <td style={{ padding: '10px' }}>{rec.member_email || 'N/A'}</td>
-                        <td style={{ padding: '10px' }}>{rec.service_date}</td>
-                        <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>{rec.status}</td>
-                        <td style={{ padding: '10px', textAlign: 'center' }}>
-                          <button onClick={() => handleDeleteAttendance(rec.id)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
-                        </td>
-                      </tr>
-                    ))
+                    filteredAttendanceRecords.map(rec => {
+                      const matchedMem = members.find(m => m.id === rec.member_id);
+                      return (
+                        <tr key={rec.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                          <td style={{ padding: '10px' }}>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'N/A')}</td>
+                          <td style={{ padding: '10px' }}>{rec.service_date}</td>
+                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>{rec.status}</td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            <button onClick={() => handleDeleteAttendance(rec.id)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
