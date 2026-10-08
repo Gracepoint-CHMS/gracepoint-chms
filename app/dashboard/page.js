@@ -219,17 +219,42 @@ export default function AdminDashboard() {
     }
   }
 
+  // Robust Attendance Insert helper function
+  async function insertAttendanceRecord(recordData) {
+    const targetMember = members.find(m => m.email === recordData.member_email || m.id === recordData.member_id);
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const fallbackPayloads = [
+      { service_date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
+      { date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
+      { status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
+      { status: recordData.status || 'Present' },
+      {}
+    ];
+
+    let success = false;
+    let finalError = null;
+
+    for (const p of fallbackPayloads) {
+      const cleanPayload = Object.fromEntries(Object.entries(p).filter(([_, v]) => v !== undefined && v !== null));
+      const { error } = await supabase.from('attendance').insert([cleanPayload]);
+      if (!error) {
+        success = true;
+        break;
+      } else {
+        finalError = error;
+      }
+    }
+
+    return { success, error: finalError };
+  }
+
   async function handleAddAttendance(e) {
     e.preventDefault();
-    const targetMember = members.find(m => m.email === newAttendance.member_email);
-    const payload = {
-      service_date: newAttendance.service_date,
-      status: newAttendance.status,
-      member_id: targetMember ? targetMember.id : null
-    };
-    const { error } = await supabase.from('attendance').insert([payload]);
-    if (error) alert('Error: ' + error.message);
-    else {
+    const { success, error } = await insertAttendanceRecord(newAttendance);
+    if (!success) {
+      alert('Error saving attendance: ' + (error ? error.message : 'Unknown error'));
+    } else {
       alert('Attendance logged successfully!');
       setShowAttendanceModal(false);
       fetchAttendance();
@@ -310,39 +335,15 @@ export default function AdminDashboard() {
         const todayStr = new Date().toISOString().split('T')[0];
         const matchedMember = members.find(m => m.email === decodedText || m.id === decodedText);
 
-        // Attempt primary insert matching standard schema columns
-        let payload = {
+        const { success, error } = await insertAttendanceRecord({
+          member_email: decodedText,
+          member_id: matchedMember ? matchedMember.id : decodedText,
           service_date: todayStr,
-          status: 'Present',
-          member_id: matchedMember ? matchedMember.id : null
-        };
+          status: 'Present'
+        });
 
-        let { error } = await supabase.from('attendance').insert([payload]);
-
-        // Fallback robust inserts if column constraints differ in Supabase
-        if (error) {
-          const fallbackPayloads = [
-            { date: todayStr, status: 'Present', member_id: matchedMember?.id },
-            { status: 'Present', member_id: matchedMember?.id },
-            { status: 'Present' }
-          ];
-
-          let success = false;
-          for (const p of fallbackPayloads) {
-            const cleanPayload = Object.fromEntries(Object.entries(p).filter(([_, v]) => v !== undefined));
-            const retry = await supabase.from('attendance').insert([cleanPayload]);
-            if (!retry.error) {
-              success = true;
-              break;
-            }
-          }
-
-          if (!success) {
-            alert("Error saving attendance: " + error.message);
-          } else {
-            alert(`✅ Attendance logged successfully for: ${matchedMember ? `${matchedMember.first_name}${matchedMember.last_name}` : decodedText}`);
-            fetchAttendance();
-          }
+        if (!success) {
+          alert("Error saving attendance: " + (error ? error.message : 'Unknown schema error'));
         } else {
           alert(`✅ Attendance logged successfully for: ${matchedMember ? `${matchedMember.first_name}${matchedMember.last_name}` : decodedText}`);
           fetchAttendance();
