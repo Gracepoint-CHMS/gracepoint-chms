@@ -565,7 +565,7 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
             .report-header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
-            .logo-check { display: inline-flex; align-items: center; justify-content: center; width: 45px; height: 45px; background-color: #2563eb; color: white; border-radius: 50%; font-size: 24px; margin-bottom: 10px; }
+            .church-logo { width: 55px; height: 55px; margin: 0 auto 10px auto; background: #2563eb; border-radius: 50%; display: flex; align-items: center; justifyContent: center; color: white; font-weight: bold; font-size: 26px; border: 3px solid #1e40af; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
             .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
             .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
             .summary-box { display: flex; justify-content: space-around; margin: 30px 0; }
@@ -575,7 +575,7 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
         </head>
         <body>
           <div class="report-header">
-            <div class="logo-check">✓</div>
+            <div class="church-logo">✝</div>
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
             <div class="report-subtitle">Official Balance Sheet Report</div>
           </div>
@@ -671,7 +671,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
             .report-header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
-            .logo-check { display: inline-flex; align-items: center; justify-content: center; width: 45px; height: 45px; background-color: #2563eb; color: white; border-radius: 50%; font-size: 24px; margin-bottom: 10px; }
+            .church-logo { width: 55px; height: 55px; margin: 0 auto 10px auto; background: #2563eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 26px; border: 3px solid #1e40af; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
             .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
             .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
             .metrics { display: flex; justify-content: space-between; margin-bottom: 25px; }
@@ -683,7 +683,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
         </head>
         <body>
           <div class="report-header">
-            <div class="logo-check">✓</div>
+            <div class="church-logo">✝</div>
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
             <div class="report-subtitle">Official Account Statement Ledger</div>
           </div>
