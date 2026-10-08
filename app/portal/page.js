@@ -7,194 +7,267 @@ import { supabase } from '../../lib/supabase';
 export default function MemberPortal() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [member, setMember] = useState(null);
-  const [contributions, setContributions] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
+  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [language, setLanguage] = useState('English');
 
   useEffect(() => {
-    fetchMemberData();
+    fetchMemberProfile();
   }, []);
 
-  async function fetchMemberData() {
-    setLoading(true);
-    // Get current authenticated user session
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      router.push('/login');
-      return;
+  async function fetchMemberProfile() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      // Fetch member details from members table based on auth email
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('email', user.email)
+        .single();
+
+      if (data) {
+        setUserProfile(data);
+      } else {
+        // Fallback user profile if record doesn't exist yet
+        setUserProfile({
+          first_name: user.user_metadata?.first_name || 'Member',
+          last_name: user.user_metadata?.last_name || '',
+          email: user.email,
+          phone: user.user_metadata?.phone || '+233...'
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    const userEmail = session.user.email;
-
-    // Fetch member profile details
-    const { data: memberData, error: memberError } = await supabase
-      .from('members')
-      .select('*')
-      .eq('email', userEmail)
-      .single();
-
-    if (memberData) {
-      setMember(memberData);
-    }
-
-    // Fetch member contributions
-    const { data: contribData, error: contribError } = await supabase
-      .from('contributions')
-      .select('*')
-      .eq('member_email', userEmail)
-      .order('week_ending', { ascending: false });
-
-    if (contribData) {
-      setContributions(contribData);
-    }
-
-    setLoading(false);
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push('/login');
   }
 
   if (loading) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <p>Loading your personal portal...</p>
-      </div>
-    );
+    return <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}><p>Loading Portal...</p></div>;
   }
 
-  // Calculate totals
-  const totalWelfare = contributions
-    .filter(c => c.contribution_type === 'Welfare')
-    .reduce((sum, c) => sum + Number(c.amount), 0);
-
-  const totalTithesAndOthers = contributions
-    .filter(c => c.contribution_type !== 'Welfare')
-    .reduce((sum, c) => sum + Number(c.amount), 0);
-
-  const welfareRecords = contributions.filter(c => c.contribution_type === 'Welfare');
-  const otherRecords = contributions.filter(c => c.contribution_type !== 'Welfare');
+  const memberEmail = userProfile?.email || 'member@gracepoint.com';
+  const memberFullName = `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim() || 'Church Member';
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(memberEmail)}`;
 
   return (
-    <div style={{ padding: '20px', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #e5e7eb', paddingBottom: '15px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Welcome, {member?.first_name || 'Member'}!</h1>
-          <p style={{ color: '#6b7280', fontSize: '14px' }}>Your Personal Member Portal & Giving History</p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          {member && (member.role === 'admin' || member.role === 'super_admin') && (
-            <button
-              onClick={() => router.push('/dashboard')}
-              style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
-            >
-              Admin Dashboard
-            </button>
-          )}
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              router.push('/login');
-            }}
-            style={{ backgroundColor: '#ef4444', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+    <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f3f4f6', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      
+      {/* TOP HEADER */}
+      <div style={{ backgroundColor: '#1e3a8a', color: '#fff', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button 
+            onClick={() => setSidebarOpen(!sidebarOpen)} 
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
           >
-            Logout
+            ☰
+          </button>
+          <span style={{ fontWeight: 'bold', fontSize: '16px' }}>Gracepoint CHMS</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+            <span>Language</span>
+            <select 
+              value={language} 
+              onChange={(e) => setLanguage(e.target.value)} 
+              style={{ padding: '4px 8px', borderRadius: '4px', border: 'none', backgroundColor: '#fff', color: '#333', fontSize: '13px', cursor: 'pointer' }}
+            >
+              <option value="English">English</option>
+              <option value="Twi">Twi</option>
+              <option value="French">French</option>
+            </select>
+          </div>
+
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', overflow: 'hidden' }}>
+            {userProfile?.photo_url ? (
+              <img src={userProfile.photo_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span>{memberFullName[0]}</span>
+            )}
+          </div>
+
+          <button 
+            onClick={handleLogout} 
+            title="Logout"
+            style={{ background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center' }}
+          >
+            ➔
           </button>
         </div>
       </div>
 
-      {/* Member Profile Card */}
-      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '25px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div>
-          {member?.photo_url ? (
-            <img src={member.photo_url} alt="Profile" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }} />
-          ) : (
-            <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 'bold', color: '#3730a3' }}>
-              {member?.first_name?.[0] || 'M'}
+      <div style={{ display: 'flex', flex: '1', position: 'relative' }}>
+        
+        {/* SIDEBAR DRAWER */}
+        {sidebarOpen && (
+          <div style={{ position: 'fixed', top: '56px', left: 0, width: '260px', height: 'calc(100vh - 56px)', backgroundColor: '#1e3a8a', color: '#fff', zIndex: 100, boxShadow: '4px 0 10px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', padding: '20px 0' }}>
+            <div style={{ padding: '0 20px 15px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>MAIN</div>
+            
+            <button 
+              onClick={() => { setActiveMenu('dashboard'); setSidebarOpen(false); }} 
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'dashboard' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'dashboard' ? 'bold' : 'normal' }}
+            >
+              🏠 Dashboard
+            </button>
+            <button 
+              onClick={() => { setActiveMenu('profile'); setSidebarOpen(false); }} 
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'profile' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'profile' ? 'bold' : 'normal' }}
+            >
+              👤 Profile
+            </button>
+            <button 
+              onClick={() => { setActiveMenu('fellowship'); setSidebarOpen(false); }} 
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'fellowship' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'fellowship' ? 'bold' : 'normal' }}
+            >
+              ⛪ House Fellowship
+            </button>
+            <button 
+              onClick={() => { setActiveMenu('attendance'); setSidebarOpen(false); }} 
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'attendance' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'attendance' ? 'bold' : 'normal' }}
+            >
+              📅 Attendance QR Code
+            </button>
+
+            <div style={{ padding: '25px 20px 10px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>COMMUNICATION</div>
+            <div style={{ padding: '10px 20px', fontSize: '14px', color: '#cbd5e1', cursor: 'pointer' }}>Announcements</div>
+
+            <div style={{ padding: '20px 20px 10px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>EVENTS & MINISTRY</div>
+            <div style={{ padding: '10px 20px', fontSize: '14px', color: '#cbd5e1', cursor: 'pointer' }}>Upcoming Events</div>
+
+            <div style={{ padding: '20px 20px 10px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>SPIRITUAL CORNER</div>
+            <div style={{ padding: '10px 20px', fontSize: '14px', color: '#cbd5e1', cursor: 'pointer' }}>Daily Devotional</div>
+          </div>
+        )}
+
+        {/* MAIN CONTENT AREA */}
+        <div style={{ flex: '1', padding: '20px', maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+          
+          {/* VIEW 1: CHURCH DASHBOARD */}
+          {activeMenu === 'dashboard' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* Church Information Card */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '25px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                <div style={{ width: '70px', height: '70px', margin: '0 auto 15px auto', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #bfdbfe' }}>
+                  <span style={{ fontSize: '28px' }}>⛪</span>
+                </div>
+                <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '5px' }}>
+                  Gracepoint Prophetic Church <br />(The Jesus Home Church)[span_3](start_span)[span_3](end_span)
+                </h2>
+                <p style={{ fontSize: '13px', color: '#4b5563', margin: '8px 0', lineHeight: '1.5' }}>
+                  Just before Dr Boateng Hospital Jerusalem, Techiman Ghana. GPS.BT-0230-4894[span_4](start_span)[span_4](end_span)
+                </p>
+                <div style={{ fontSize: '13px', color: '#2563eb', marginTop: '10px', fontWeight: '500' }}>
+                  📞 +233245914937 • ✉️ prophetbewis@gmail.com[span_5](start_span)[span_5](end_span)
+                </div>
+              </div>
+
+              {/* Church Activities Card */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '15px' }}>Church Activities</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>
+                        <th style={{ padding: '10px' }}>ACTIVITY</th>
+                        <th style={{ padding: '10px' }}>DAY(S)</th>
+                        <th style={{ padding: '10px' }}>TIME</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '10px' }}>Sunday Service</td>
+                        <td style={{ padding: '10px' }}>Sundays</td>
+                        <td style={{ padding: '10px' }}>8:00 AM</td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '10px' }}>Midweek Service</td>
+                        <td style={{ padding: '10px' }}>Wednesdays</td>
+                        <td style={{ padding: '10px' }}>5:30 PM</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Church Bank Details Card */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '15px' }}>Church Bank Details</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#374151' }}>
+                  <div><b>Account Name:</b> Gracepoint Prophetic Church[span_6](start_span)[span_6](end_span)</div>
+                  <div><b>Account Number:</b> 0530502114[span_7](start_span)[span_7](end_span)</div>
+                  <div><b>Bank Name:</b> MTN Ghana[span_8](start_span)[span_8](end_span)</div>
+                  <div><b>Account Type:</b> savings[span_9](start_span)[span_9](end_span)</div>
+                </div>
+              </div>
+
             </div>
           )}
-        </div>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '5px' }}>{member?.prefix} {member?.first_name} {member?.last_name}</h2>
-          <p style={{ color: '#4b5563', fontSize: '14px', marginBottom: '4px' }}><strong>Email:</strong> {member?.email}</p>
-          <p style={{ color: '#4b5563', fontSize: '14px', marginBottom: '4px' }}><strong>Phone:</strong> {member?.phone || 'Not provided'}</p>
-          <p style={{ color: '#4b5563', fontSize: '14px' }}><strong>Department:</strong> {member?.core_department || 'N/A'} ({member?.sub_department || 'General'})</p>
-        </div>
-      </div>
 
-      {/* Financial Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-        <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '20px', borderRadius: '8px' }}>
-          <h3 style={{ fontSize: '15px', color: '#1e40af', marginBottom: '8px' }}>Compulsory Weekly Welfare Total</h3>
-          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '5px' }}>GHS {totalWelfare.toFixed(2)}</p>
-          <span style={{ fontSize: '12px', color: '#3b82f6' }}>Compulsory weekly contributions tracked</span>
-        </div>
-        <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '20px', borderRadius: '8px' }}>
-          <h3 style={{ fontSize: '15px', color: '#166534', marginBottom: '8px' }}>Tithes, Offerings & Dues Total</h3>
-          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#14532d', marginBottom: '5px' }}>GHS {totalTithesAndOthers.toFixed(2)}</p>
-          <span style={{ fontSize: '12px', color: '#22c55e' }}>General offerings and tithes given</span>
-        </div>
-      </div>
+          {/* VIEW 2: PROFILE */}
+          {activeMenu === 'profile' && (
+            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '20px' }}>My Profile</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '14px' }}>
+                <div><b>Full Name:</b> {memberFullName}</div>
+                <div><b>Email:</b> {memberEmail}</div>
+                <div><b>Phone:</b> {userProfile?.phone || 'N/A'}</div>
+                <div><b>Department:</b> {userProfile?.core_department || 'General'}</div>
+                <div><b>Role:</b> {userProfile?.role || 'member'}</div>
+              </div>
+            </div>
+          )}
 
-      {/* Section 1: Compulsory Weekly Welfare History */}
-      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '25px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#1e40af' }}>My Weekly Welfare Contributions (Compulsory)</h3>
-        {welfareRecords.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '14px' }}>No weekly welfare records found for your account yet.</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
-                  <th style={{ padding: '10px' }}>Week Ending</th>
-                  <th style={{ padding: '10px' }}>Amount (GHS)</th>
-                  <th style={{ padding: '10px' }}>Payment Method</th>
-                  <th style={{ padding: '10px' }}>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {welfareRecords.map((w) => (
-                  <tr key={w.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '10px', fontWeight: '500' }}>{w.week_ending || 'N/A'}</td>
-                    <td style={{ padding: '10px', fontWeight: 'bold', color: '#1e40af' }}>GHS {Number(w.amount).toFixed(2)}</td>
-                    <td style={{ padding: '10px', fontSize: '13px' }}>{w.payment_method || 'Cash'}</td>
-                    <td style={{ padding: '10px', fontSize: '13px', color: '#6b7280' }}>{w.notes || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+          {/* VIEW 3: HOUSE FELLOWSHIP */}
+          {activeMenu === 'fellowship' && (
+            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '15px' }}>House Fellowship</h2>
+              <p style={{ fontSize: '14px', color: '#4b5563' }}>You are assigned to the Jerusalem House Fellowship center. Meetings take place every Tuesday at 6:00 PM.</p>
+            </div>
+          )}
 
-      {/* Section 2: Tithes, Offerings & Dues History */}
-      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#166534' }}>Tithes, Offerings & Other Contributions</h3>
-        {otherRecords.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '14px' }}>No other contribution records found.</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
-                  <th style={{ padding: '10px' }}>Type</th>
-                  <th style={{ padding: '10px' }}>Amount (GHS)</th>
-                  <th style={{ padding: '10px' }}>Payment Method</th>
-                  <th style={{ padding: '10px' }}>Date Recorded</th>
-                  <th style={{ padding: '10px' }}>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {otherRecords.map((o) => (
-                  <tr key={o.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '10px', fontWeight: '500' }}>{o.contribution_type}</td>
-                    <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>GHS {Number(o.amount).toFixed(2)}</td>
-                    <td style={{ padding: '10px', fontSize: '13px' }}>{o.payment_method || 'Cash'}</td>
-                    <td style={{ padding: '10px', fontSize: '13px' }}>{new Date(o.created_at).toLocaleDateString()}</td>
-                    <td style={{ padding: '10px', fontSize: '13px', color: '#6b7280' }}>{o.notes || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          {/* VIEW 4: ATTENDANCE QR CODE */}
+          {activeMenu === 'attendance' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e3a8a', textAlign: 'center' }}>Attendance QR Code</h2>
+              
+              <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', width: '100%', maxWidth: '380px', boxSizing: 'border-box' }}>
+                <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '12px', display: 'inline-block', marginBottom: '15px', border: '1px solid #e2e8f0' }}>
+                  <img src={qrCodeUrl} alt="Attendance QR Code" style={{ width: '220px', height: '220px', display: 'block' }} />
+                </div>
+                
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1f2937', marginBottom: '8px' }}>{memberFullName}</h3>
+                <p style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.4' }}>
+                  Show this QR code to the admin to mark your attendance[span_10](start_span)[span_10](end_span).
+                </p>
+              </div>
+
+              <a 
+                href={qrCodeUrl} 
+                download="Attendance_QR.png"
+                target="_blank"
+                rel="noreferrer"
+                style={{ backgroundColor: '#2563eb', color: '#fff', padding: '12px 24px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+              >
+                Download QR Code
+              </a>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
