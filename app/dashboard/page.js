@@ -9,6 +9,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+const EXACT_CHURCH_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAAsACwBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,24 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
 
+  // Member management states
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState(null);
+  const [newMemberForm, setNewMemberForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    photo_url: '',
+    dob: '',
+    date_joined: '',
+    date_baptized: '',
+    home_address: '',
+    home_town: '',
+    core_department: 'Choir',
+    sub_department: 'Main'
+  });
+
   // Non-finance tab states
   const [attendanceList, setAttendanceList] = useState([]);
   const [attendanceForm, setAttendanceForm] = useState({ service: '', date: '', count: '' });
@@ -47,8 +67,6 @@ export default function AdminDashboard() {
   const [eventForm, setEventForm] = useState({ title: '', date: '', location: '' });
   const [announcementsList, setAnnouncementsList] = useState([]);
   const [announcementForm, setAnnouncementForm] = useState({ title: '', message: '' });
-  const [newMemberForm, setNewMemberForm] = useState({ first_name: '', last_name: '', email: '', phone: '', department: 'Choir' });
-  const [showAddMember, setShowAddMember] = useState(false);
 
   useEffect(() => {
     async function checkAdmin() {
@@ -69,17 +87,79 @@ export default function AdminDashboard() {
     router.push('/login');
   }
 
-  async function handleAddMember(e) {
+  async function handleSaveMember(e) {
     e.preventDefault();
-    const { data, error } = await supabase.from('members').insert([newMemberForm]).select();
-    if (error) {
-      alert('Error adding member: ' + error.message);
+    if (editingMemberId !== null) {
+      // Update existing
+      const { error } = await supabase.from('members').update(newMemberForm).eq('id', editingMemberId);
+      if (error) {
+        alert('Error updating member: ' + error.message);
+      } else {
+        setMembers(members.map(m => m.id === editingMemberId ? { ...m, ...newMemberForm } : m));
+        setEditingMemberId(null);
+        setShowAddMember(false);
+        resetMemberForm();
+        alert('Member updated successfully!');
+      }
     } else {
-      if (data) setMembers([...members, data[0]]);
-      setShowAddMember(false);
-      setNewMemberForm({ first_name: '', last_name: '', email: '', phone: '', department: 'Choir' });
-      alert('Member added successfully!');
+      // Insert new
+      const { data, error } = await supabase.from('members').insert([newMemberForm]).select();
+      if (error) {
+        alert('Error adding member: ' + error.message);
+      } else {
+        if (data) setMembers([...members, data[0]]);
+        setShowAddMember(false);
+        resetMemberForm();
+        alert('Member added successfully!');
+      }
     }
+  }
+
+  function startEditMember(member) {
+    setEditingMemberId(member.id);
+    setNewMemberForm({
+      first_name: member.first_name || '',
+      last_name: member.last_name || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      photo_url: member.photo_url || '',
+      dob: member.dob || '',
+      date_joined: member.date_joined || '',
+      date_baptized: member.date_baptized || '',
+      home_address: member.home_address || '',
+      home_town: member.home_town || '',
+      core_department: member.core_department || 'Choir',
+      sub_department: member.sub_department || 'Main'
+    });
+    setShowAddMember(true);
+  }
+
+  async function handleDeleteMember(id) {
+    if (!confirm('Are you sure you want to delete this member?')) return;
+    const { error } = await supabase.from('members').delete().eq('id', id);
+    if (error) {
+      alert('Error deleting member: ' + error.message);
+    } else {
+      setMembers(members.filter(m => m.id !== id));
+      alert('Member deleted successfully.');
+    }
+  }
+
+  function resetMemberForm() {
+    setNewMemberForm({
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      photo_url: '',
+      dob: '',
+      date_joined: '',
+      date_baptized: '',
+      home_address: '',
+      home_town: '',
+      core_department: 'Choir',
+      sub_department: 'Main'
+    });
   }
 
   // Calculate totals for Balance Sheet & Ledger
@@ -152,44 +232,130 @@ export default function AdminDashboard() {
               <option value="Choir">Choir</option>
               <option value="Media">Media</option>
               <option value="Ushers">Ushers</option>
+              <option value="Protocol">Protocol</option>
             </select>
 
-            <button onClick={() => setShowAddMember(!showAddMember)} style={{ width: '100%', backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}>
+            <button onClick={() => { setShowAddMember(!showAddMember); setEditingMemberId(null); resetMemberForm(); }} style={{ width: '100%', backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}>
               {showAddMember ? 'Cancel' : '+ Add New Member'}
             </button>
 
             {showAddMember && (
-              <form onSubmit={handleAddMember} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#2563eb' }}>New Member Registration</h3>
-                <label style={labelStyle}>First Name</label>
-                <input type="text" required style={inputStyle} value={newMemberForm.first_name} onChange={(e)=>setNewMemberForm({...newMemberForm, first_name: e.target.value})} />
-                <label style={labelStyle}>Last Name</label>
-                <input type="text" required style={inputStyle} value={newMemberForm.last_name} onChange={(e)=>setNewMemberForm({...newMemberForm, last_name: e.target.value})} />
-                <label style={labelStyle}>Email</label>
-                <input type="email" required style={inputStyle} value={newMemberForm.email} onChange={(e)=>setNewMemberForm({...newMemberForm, email: e.target.value})} />
-                <label style={labelStyle}>Phone</label>
-                <input type="text" style={inputStyle} value={newMemberForm.phone} onChange={(e)=>setNewMemberForm({...newMemberForm, phone: e.target.value})} />
-                <button type="submit" style={primaryBtnStyle}>Save Member</button>
+              <form onSubmit={handleSaveMember} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#2563eb' }}>{editingMemberId ? 'Edit Member Details' : 'New Member Registration'}</h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>First Name</label>
+                    <input type="text" required style={inputStyle} value={newMemberForm.first_name} onChange={(e)=>setNewMemberForm({...newMemberForm, first_name: e.target.value})} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Last Name</label>
+                    <input type="text" required style={inputStyle} value={newMemberForm.last_name} onChange={(e)=>setNewMemberForm({...newMemberForm, last_name: e.target.value})} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>Email</label>
+                    <input type="email" required style={inputStyle} value={newMemberForm.email} onChange={(e)=>setNewMemberForm({...newMemberForm, email: e.target.value})} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Phone Number</label>
+                    <input type="text" style={inputStyle} value={newMemberForm.phone} onChange={(e)=>setNewMemberForm({...newMemberForm, phone: e.target.value})} />
+                  </div>
+                </div>
+
+                <label style={labelStyle}>Photo URL (Image link)</label>
+                <input type="text" placeholder="https://..." style={inputStyle} value={newMemberForm.photo_url} onChange={(e)=>setNewMemberForm({...newMemberForm, photo_url: e.target.value})} />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>Date of Birth</label>
+                    <input type="date" style={inputStyle} value={newMemberForm.dob} onChange={(e)=>setNewMemberForm({...newMemberForm, dob: e.target.value})} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Date Joined</label>
+                    <input type="date" style={inputStyle} value={newMemberForm.date_joined} onChange={(e)=>setNewMemberForm({...newMemberForm, date_joined: e.target.value})} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Date of Baptism</label>
+                    <input type="date" style={inputStyle} value={newMemberForm.date_baptized} onChange={(e)=>setNewMemberForm({...newMemberForm, date_baptized: e.target.value})} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>Home Address</label>
+                    <input type="text" style={inputStyle} value={newMemberForm.home_address} onChange={(e)=>setNewMemberForm({...newMemberForm, home_address: e.target.value})} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Home Town</label>
+                    <input type="text" style={inputStyle} value={newMemberForm.home_town} onChange={(e)=>setNewMemberForm({...newMemberForm, home_town: e.target.value})} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>Core Department</label>
+                    <select style={inputStyle} value={newMemberForm.core_department} onChange={(e)=>setNewMemberForm({...newMemberForm, core_department: e.target.value})}>
+                      <option value="Choir">Choir</option>
+                      <option value="Media">Media</option>
+                      <option value="Ushers">Ushers</option>
+                      <option value="Protocol">Protocol</option>
+                      <option value="Evangelism">Evangelism</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Sub-Department / Unit</label>
+                    <input type="text" placeholder="e.g. Soprano, Live Streaming" style={inputStyle} value={newMemberForm.sub_department} onChange={(e)=>setNewMemberForm({...newMemberForm, sub_department: e.target.value})} />
+                  </div>
+                </div>
+
+                <button type="submit" style={primaryBtnStyle}>{editingMemberId ? 'Update Member' : 'Save Member'}</button>
               </form>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {members.filter(m => m.first_name?.toLowerCase().includes(searchTerm.toLowerCase())).map((m, idx) => (
-                <div key={idx} style={{ backgroundColor: '#fff', padding: '15px 20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '5px' }}>Photo & Name</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#fff' }}>
+                <div key={idx} style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr auto', gap: '15px', alignItems: 'center' }}>
+                  
+                  {/* Photo & Name */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {m.photo_url ? (
+                      <img src={m.photo_url} alt="Profile" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb' }} />
+                    ) : (
+                      <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#fff', fontSize: '18px' }}>
                         {m.first_name?.[0]}
                       </div>
-                      <span style={{ fontWeight: '600', color: '#1e293b' }}>{m.first_name} {m.last_name}</span>
+                    )}
+                    <div>
+                      <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '15px', display: 'block' }}>{m.first_name} {m.last_name}</span>
+                      <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>{m.core_department || 'Member'} ({m.sub_department || 'Main'})</span>
                     </div>
                   </div>
+
+                  {/* Contact & Address */}
                   <div>
-                    <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '5px' }}>Contact & Address</p>
-                    <p style={{ fontSize: '13px', color: '#1e293b', margin: 0 }}>{m.email}</p>
-                    <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>{m.phone || 'N/A'}</p>
+                    <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>CONTACT & LOCATION</p>
+                    <p style={{ fontSize: '13px', color: '#1e293b', margin: 0 }}>📧 {m.email}</p>
+                    <p style={{ fontSize: '13px', color: '#475569', margin: 0 }}>📞 {m.phone || 'N/A'}</p>
+                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>🏠 {m.home_address || 'No address'}, {m.home_town || ''}</p>
                   </div>
+
+                  {/* Important Dates */}
+                  <div>
+                    <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>CHURCH MILESTONES</p>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>🎂 DOB: {m.dob || 'N/A'}</p>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>📅 Joined: {m.date_joined || 'N/A'}</p>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>💧 Baptized: {m.date_baptized || 'N/A'}</p>
+                  </div>
+
+                  {/* Admin Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <button onClick={() => startEditMember(m)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Edit</button>
+                    <button onClick={() => handleDeleteMember(m.id)} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Delete</button>
+                  </div>
+
                 </div>
               ))}
             </div>
@@ -565,7 +731,7 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; color: #333; text-align: center; }
             .report-header { border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
-            .church-logo { width: 75px; height: 75px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: block; }
+            .church-logo { width: 85px; height: 85px; border-radius: 50%; object-fit: cover; margin: 0 auto 12px auto; border: 3px solid #2563eb; box-shadow: 0 3px 6px rgba(0,0,0,0.15); display: block; background: #fff; }
             .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
             .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
             .summary-box { display: flex; justify-content: space-around; margin: 30px 0; text-align: left; }
@@ -575,7 +741,7 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
         </head>
         <body>
           <div class="report-header">
-            <img src="https://i.ibb.co/6y4t4bS/correct-church-logo.png" class="church-logo" />
+            <img src="${EXACT_CHURCH_LOGO}" class="church-logo" />
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
             <div style="font-size: 12px; color: #475569; margin-top: 3px; font-weight: bold;">THE JESUS HOME CHURCH</div>
             <div class="report-subtitle" style="margin-top: 10px;">Official Balance Sheet Report</div>
@@ -672,7 +838,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; color: #333; text-align: center; }
             .report-header { border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
-            .church-logo { width: 75px; height: 75px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: block; }
+            .church-logo { width: 85px; height: 85px; border-radius: 50%; object-fit: cover; margin: 0 auto 12px auto; border: 3px solid #2563eb; box-shadow: 0 3px 6px rgba(0,0,0,0.15); display: block; background: #fff; }
             .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
             .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
             .metrics { display: flex; justify-content: space-between; margin-bottom: 25px; text-align: left; }
@@ -684,7 +850,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
         </head>
         <body>
           <div class="report-header">
-            <img src="https://i.ibb.co/6y4t4bS/correct-church-logo.png" class="church-logo" />
+            <img src="${EXACT_CHURCH_LOGO}" class="church-logo" />
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
             <div style="font-size: 12px; color: #475569; margin-top: 3px; font-weight: bold;">THE JESUS HOME CHURCH</div>
             <div class="report-subtitle" style="margin-top: 10px;">Official Account Statement Ledger</div>
