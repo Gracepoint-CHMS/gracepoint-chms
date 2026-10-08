@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
+let html5QrCodeInstance = null;
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [members, setMembers] = useState([]);
@@ -255,6 +257,64 @@ export default function AdminDashboard() {
     }
   }
 
+  // Real Scanner Functions
+  function startRealScanner() {
+    if (typeof Html5Qrcode === 'undefined') {
+      alert("Scanner library is still loading. Please wait a moment and try again.");
+      return;
+    }
+
+    if (html5QrCodeInstance) {
+      try {
+        html5QrCodeInstance.clear();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    html5QrCodeInstance = new Html5Qrcode("reader");
+    
+    html5QrCodeInstance.start(
+      { facingMode: "environment" }, 
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      async (decodedText) => {
+        html5QrCodeInstance.pause();
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.from('attendance').insert([
+          { member_email: decodedText, service_date: todayStr, status: 'Present', department: 'General' }
+        ]);
+
+        if (error) {
+          alert("Error saving attendance: " + error.message);
+        } else {
+          alert(`✅ Attendance logged successfully for: ${decodedText}`);
+          fetchAttendance();
+        }
+
+        setTimeout(() => {
+          if (html5QrCodeInstance) html5QrCodeInstance.resume();
+        }, 3000);
+      },
+      (errorMessage) => {
+        // Safe to ignore scanning search frame errors
+      }
+    ).catch(err => {
+      alert("Could not start camera. Make sure you are on HTTPS and camera permissions are allowed.");
+      console.error(err);
+    });
+  }
+
+  function stopRealScanner() {
+    if (html5QrCodeInstance) {
+      html5QrCodeInstance.stop().then(() => {
+        alert("Scanner Stopped");
+      }).catch(err => console.error(err));
+    } else {
+      alert("Scanner is not running.");
+    }
+  }
+
   // Filters
   const filteredMembers = members.filter(m => {
     const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
@@ -429,10 +489,9 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 3: ATTENDANCE SCANNER & DASHBOARD (Matching UI Reference) */}
+      {/* TAB 3: ATTENDANCE SCANNER & DASHBOARD */}
       {activeTab === 'attendance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Top Bar with Monthly Database Action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <h2 style={{ fontSize: '20px', fontWeight: 'bold' }}>Attendance Scanner</h2>
             <button onClick={() => alert('Monthly Database Report Export')} style={{ backgroundColor: '#10b981', color: '#fff', padding: '8px 14px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -440,18 +499,15 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* Scanner Box Section */}
+          {/* Real Camera Scanner Box Section */}
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-              <button onClick={() => alert('Scanner Started')} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Start/Resume Scanner</button>
-              <button onClick={() => alert('Scanner Stopped')} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Stop Scanner</button>
+              <button onClick={startRealScanner} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Start/Resume Scanner</button>
+              <button onClick={stopRealScanner} style={{ backgroundColor: '#ef4444', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Stop Scanner</button>
             </div>
-            {/* Camera Viewfinder Mock */}
-            <div style={{ position: 'relative', width: '100%', maxWidth: '500px', height: '280px', backgroundColor: '#111', margin: '0 auto', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              <div style={{ border: '3px dashed #fff', width: '70%', height: '60%', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>
-                [ Camera Feed / QR Scanner View ]
-              </div>
-            </div>
+            
+            {/* Camera Viewfinder Container */}
+            <div id="reader" style={{ width: '100%', maxWidth: '400px', margin: '0 auto', borderRadius: '8px', overflow: 'hidden' }}></div>
           </div>
 
           {/* Today's Attendance Section */}
@@ -520,48 +576,6 @@ export default function AdminDashboard() {
                   )}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* Consistent Absentees Section */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>Consistent Absentees (For this month)</h3>
-            <p style={{ color: '#4b5563', fontSize: '14px', margin: '0' }}>• No consistent absentees this month</p>
-          </div>
-
-          {/* Attendance Heatmap Section */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>Attendance Heatmap (Sundays of this month)</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                    <th style={{ padding: '10px' }}>MEMBER</th>
-                    <th style={{ padding: '10px', textAlign: 'center' }}>Status Grid</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.slice(0, 10).map(m => (
-                    <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={{ padding: '10px' }}>{m.first_name} {m.last_name}</td>
-                      <td style={{ padding: '10px', textAlign: 'center' }}>
-                        <span style={{ display: 'inline-block', width: '20px', height: '20px', backgroundColor: '#dc2626', borderRadius: '4px' }} title="Absent"></span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Attendance Trends Section */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>Attendance Trends</h3>
-            <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: '6px' }}>
-              <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>📈 Members Present Overview Chart</p>
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-                <span style={{ width: '12px', height: '12px', backgroundColor: '#3b82f6', display: 'inline-block' }}></span> Members Present
-              </div>
             </div>
           </div>
         </div>
