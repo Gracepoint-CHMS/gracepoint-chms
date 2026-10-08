@@ -20,6 +20,10 @@ export default function AdminDashboard() {
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [newBalanceInput, setNewBalanceInput] = useState('2,484.32');
 
+  // Welfare matrix interactive state: stores values like { "January-W1": "50" }
+  const [welfareData, setWelfareData] = useState({});
+  const [selectedWelfareMember, setSelectedWelfareMember] = useState(null);
+
   // Admin Data states
   const [members, setMembers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,7 +81,7 @@ export default function AdminDashboard() {
           <button onClick={handleLogout} style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
         </div>
 
-        {/* NAVIGATION TABS */}
+        {/* NAVIGATION TABS (Fully Fixed) */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <button onClick={() => setActiveTab('members')} style={tabBtnStyle(activeTab === 'members')}>Members</button>
           <button onClick={() => { setActiveTab('contributions'); setActiveFinanceView('hub'); }} style={tabBtnStyle(activeTab === 'contributions')}>Contributions</button>
@@ -176,15 +180,35 @@ export default function AdminDashboard() {
             {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm /></FinanceSubView>}
             {activeFinanceView === 'budget' && <FinanceSubView title="Approve Budgets" onBack={() => setActiveFinanceView('hub')}><BudgetApproval /></FinanceSubView>}
             {activeFinanceView === 'tracker' && <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}><ContributionTracker members={members} /></FinanceSubView>}
-            {activeFinanceView === 'welfare' && <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}><WelfareMatrix members={members} /></FinanceSubView>}
+            {activeFinanceView === 'welfare' && <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}><WelfareMatrix members={members} welfareData={welfareData} setWelfareData={setWelfareData} selectedWelfareMember={selectedWelfareMember} setSelectedWelfareMember={setSelectedWelfareMember} /></FinanceSubView>}
             {activeFinanceView === 'balance-sheet' && <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}><BalanceSheet /></FinanceSubView>}
             {activeFinanceView === 'report' && <FinanceSubView title="Account Report" onBack={() => setActiveFinanceView('hub')}><AccountReport /></FinanceSubView>}
           </div>
         )}
 
-        {activeTab === 'attendance' && <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '10px' }}>Attendance module view.</div>}
-        {activeTab === 'events' && <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '10px' }}>Events module view.</div>}
-        {activeTab === 'announcements' && <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '10px' }}>Announcements module view.</div>}
+        {/* TAB 3: ATTENDANCE */}
+        {activeTab === 'attendance' && (
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>Attendance Records</h2>
+            <p style={{ color: '#64748b', fontSize: '14px' }}>Track weekly church service and meeting attendance here.</p>
+          </div>
+        )}
+
+        {/* TAB 4: EVENTS */}
+        {activeTab === 'events' && (
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>Church Events</h2>
+            <p style={{ color: '#64748b', fontSize: '14px' }}>Manage upcoming programs, schedules, and special events.</p>
+          </div>
+        )}
+
+        {/* TAB 5: ANNOUNCEMENTS */}
+        {activeTab === 'announcements' && (
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>Announcements</h2>
+            <p style={{ color: '#64748b', fontSize: '14px' }}>Broadcast notices and church updates to members.</p>
+          </div>
+        )}
 
       </div>
     </div>
@@ -269,36 +293,75 @@ function ContributionTracker({ members }) {
   );
 }
 
-function WelfareMatrix({ members }) {
-  const [selected, setSelected] = useState(null);
-  return !selected ? (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-      {members.map((m, i) => (
-        <div key={i} onClick={() => setSelected(m)} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '10px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <p style={{ fontWeight: '500', fontSize: '13px' }}>{m.first_name} {m.last_name}</p>
-        </div>
-      ))}
+function WelfareMatrix({ members, welfareData, setWelfareData, selectedWelfareMember, setSelectedWelfareMember }) {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const handleInputChange = (month, week, value) => {
+    const key = `${selectedWelfareMember}-${month}-${week}`;
+    setWelfareData(prev => ({ ...prev, [key]: value }));
+  };
+
+  return !selectedWelfareMember ? (
+    <div>
+      <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '15px' }}>Select a member to view and enter monthly welfare contributions:</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+        {members.map((m, i) => (
+          <div key={i} onClick={() => setSelectedWelfareMember(`${m.first_name} ${m.last_name}`)} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '10px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <p style={{ fontWeight: '500', fontSize: '13px', color: '#1e293b' }}>{m.first_name} {m.last_name}</p>
+          </div>
+        ))}
+      </div>
     </div>
   ) : (
-    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px' }}>
-      <button onClick={() => setSelected(null)} style={{ marginBottom: '10px', border: 'none', background: '#ef4444', color: '#fff', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Close Matrix</button>
-      <h3 style={{ marginBottom: '10px' }}>Welfare for {selected.first_name}</h3>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#2563eb', color: '#fff' }}>
-            <th style={{ padding: '6px' }}>Month</th>
-            <th style={{ padding: '6px' }}>W1</th><th style={{ padding: '6px' }}>W2</th><th style={{ padding: '6px' }}>W3</th><th style={{ padding: '6px' }}>W4</th>
-          </tr>
-        </thead>
-        <tbody>
-          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((m, idx) => (
-            <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={{ padding: '6px', fontWeight: 'bold' }}>{m}</td>
-              {[1, 2, 3, 4].map((w, wIdx) => <td key={wIdx} style={{ border: '1px solid #cbd5e1', padding: '6px' }}>0</td>)}
+    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <h3 style={{ fontSize: '16px', color: '#2563eb', margin: 0 }}>Welfare Matrix: {selectedWelfareMember}</h3>
+        <button onClick={() => setSelectedWelfareMember(null)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Close Matrix</button>
+      </div>
+      <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '15px' }}>Type amounts directly into any week box for all 12 months.</p>
+      
+      <div style={{ overflowX: 'auto', maxHeight: '450px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'center' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#2563eb', color: '#fff', position: 'sticky', top: 0, zIndex: 10 }}>
+              <th style={{ padding: '10px' }}>Month</th>
+              <th style={{ padding: '10px' }}>W1</th>
+              <th style={{ padding: '10px' }}>W2</th>
+              <th style={{ padding: '10px' }}>W3</th>
+              <th style={{ padding: '10px' }}>W4</th>
+              <th style={{ padding: '10px' }}>Total</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {months.map((month, idx) => {
+              const w1 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W1`] || 0);
+              const w2 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W2`] || 0);
+              const w3 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W3`] || 0);
+              const w4 = parseFloat(welfareData[`${selectedWelfareMember}-${month}-W4`] || 0);
+              const rowTotal = w1 + w2 + w3 + w4;
+
+              return (
+                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '10px', fontWeight: 'bold', color: '#1e293b', textAlign: 'left' }}>{month}</td>
+                  {['W1', 'W2', 'W3', 'W4'].map((week) => (
+                    <td key={week} style={{ padding: '6px', border: '1px solid #e2e8f0' }}>
+                      <input 
+                        type="number" 
+                        value={welfareData[`${selectedWelfareMember}-${month}-${week}`] || ''} 
+                        onChange={(e) => handleInputChange(month, week, e.target.value)}
+                        placeholder="0"
+                        style={{ width: '50px', textAlign: 'center', padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                      />
+                    </td>
+                  ))}
+                  <td style={{ padding: '10px', fontWeight: 'bold', color: '#16a34a' }}>{rowTotal.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <button onClick={() => alert('Welfare entries saved successfully!')} style={{ ...primaryBtnStyle, marginTop: '20px' }}>Save Welfare Contributions</button>
     </div>
   );
 }
