@@ -1,772 +1,452 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
 
-let html5QrCodeInstance = null;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [members, setMembers] = useState([]);
-  const [contributions, setContributions] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState('finances'); // Default to Finance Management
+  const [activeFinanceView, setActiveFinanceView] = useState('hub'); // 'hub', 'tracker', 'welfare', 'balance-sheet', 'expense', 'budget', 'report'
   
-  // Navigation tabs
-  const [activeTab, setActiveTab] = useState('members');
-  
-  // Search & Filters state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [departmentFilter, setDepartmentFilter] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  // Interactive finance states
+  const [selectedWelfareMember, setSelectedWelfareMember] = useState(null);
+  const [expenseForm, setExpenseForm] = useState({ description: '', quantity: '', rate: '', date: '', approvedBy: '', remarks: '' });
+  const [budgetFilter, setBudgetFilter] = useState('All');
+  const [pledgeForm, setPledgeForm] = useState({ member: '', purpose: '', amount: '' });
 
-  // Attendance Filter States
-  const [filterDate, setFilterDate] = useState('');
-  const [filterMonth, setFilterMonth] = useState('');
-
-  // Editing state
-  const [editingMember, setEditingMember] = useState(null);
-
-  // Modals state
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showContribModal, setShowContribModal] = useState(false);
-  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
-  const [showEventModal, setShowEventModal] = useState(false);
-  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
-
-  // Form states
-  const [newMember, setNewMember] = useState({
-    prefix: '', first_name: '', last_name: '', email: '', phone: '',
-    home_address: '', hometown: '', emergency_contact_person: '', emergency_contact_phone: '',
-    date_of_birth: '', date_joined: '', date_of_baptism: '', gender: '',
-    marital_status: '', core_department: '', sub_department: '', role: 'member', photo_url: ''
-  });
-
-  const [newContribution, setNewContribution] = useState({
-    member_email: '', amount: '', contribution_type: 'Welfare', week_ending: '', payment_method: 'Cash', notes: ''
-  });
-
-  const [newAttendance, setNewAttendance] = useState({
-    member_email: '', service_date: new Date().toISOString().split('T')[0], status: 'Present'
-  });
-
-  const [newEvent, setNewEvent] = useState({
-    title: '', description: '', event_date: '', start_time: '', location: ''
-  });
-
-  const [newAnnouncement, setNewAnnouncement] = useState({
-    title: '', content: '', author: 'Leadership'
-  });
+  // Admin Data states
+  const [members, setMembers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
-    setLoading(true);
-    await Promise.all([
-      fetchMembers(),
-      fetchContributions(),
-      fetchAttendance(),
-      fetchEvents(),
-      fetchAnnouncements()
-    ]);
-    setLoading(false);
-  }
-
-  async function fetchMembers() {
-    const { data } = await supabase.from('members').select('*').order('created_at', { ascending: false });
-    if (data) setMembers(data);
-  }
-
-  async function fetchContributions() {
-    const { data } = await supabase.from('contributions').select('*').order('created_at', { ascending: false });
-    if (data) setContributions(data);
-  }
-
-  async function fetchAttendance() {
-    const { data } = await supabase.from('attendance').select('*');
-    if (data) setAttendance(data);
-  }
-
-  async function fetchEvents() {
-    const { data } = await supabase.from('events').select('*').order('event_date', { ascending: true });
-    if (data) setEvents(data);
-  }
-
-  async function fetchAnnouncements() {
-    const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-    if (data) setAnnouncements(data);
-  }
-
-  // Deletions
-  async function handleDeleteMember(id, email) {
-    if (!confirm(`Are you sure you want to delete ${email}?`)) return;
-    let query = supabase.from('members').delete();
-    if (id) query = query.eq('id', id);
-    else query = query.eq('email', email);
-    const { error } = await query;
-    if (error) alert('Error: ' + error.message);
-    else setMembers(members.filter(m => (id ? m.id !== id : m.email !== email)));
-  }
-
-  async function handleDeleteContribution(id) {
-    if (!confirm('Delete this contribution record?')) return;
-    const { error } = await supabase.from('contributions').delete().eq('id', id);
-    if (error) alert('Error: ' + error.message);
-    else setContributions(contributions.filter(c => c.id !== id));
-  }
-
-  async function handleDeleteAttendance(id) {
-    if (!confirm('Delete this attendance record?')) return;
-    const { error } = await supabase.from('attendance').delete().eq('id', id);
-    if (error) alert('Error: ' + error.message);
-    else setAttendance(attendance.filter(a => a.id !== id));
-  }
-
-  async function handleDeleteEvent(id) {
-    if (!confirm('Delete this event?')) return;
-    const { error } = await supabase.from('events').delete().eq('id', id);
-    if (error) alert('Error: ' + error.message);
-    else setEvents(events.filter(e => e.id !== id));
-  }
-
-  async function handleDeleteAnnouncement(id) {
-    if (!confirm('Delete this announcement?')) return;
-    const { error } = await supabase.from('announcements').delete().eq('id', id);
-    if (error) alert('Error: ' + error.message);
-    else setAnnouncements(announcements.filter(a => a.id !== id));
-  }
-
-  // Image Upload Handler using MEMBER-PHOTOS bucket
-  async function handleImageUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploading(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('MEMBER-PHOTOS')
-      .upload(filePath, file);
-
-    if (uploadError) {
-      alert('Error uploading image: ' + uploadError.message);
-      setUploading(false);
-      return;
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from('MEMBER-PHOTOS')
-      .getPublicUrl(filePath);
-
-    setEditingMember({
-      ...editingMember,
-      photo_url: publicUrlData.publicUrl
-    });
-    setUploading(false);
-  }
-
-  // Add Handlers
-  async function handleAddMember(e) {
-    e.preventDefault();
-    const { error } = await supabase.from('members').insert([newMember]);
-    if (error) alert('Error: ' + error.message);
-    else {
-      alert('Member added successfully!');
-      setShowAddModal(false);
-      fetchMembers();
-    }
-  }
-
-  async function handleUpdateMember(e) {
-    e.preventDefault();
-    let query = supabase.from('members').update(editingMember);
-    if (editingMember.id) query = query.eq('id', editingMember.id);
-    else query = query.eq('email', editingMember.email);
-
-    const { error } = await query;
-    if (error) alert('Error updating member: ' + error.message);
-    else {
-      alert('Member updated successfully!');
-      setEditingMember(null);
-      fetchMembers();
-    }
-  }
-
-  async function handleAddContribution(e) {
-    e.preventDefault();
-    const targetMember = members.find(m => m.email === newContribution.member_email);
-    const payload = {
-      ...newContribution,
-      member_id: targetMember ? targetMember.id : null,
-      amount: parseFloat(newContribution.amount),
-      week_ending: newContribution.week_ending || null
-    };
-    const { error } = await supabase.from('contributions').insert([payload]);
-    if (error) alert('Error: ' + error.message);
-    else {
-      alert('Contribution recorded!');
-      setShowContribModal(false);
-      fetchContributions();
-    }
-  }
-
-  // Ultra-Robust Attendance Insert helper function addressing event_id constraint
-  async function insertAttendanceRecord(recordData) {
-    const targetMember = members.find(m => m.email === recordData.member_email || m.id === recordData.member_id);
-    const todayStr = new Date().toISOString().split('T')[0];
-    const defaultEventId = events.length > 0 ? events[0].id : '00000000-0000-0000-0000-000000000000';
-
-    const fallbackPayloads = [
-      { service_date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id, event_id: defaultEventId },
-      { date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id, event_id: defaultEventId },
-      { service_date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
-      { date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
-      { status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
-      { status: recordData.status || 'Present' },
-      {}
-    ];
-
-    let success = false;
-    let finalError = null;
-
-    for (const p of fallbackPayloads) {
-      const cleanPayload = Object.fromEntries(Object.entries(p).filter(([_, v]) => v !== undefined && v !== null));
-      const { error } = await supabase.from('attendance').insert([cleanPayload]);
-      if (!error) {
-        success = true;
-        break;
-      } else {
-        finalError = error;
+    async function checkAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
       }
-    }
+      
+      // Fetch members for dropdowns & member lists
+      const { data: memberData } = await supabase.from('members').select('*');
+      if (memberData) setMembers(memberData);
 
-    return { success, error: finalError };
+      setLoading(false);
+    }
+    checkAdmin();
+  }, [router]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push('/login');
   }
-
-  async function handleAddAttendance(e) {
-    e.preventDefault();
-    const { success, error } = await insertAttendanceRecord(newAttendance);
-    if (!success) {
-      alert('Error saving attendance: ' + (error ? error.message : 'Unknown error'));
-    } else {
-      alert('Attendance logged successfully!');
-      setShowAttendanceModal(false);
-      fetchAttendance();
-    }
-  }
-
-  async function handleAddEvent(e) {
-    e.preventDefault();
-    const { error } = await supabase.from('events').insert([newEvent]);
-    if (error) alert('Error: ' + error.message);
-    else {
-      alert('Event published!');
-      setShowEventModal(false);
-      fetchEvents();
-    }
-  }
-
-  async function handleAddAnnouncement(e) {
-    e.preventDefault();
-    const { error } = await supabase.from('announcements').insert([newAnnouncement]);
-    if (error) alert('Error: ' + error.message);
-    else {
-      alert('Announcement broadcasted!');
-      setShowAnnouncementModal(false);
-      fetchAnnouncements();
-    }
-  }
-
-  // Self-Loading & Real Scanner Functions
-  function startRealScanner() {
-    if (typeof window.Html5Qrcode !== 'undefined') {
-      initializeScanner(window.Html5Qrcode);
-      return;
-    }
-
-    let existingScript = document.getElementById('html5-qrcode-script');
-    if (existingScript) {
-      existingScript.onload = () => initializeScanner(window.Html5Qrcode);
-      alert("Loading scanner library, please tap Start again in 2 seconds.");
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = 'html5-qrcode-script';
-    script.src = 'https://unpkg.com/html5-qrcode';
-    script.async = true;
-    script.onload = () => {
-      if (window.Html5Qrcode) {
-        initializeScanner(window.Html5Qrcode);
-      } else {
-        alert("Failed to initialize scanner library.");
-      }
-    };
-    script.onerror = () => {
-      alert("Failed to download scanner library. Check your network.");
-    };
-    document.body.appendChild(script);
-    alert("Downloading scanner library for the first time... please tap Start again in a moment.");
-  }
-
-  function initializeScanner(Html5QrcodeClass) {
-    if (html5QrCodeInstance) {
-      try {
-        html5QrCodeInstance.clear();
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    html5QrCodeInstance = new Html5QrcodeClass("reader");
-    
-    html5QrCodeInstance.start(
-      { facingMode: "environment" }, 
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      async (decodedText) => {
-        html5QrCodeInstance.pause();
-
-        const todayStr = new Date().toISOString().split('T')[0];
-        const matchedMember = members.find(m => m.email === decodedText || m.id === decodedText);
-
-        const { success, error } = await insertAttendanceRecord({
-          member_email: decodedText,
-          member_id: matchedMember ? matchedMember.id : decodedText,
-          service_date: todayStr,
-          status: 'Present'
-        });
-
-        if (!success) {
-          alert("Error saving attendance: " + (error ? error.message : 'Unknown schema error'));
-        } else {
-          alert(`✅ Attendance logged successfully for: ${matchedMember ? `${matchedMember.first_name}${matchedMember.last_name}` : decodedText}`);
-          fetchAttendance();
-        }
-
-        setTimeout(() => {
-          if (html5QrCodeInstance) html5QrCodeInstance.resume();
-        }, 3000);
-      },
-      (errorMessage) => {}
-    ).catch(err => {
-      alert("Could not start camera. Make sure you are on HTTPS and camera permissions are allowed.");
-      console.error(err);
-    });
-  }
-
-  function stopRealScanner() {
-    if (html5QrCodeInstance) {
-      html5QrCodeInstance.stop().then(() => {
-        alert("Scanner Stopped");
-      }).catch(err => console.error(err));
-    } else {
-      alert("Scanner is not running.");
-    }
-  }
-
-  // Filters
-  const filteredMembers = members.filter(m => {
-    const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
-    const email = (m.email || '').toLowerCase();
-    return (fullName.includes(searchQuery.toLowerCase()) || email.includes(searchQuery.toLowerCase())) &&
-      (departmentFilter ? m.core_department === departmentFilter : true) &&
-      (roleFilter ? m.role === roleFilter : true);
-  });
-
-  const filteredContributions = contributions.filter(c => {
-    const email = (c.member_email || '').toLowerCase();
-    return (email.includes(searchQuery.toLowerCase()) || (c.notes || '').toLowerCase().includes(searchQuery.toLowerCase())) &&
-      (typeFilter ? c.contribution_type === typeFilter : true);
-  });
-
-  // Attendance Specific Calculations
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todaysAttendanceRecords = attendance.filter(a => (a.service_date === todayStr || a.date === todayStr || (a.created_at && a.created_at.startsWith(todayStr))));
-
-  const filteredAttendanceRecords = attendance.filter(a => {
-    const recordDate = a.service_date || a.date || (a.created_at ? a.created_at.split('T')[0] : '');
-    const matchDate = filterDate ? recordDate === filterDate : true;
-    const matchMonth = filterMonth ? recordDate.startsWith(filterMonth) : true;
-    return matchDate && matchMonth;
-  });
-
-  // Summary Metrics
-  const totalWelfare = contributions.filter(c => c.contribution_type === 'Welfare').reduce((sum, c) => sum + Number(c.amount), 0);
-  const totalTithes = contributions.filter(c => c.contribution_type === 'Tithe').reduce((sum, c) => sum + Number(c.amount), 0);
-  const totalOther = contributions.filter(c => c.contribution_type !== 'Welfare' && c.contribution_type !== 'Tithe').reduce((sum, c) => sum + Number(c.amount), 0);
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}><p>Loading Admin Dashboard...</p></div>;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif' }}>
+        <p style={{ color: '#1d4ed8', fontWeight: '500' }}>Loading Super Admin Portal...</p>
+      </div>
+    );
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Admin Dashboard</h1>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
+      
+      {/* TOP HEADER BAR */}
+      <div style={{ backgroundColor: '#2563eb', color: '#fff', padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Gracepoint CHMS (Super Admin)</h2>
+        </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => router.push('/portal')} style={{ backgroundColor: '#4f46e5', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>My Portal</button>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} style={{ backgroundColor: '#ef4444', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
+          <button onClick={() => router.push('/portal')} style={{ background: '#1e40af', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>My Portal</button>
+          <button onClick={handleLogout} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Logout</button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {['members', 'contributions', 'attendance', 'events', 'announcements'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{ padding: '10px 16px', backgroundColor: activeTab === tab ? '#2563eb' : '#e5e7eb', color: activeTab === tab ? '#fff' : '#374151', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', textTransform: 'capitalize' }}
-          >
-            {tab}
-          </button>
-        ))}
+      {/* ADMIN NAVIGATION TABS */}
+      <div style={{ backgroundColor: '#fff', padding: '15px 25px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <button onClick={() => setActiveTab('members')} style={{ ...tabBtnStyle, backgroundColor: activeTab === 'members' ? '#2563eb' : '#f1f5f9', color: activeTab === 'members' ? '#fff' : '#475569' }}>Members</button>
+        <button onClick={() => setActiveTab('contributions')} style={{ ...tabBtnStyle, backgroundColor: activeTab === 'contributions' ? '#2563eb' : '#f1f5f9', color: activeTab === 'contributions' ? '#fff' : '#475569' }}>Contributions</button>
+        <button onClick={() => { setActiveTab('finances'); setActiveFinanceView('hub'); }} style={{ ...tabBtnStyle, backgroundColor: activeTab === 'finances' ? '#2563eb' : '#f1f5f9', color: activeTab === 'finances' ? '#fff' : '#475569' }}>Finance Management</button>
       </div>
 
-      {/* TAB 1: MEMBERS */}
-      {activeTab === 'members' && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '10px', flex: '1', flexWrap: 'wrap', minWidth: '280px' }}>
-              <input type="text" placeholder="Search name or email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', flex: '1' }} />
-              <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}>
-                <option value="">All Departments</option>
-                <option value="LOVE">LOVE</option>
-                <option value="UNITY">UNITY</option>
-                <option value="CARE">CARE</option>
-                <option value="RESPECT">RESPECT</option>
-              </select>
-            </div>
-            <button onClick={() => setShowAddModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>+ Add New Member</button>
-          </div>
-
-          <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                  <th style={{ padding: '12px' }}>Photo & Name</th>
-                  <th style={{ padding: '12px' }}>Contact & Address</th>
-                  <th style={{ padding: '12px' }}>Background</th>
-                  <th style={{ padding: '12px' }}>Department</th>
-                  <th style={{ padding: '12px' }}>Role</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMembers.map(m => (
-                  <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {m.photo_url ? (
-                        <img src={m.photo_url} alt="Profile" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
-                          {(m.first_name?.[0] || '') + (m.last_name?.[0] || '')}
-                        </div>
-                      )}
-                      <div>{m.prefix} {m.first_name} {m.last_name}</div>
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      <div>{m.email}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>{m.phone}</div>
-                      <div style={{ fontSize: '11px', color: '#4b5563' }}>📍 {m.home_address || 'N/A'}, {m.hometown || ''}</div>
-                    </td>
-                    <td style={{ padding: '12px', fontSize: '12px', color: '#4b5563' }}>
-                      <div>Gender: {m.gender || 'N/A'}</div>
-                      <div>Marital: {m.marital_status || 'N/A'}</div>
-                      <div>Emergency: {m.emergency_contact_person || 'N/A'} ({m.emergency_contact_phone || 'N/A'})</div>
-                    </td>
-                    <td style={{ padding: '12px' }}>{m.core_department} / {m.sub_department}</td>
-                    <td style={{ padding: '12px' }}><span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', backgroundColor: '#f3f4f6' }}>{m.role}</span></td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <button onClick={() => setEditingMember({ ...m })} style={{ marginRight: '8px', padding: '6px 10px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Edit</button>
-                      <button onClick={() => handleDeleteMember(m.id, m.email)} style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: CONTRIBUTIONS */}
-      {activeTab === 'contributions' && (
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px' }}>
-            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ fontSize: '14px', color: '#1e40af', marginBottom: '5px' }}>Total Weekly Welfare</h4>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {totalWelfare.toFixed(2)}</p>
-            </div>
-            <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ fontSize: '14px', color: '#166534', marginBottom: '5px' }}>Total Tithes</h4>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#14532d' }}>GHS {totalTithes.toFixed(2)}</p>
-            </div>
-            <div style={{ backgroundColor: '#fdf4ff', border: '1px solid #f5d0fe', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ fontSize: '14px', color: '#86198f', marginBottom: '5px' }}>Other Giving & Dues</h4>
-              <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#701a75' }}>GHS {totalOther.toFixed(2)}</p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-            <input type="text" placeholder="Search email or notes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', flex: '1', minWidth: '200px' }} />
-            <button onClick={() => setShowContribModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>+ Record Contribution</button>
-          </div>
-
-          <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                  <th style={{ padding: '12px' }}>Email</th>
-                  <th style={{ padding: '12px' }}>Type</th>
-                  <th style={{ padding: '12px' }}>Amount</th>
-                  <th style={{ padding: '12px' }}>Week Ending</th>
-                  <th style={{ padding: '12px' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredContributions.map(c => (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px' }}>{c.member_email}</td>
-                    <td style={{ padding: '12px' }}>{c.contribution_type}</td>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>GHS {Number(c.amount).toFixed(2)}</td>
-                    <td style={{ padding: '12px' }}>{c.week_ending || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}><button onClick={() => handleDeleteContribution(c.id)} style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Delete</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: ATTENDANCE SCANNER & DASHBOARD */}
-      {activeTab === 'attendance' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold' }}>Attendance Scanner</h2>
-          </div>
-
-          {/* Real Camera Scanner Box Section */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-              <button onClick={startRealScanner} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Start/Resume Scanner</button>
-              <button onClick={stopRealScanner} style={{ backgroundColor: '#ef4444', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Stop Scanner</button>
-            </div>
-            
-            {/* Camera Viewfinder Container */}
-            <div id="reader" style={{ width: '100%', maxWidth: '400px', margin: '0 auto', borderRadius: '8px', overflow: 'hidden' }}></div>
-          </div>
-
-          {/* Today's Attendance Section */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 'bold' }}>Today's Attendance</h3>
-              <button onClick={() => setShowAttendanceModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '6px 12px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>+ Manual Log</button>
-            </div>
-            {todaysAttendanceRecords.length === 0 ? (
-              <p style={{ color: '#6b7280', fontSize: '14px' }}>No attendance yet for today.</p>
-            ) : (
-              <ul style={{ paddingLeft: '20px', margin: '0' }}>
-                {todaysAttendanceRecords.map(rec => {
-                  const matchedMem = members.find(m => m.id === rec.member_id);
-                  return (
-                    <li key={rec.id} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                      <b>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'General Member')}</b> - <span style={{ color: '#166534' }}>{rec.status || 'Present'}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-
-          {/* View Attendance Filter Section */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>View Attendance</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '15px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>DATE:</label>
-                <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>MONTH:</label>
-                <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <button onClick={() => { setFilterDate(''); setFilterMonth(''); }} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', flex: '1' }}>Reset Filter</button>
-            </div>
-
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+      {/* MAIN ADMIN CONTENT */}
+      <div style={{ padding: '25px', maxWidth: '1000px', margin: '0 auto' }}>
+        
+        {/* TAB 1: MEMBERS */}
+        {activeTab === 'members' && (
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1e293b', marginBottom: '15px' }}>Manage Members</h1>
+            <input 
+              type="text" 
+              placeholder="Search name or email..." 
+              style={inputStyle} 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+            />
+            <div style={{ backgroundColor: '#fff', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                    <th style={{ padding: '10px' }}>MEMBER</th>
-                    <th style={{ padding: '10px' }}>DATE</th>
-                    <th style={{ padding: '10px' }}>STATUS</th>
-                    <th style={{ padding: '10px', textAlign: 'center' }}>ACTION</th>
+                  <tr style={{ backgroundColor: '#1e293b', color: '#fff', textAlign: 'left' }}>
+                    <th style={{ padding: '10px' }}>Name</th>
+                    <th style={{ padding: '10px' }}>Email</th>
+                    <th style={{ padding: '10px' }}>Phone</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAttendanceRecords.length === 0 ? (
-                    <tr>
-                      <td colSpan="4" style={{ padding: '15px', textAlign: 'center', color: '#6b7280' }}>No records found.</td>
+                  {members.filter(m => m.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.email?.toLowerCase().includes(searchTerm.toLowerCase())).map((m, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '10px', fontWeight: '500' }}>{m.first_name} {m.last_name}</td>
+                      <td style={{ padding: '10px', color: '#64748b' }}>{m.email}</td>
+                      <td style={{ padding: '10px', color: '#64748b' }}>{m.phone || 'N/A'}</td>
                     </tr>
-                  ) : (
-                    filteredAttendanceRecords.map(rec => {
-                      const matchedMem = members.find(m => m.id === rec.member_id);
-                      const displayDate = rec.service_date || rec.date || (rec.created_at ? rec.created_at.split('T')[0] : 'N/A');
-                      return (
-                        <tr key={rec.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                          <td style={{ padding: '10px' }}>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'N/A')}</td>
-                          <td style={{ padding: '10px' }}>{displayDate}</td>
-                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>{rec.status || 'Present'}</td>
-                          <td style={{ padding: '10px', textAlign: 'center' }}>
-                            <button onClick={() => handleDeleteAttendance(rec.id)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* TAB 4: EVENTS */}
-      {activeTab === 'events' && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>Upcoming Church Events</h2>
-            <button onClick={() => setShowEventModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>+ Create Event</button>
+        {/* TAB 2: CONTRIBUTIONS */}
+        {activeTab === 'contributions' && (
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1e293b', marginBottom: '15px' }}>Contributions Overview</h1>
+            <p style={{ color: '#64748b' }}>Use the Finance Management section for advanced tracking and welfare matrices.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
-            {events.map(ev => (
-              <div key={ev.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>{ev.title}</h3>
-                <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '8px' }}>{ev.description}</p>
-                <div style={{ fontSize: '12px', color: '#2563eb', fontWeight: 'bold' }}>📅 {ev.event_date} {ev.start_time ? `at ${ev.start_time}` : ''}</div>
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>📍 {ev.location || 'Church Auditorium'}</div>
-                <button onClick={() => handleDeleteEvent(ev.id)} style={{ marginTop: '12px', padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete Event</button>
+        )}
+
+        {/* TAB 3: FINANCE MANAGEMENT SUITE */}
+        {activeTab === 'finances' && (
+          <div>
+            {/* FINANCE HUB */}
+            {activeFinanceView === 'hub' && (
+              <div>
+                <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1e293b', marginBottom: '5px' }}>Finance Management</h1>
+                <p style={{ color: '#64748b', marginBottom: '20px' }}>Select an action below to manage church finances.</p>
+
+                {/* Opening Balance Card */}
+                <div style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <span style={{ color: '#4b5563', fontWeight: '600' }}>Opening Balance:</span>
+                  <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>GHS 2,484.32</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '15px' }}>
+                  <FinanceCard title="Contribution Tracker" icon="💼" onClick={() => setActiveFinanceView('tracker')} />
+                  <FinanceCard title="Welfare Contribution" icon="🤝" onClick={() => setActiveFinanceView('welfare')} />
+                  <FinanceCard title="Balance Sheet" icon="⚖️" onClick={() => setActiveFinanceView('balance-sheet')} />
+                  <FinanceCard title="Account Report" icon="💳" onClick={() => setActiveFinanceView('report')} />
+                  <FinanceCard title="Record Income / Expense" icon="➕" onClick={() => setActiveFinanceView('expense')} />
+                  <FinanceCard title="Approve Budgets" icon="✅" onClick={() => setActiveFinanceView('budget')} />
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
 
-      {/* TAB 5: ANNOUNCEMENTS */}
-      {activeTab === 'announcements' && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>Broadcast Announcements</h2>
-            <button onClick={() => setShowAnnouncementModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>+ Post Announcement</button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {announcements.map(an => (
-              <div key={an.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #4f46e5', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>{an.title}</h3>
-                <p style={{ fontSize: '13px', color: '#374151', margin: '6px 0' }}>{an.content}</p>
-                <div style={{ fontSize: '11px', color: '#6b7280' }}>Posted by {an.author} on {new Date(an.created_at).toLocaleDateString()}</div>
-                <button onClick={() => handleDeleteAnnouncement(an.id)} style={{ marginTop: '8px', padding: '4px 8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>Delete</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+            {/* 1. CONTRIBUTION TRACKER */}
+            {activeFinanceView === 'tracker' && (
+              <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                  <MetricCard label="0 pledges" />
+                  <MetricCard label="0% of target" />
+                </div>
+                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '15px', marginBottom: '15px', color: '#1d4ed8' }}>➕ New Pledge</h3>
+                  <label style={labelStyle}>Member</label>
+                  <select style={inputStyle} value={pledgeForm.member} onChange={(e)=>setPledgeForm({...pledgeForm, member: e.target.value})}>
+                    <option value="">Select member...</option>
+                    {members.map((m, i) => (
+                      <option key={i} value={`${m.first_name} ${m.last_name}`}>{m.first_name} {m.last_name}</option>
+                    ))}
+                  </select>
+                  <label style={labelStyle}>Purpose</label>
+                  <input type="text" placeholder="e.g. Building fund" style={inputStyle} value={pledgeForm.purpose} onChange={(e)=>setPledgeForm({...pledgeForm, purpose: e.target.value})} />
+                  <label style={labelStyle}>Amount</label>
+                  <input type="number" placeholder="0.00" style={inputStyle} value={pledgeForm.amount} onChange={(e)=>setPledgeForm({...pledgeForm, amount: e.target.value})} />
+                  <button style={primaryBtnStyle}>+ Create</button>
+                </div>
+              </FinanceSubView>
+            )}
 
-      {/* MODAL: EDIT MEMBER */}
-      {editingMember && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, overflowY: 'auto', padding: '20px' }}>
-          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>Edit Member Details</h3>
-            <form onSubmit={handleUpdateMember} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-                {editingMember.photo_url ? (
-                  <img src={editingMember.photo_url} alt="Profile Preview" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', margin: '0 auto', border: '2px solid #e5e7eb' }} />
+            {/* 2. WELFARE CONTRIBUTION MATRIX */}
+            {activeFinanceView === 'welfare' && (
+              <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}>
+                {!selectedWelfareMember ? (
+                  <div>
+                    <input type="text" placeholder="Search member..." style={{ ...inputStyle, marginBottom: '15px' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                      {members.map((m, i) => (
+                        <div key={i} onClick={() => setSelectedWelfareMember(`${m.first_name} ${m.last_name}`)} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '10px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                          <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e1', margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#fff' }}>
+                            {m.first_name?.[0]}
+                          </div>
+                          <p style={{ fontSize: '13px', fontWeight: '500', color: '#1e293b' }}>{m.first_name} {m.last_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
-                  <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', color: '#6b7280', fontSize: '14px' }}>No Photo</div>
+                  <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                      <h3 style={{ fontSize: '16px', color: '#1d4ed8' }}>{selectedWelfareMember}</h3>
+                      <button onClick={() => setSelectedWelfareMember(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 'bold' }}>✕ Close</button>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px' }}>Click any box to enter amount</p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#3b82f6', color: '#fff' }}>
+                            <th style={{ padding: '8px' }}>Months</th>
+                            <th style={{ padding: '8px' }}>1st Week</th>
+                            <th style={{ padding: '8px' }}>2nd Week</th>
+                            <th style={{ padding: '8px' }}>3rd Week</th>
+                            <th style={{ padding: '8px' }}>4th Week</th>
+                            <th style={{ padding: '8px' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '8px', fontWeight: 'bold' }}>{m}</td>
+                              {[1, 2, 3, 4, 'Total'].map((w, wIdx) => (
+                                <td key={wIdx} style={{ padding: '8px', border: '1px solid #e2e8f0' }}>0</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button style={{ ...primaryBtnStyle, marginTop: '15px' }}>Save</button>
+                  </div>
                 )}
-              </div>
+              </FinanceSubView>
+            )}
 
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Upload New Profile Photo</label>
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleImageUpload} 
-                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', boxSizing: 'border-box', backgroundColor: '#f9fafb' }} 
-              />
-              {uploading && <p style={{ fontSize: '12px', color: '#2563eb', margin: '0' }}>Uploading image to storage...</p>}
+            {/* 3. BALANCE SHEET */}
+            {activeFinanceView === 'balance-sheet' && (
+              <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <input type="date" style={{ ...inputStyle, marginBottom: '10px' }} />
+                  <input type="date" style={{ ...inputStyle, marginBottom: '10px' }} />
+                  <button style={primaryBtnStyle}>Filter</button>
+                </div>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#2563eb', color: '#fff', textAlign: 'left' }}>
+                        <th style={{ padding: '10px' }}>Total Expenses</th>
+                        <th style={{ padding: '10px' }}>Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px', color: '#dc2626' }}>GHS 0</td>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>GHS 2,672.32</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px', color: '#dc2626' }}>GHS 200</td>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>GHS 2,673.32</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </FinanceSubView>
+            )}
 
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>First Name</label>
-              <input type="text" value={editingMember.first_name || ''} onChange={e => setEditingMember({...editingMember, first_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Last Name</label>
-              <input type="text" value={editingMember.last_name || ''} onChange={e => setEditingMember({...editingMember, last_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Phone</label>
-              <input type="text" value={editingMember.phone || ''} onChange={e => setEditingMember({...editingMember, phone: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-              
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Home Address</label>
-              <input type="text" value={editingMember.home_address || ''} onChange={e => setEditingMember({...editingMember, home_address: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            {/* 4. EXPENSE LOGGING */}
+            {activeFinanceView === 'expense' && (
+              <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <label style={labelStyle}>Description</label>
+                  <textarea placeholder="Enter expense description" style={{ ...inputStyle, height: '70px' }} value={expenseForm.description} onChange={(e)=>setExpenseForm({...expenseForm, description: e.target.value})} />
+                  
+                  <label style={labelStyle}>Quantity</label>
+                  <input type="number" placeholder="Enter quantity" style={inputStyle} value={expenseForm.quantity} onChange={(e)=>setExpenseForm({...expenseForm, quantity: e.target.value})} />
+                  
+                  <label style={labelStyle}>Rate</label>
+                  <input type="number" placeholder="Enter rate per item" style={inputStyle} value={expenseForm.rate} onChange={(e)=>setExpenseForm({...expenseForm, rate: e.target.value})} />
+                  
+                  <label style={labelStyle}>Total Cost</label>
+                  <input type="text" disabled placeholder="Auto-calculated total" style={{ ...inputStyle, backgroundColor: '#f8fafc' }} value={expenseForm.quantity && expenseForm.rate ? `GHS ${expenseForm.quantity * expenseForm.rate}` : ''} />
+                  
+                  <label style={labelStyle}>Date</label>
+                  <input type="date" style={inputStyle} value={expenseForm.date} onChange={(e)=>setExpenseForm({...expenseForm, date: e.target.value})} />
+                  
+                  <label style={labelStyle}>Approved By</label>
+                  <input type="text" placeholder="Name of approver" style={inputStyle} value={expenseForm.approvedBy} onChange={(e)=>setExpenseForm({...expenseForm, approvedBy: e.target.value})} />
+                  
+                  <label style={labelStyle}>Remarks</label>
+                  <textarea placeholder="Additional notes or remarks" style={{ ...inputStyle, height: '60px' }} value={expenseForm.remarks} onChange={(e)=>setExpenseForm({...expenseForm, remarks: e.target.value})} />
+                  
+                  <button style={primaryBtnStyle}>Save Expense</button>
+                </div>
+              </FinanceSubView>
+            )}
 
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Hometown</label>
-              <input type="text" value={editingMember.hometown || ''} onChange={e => setEditingMember({...editingMember, hometown: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            {/* 5. BUDGET APPROVAL */}
+            {activeFinanceView === 'budget' && (
+              <FinanceSubView title="Admin Budget Approval" onBack={() => setActiveFinanceView('hub')}>
+                <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '15px' }}>Review, approve, or adjust budget requests submitted by branches.</p>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <label style={labelStyle}>Filter by Status</label>
+                  <select style={inputStyle} value={budgetFilter} onChange={(e)=>setBudgetFilter(e.target.value)}>
+                    <option value="All">All</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                  </select>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <span style={badgeStyle}>0 Total</span>
+                    <span style={{ ...badgeStyle, backgroundColor: '#fef3c7', color: '#d97706' }}>0 Pending</span>
+                    <span style={{ ...badgeStyle, backgroundColor: '#dcfce7', color: '#16a34a' }}>0 Approved</span>
+                  </div>
+                </div>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#2563eb', color: '#fff', textAlign: 'left' }}>
+                        <th style={{ padding: '10px' }}>BRANCH</th>
+                        <th style={{ padding: '10px' }}>DESCRIPTION</th>
+                        <th style={{ padding: '10px' }}>AMOUNT REQUESTED</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td colSpan="3" style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>No budget requests found.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </FinanceSubView>
+            )}
 
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Emergency Contact Person</label>
-              <input type="text" value={editingMember.emergency_contact_person || ''} onChange={e => setEditingMember({...editingMember, emergency_contact_person: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Emergency Contact Phone</label>
-              <input type="text" value={editingMember.emergency_contact_phone || ''} onChange={e => setEditingMember({...editingMember, emergency_contact_phone: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Role</label>
-              <select value={editingMember.role || 'member'} onChange={e => setEditingMember({...editingMember, role: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-                <option value="super_admin">Super Admin</option>
-              </select>
-
-              <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>Update Member</button>
-              <button type="button" onClick={() => setEditingMember(null)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-            </form>
+            {/* 6. ACCOUNT REPORT */}
+            {activeFinanceView === 'report' && (
+              <FinanceSubView title="Account Statement" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', display: 'flex', gap: '10px' }}>
+                  <button style={{ ...primaryBtnStyle, flex: 1, backgroundColor: '#1e293b' }}>Print</button>
+                  <button style={{ ...primaryBtnStyle, flex: 1, backgroundColor: '#16a34a' }}>Download PDF</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '15px' }}>
+                  <MetricCard label="Opening Balance: GHS 2,484.32" />
+                  <MetricCard label="Closing Balance: GHS 11,010.32" />
+                  <MetricCard label="Net Movement: GHS 8,526" />
+                </div>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#1e293b', color: '#fff', textAlign: 'left' }}>
+                        <th style={{ padding: '8px' }}>DATE</th>
+                        <th style={{ padding: '8px' }}>DESCRIPTION</th>
+                        <th style={{ padding: '8px' }}>INCOME</th>
+                        <th style={{ padding: '8px' }}>EXPENSES</th>
+                        <th style={{ padding: '8px' }}>BALANCE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>18 Dec 2025</td>
+                        <td style={{ padding: '8px' }}>Opening Balance</td>
+                        <td style={{ padding: '8px' }}>-</td>
+                        <td style={{ padding: '8px' }}>-</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS 2,484.32</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>18 Dec 2025</td>
+                        <td style={{ padding: '8px' }}>Income (Special Event)</td>
+                        <td style={{ padding: '8px', color: '#16a34a' }}>GHS 188</td>
+                        <td style={{ padding: '8px' }}>-</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS 2,672.32</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </FinanceSubView>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* MODAL: LOG ATTENDANCE */}
-      {showAttendanceModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '8px', width: '450px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>Log Attendance</h3>
-            <form onSubmit={handleAddAttendance} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Member Email</label>
-              <input type="email" required placeholder="member@email.com" value={newAttendance.member_email} onChange={e => setNewAttendance({...newAttendance, member_email: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Service Date</label>
-              <input type="date" required value={newAttendance.service_date} onChange={e => setNewAttendance({...newAttendance, service_date: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Status</label>
-              <select value={newAttendance.status} onChange={e => setNewAttendance({...newAttendance, status: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
-                <option value="Present">Present</option>
-                <option value="Absent">Absent</option>
-                <option value="Excused">Excused</option>
-              </select>
-
-              <button type="submit" style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>Save Attendance</button>
-              <button type="button" onClick={() => setShowAttendanceModal(false)} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-            </form>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
+
+// Reusable Components & Styles
+function FinanceCard({ title, icon, onClick }) {
+  return (
+    <div onClick={onClick} style={{ backgroundColor: '#fff', padding: '22px', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transition: 'transform 0.1s' }}>
+      <div style={{ fontSize: '30px', marginBottom: '8px' }}>{icon}</div>
+      <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#1e293b' }}>{title}</h3>
+    </div>
+  );
+}
+
+function FinanceSubView({ title, onBack, children }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px' }}>
+        <button onClick={onBack} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontWeight: 'bold' }}>← Back</button>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MetricCard({ label }) {
+  return (
+    <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', fontWeight: 'bold', color: '#1e293b', fontSize: '14px' }}>
+      {label}
+    </div>
+  );
+}
+
+const tabBtnStyle = {
+  padding: '10px 16px',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  fontWeight: '600',
+  fontSize: '13px'
+};
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px',
+  borderRadius: '8px',
+  border: '1px solid #cbd5e1',
+  marginBottom: '15px',
+  fontSize: '14px',
+  boxSizing: 'border-box'
+};
+
+const labelStyle = {
+  display: 'block',
+  fontSize: '13px',
+  fontWeight: '600',
+  color: '#475569',
+  marginBottom: '5px'
+};
+
+const primaryBtnStyle = {
+  width: '100%',
+  padding: '12px',
+  backgroundColor: '#2563eb',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '8px',
+  fontWeight: 'bold',
+  cursor: 'pointer'
+};
+
+const badgeStyle = {
+  padding: '6px 12px',
+  borderRadius: '6px',
+  backgroundColor: '#e0f2fe',
+  color: '#0369a1',
+  fontSize: '12px',
+  fontWeight: 'bold'
+};
