@@ -100,7 +100,6 @@ export default function AdminDashboard() {
     router.push('/login');
   }
 
-  // Handle local image file upload conversion to Base64 string
   function handlePhotoUpload(e) {
     const file = e.target.files[0];
     if (file) {
@@ -125,8 +124,25 @@ export default function AdminDashboard() {
 
   async function handleSaveMember(e) {
     e.preventDefault();
+    
+    // Clean payload to match standard Supabase text/json column types safely
+    const payload = {
+      first_name: newMemberForm.first_name,
+      last_name: newMemberForm.last_name,
+      email: newMemberForm.email,
+      phone: newMemberForm.phone,
+      photo_url: newMemberForm.photo_url,
+      dob: newMemberForm.dob || null,
+      date_joined: newMemberForm.date_joined || null,
+      date_baptized: newMemberForm.date_baptized || null,
+      home_address: newMemberForm.home_address,
+      home_town: newMemberForm.home_town,
+      core_department: newMemberForm.core_department,
+      sub_departments: Array.isArray(newMemberForm.sub_departments) ? newMemberForm.sub_departments.join(', ') : newMemberForm.sub_departments
+    };
+
     if (editingMemberId !== null) {
-      const { error } = await supabase.from('members').update(newMemberForm).eq('id', editingMemberId);
+      const { error } = await supabase.from('members').update(payload).eq('id', editingMemberId);
       if (error) {
         alert('Error updating member: ' + error.message);
       } else {
@@ -137,11 +153,13 @@ export default function AdminDashboard() {
         alert('Member updated successfully!');
       }
     } else {
-      const { data, error } = await supabase.from('members').insert([newMemberForm]).select();
+      const { data, error } = await supabase.from('members').insert([payload]).select();
       if (error) {
         alert('Error adding member: ' + error.message);
       } else {
-        if (data) setMembers([...members, data[0]]);
+        if (data && data.length > 0) {
+          setMembers([...members, { ...data[0], sub_departments: newMemberForm.sub_departments }]);
+        }
         setShowAddMember(false);
         resetMemberForm();
         alert('Member added successfully!');
@@ -163,7 +181,7 @@ export default function AdminDashboard() {
       home_address: member.home_address || '',
       home_town: member.home_town || '',
       core_department: member.core_department || 'LOVE',
-      sub_departments: member.sub_departments || []
+      sub_departments: typeof member.sub_departments === 'string' ? member.sub_departments.split(', ').filter(Boolean) : (member.sub_departments || [])
     });
     setShowAddMember(true);
   }
@@ -388,7 +406,7 @@ export default function AdminDashboard() {
                     <p style={{ fontSize: '13px', color: '#1e293b', margin: 0 }}>📧 {m.email}</p>
                     <p style={{ fontSize: '13px', color: '#475569', margin: 0 }}>📞 {m.phone || 'N/A'}</p>
                     <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>🏠 {m.home_address || 'No address'}, {m.home_town || ''}</p>
-                    <p style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '3px' }}>Sub-Depts: {Array.isArray(m.sub_departments) ? m.sub_departments.join(', ') : 'None'}</p>
+                    <p style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '3px' }}>Sub-Depts: {Array.isArray(m.sub_departments) ? m.sub_departments.join(', ') : (m.sub_departments || 'None')}</p>
                   </div>
 
                   {/* Important Dates */}
