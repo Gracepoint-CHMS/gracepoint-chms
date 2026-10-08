@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const [expenses, setExpenses] = useState([]);
   const [tithes, setTithes] = useState([]);
   const [pledges, setPledges] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [welfareData, setWelfareData] = useState({});
 
   // Form states
@@ -31,6 +32,7 @@ export default function AdminDashboard() {
   const [expenseForm, setExpenseForm] = useState({ description: '', qty: '', rate: '', date: '', approver: '' });
   const [titheForm, setTitheForm] = useState({ member: '', amount: '', date: '' });
   const [pledgeForm, setPledgeForm] = useState({ member: '', purpose: '', amount: '' });
+  const [budgetForm, setBudgetForm] = useState({ branch: '', description: '', amount: '', date: '' });
   const [selectedWelfareMember, setSelectedWelfareMember] = useState(null);
 
   // Admin Data states
@@ -104,7 +106,7 @@ export default function AdminDashboard() {
       {/* TOP HEADER BAR */}
       <div style={{ backgroundColor: '#2563eb', color: '#fff', padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Gracepoint CHMS</span>
+          <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Gracepoint CHMS (Super Admin)</span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => router.push('/portal')} style={{ background: 'transparent', color: '#fff', border: '1px solid #fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>My Portal</button>
@@ -223,6 +225,7 @@ export default function AdminDashboard() {
                   <FinanceCard title="Record Income" icon="➕" onClick={() => setActiveFinanceView('income')} />
                   <FinanceCard title="Record Expenses" icon="➖" onClick={() => setActiveFinanceView('expense')} />
                   <FinanceCard title="Record Tithes" icon="⛪" onClick={() => setActiveFinanceView('tithes')} />
+                  <FinanceCard title="Create Budget" icon="📋" onClick={() => setActiveFinanceView('create-budget')} />
                   <FinanceCard title="Approve Budgets" icon="✅" onClick={() => setActiveFinanceView('budget')} />
                   <FinanceCard title="Contribution Tracker" icon="💼" onClick={() => setActiveFinanceView('tracker')} />
                   <FinanceCard title="Welfare Contribution" icon="🤝" onClick={() => setActiveFinanceView('welfare')} />
@@ -235,11 +238,12 @@ export default function AdminDashboard() {
             {activeFinanceView === 'income' && <FinanceSubView title="Record Income" onBack={() => setActiveFinanceView('hub')}><IncomeForm incomeForm={incomeForm} setIncomeForm={setIncomeForm} incomes={incomes} setIncomes={setIncomes} /></FinanceSubView>}
             {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenses={expenses} setExpenses={setExpenses} /></FinanceSubView>}
             {activeFinanceView === 'tithes' && <FinanceSubView title="Record Tithes" onBack={() => setActiveFinanceView('hub')}><TitheForm titheForm={titheForm} setTitheForm={setTitheForm} members={members} tithes={tithes} setTithes={setTithes} /></FinanceSubView>}
-            {activeFinanceView === 'budget' && <FinanceSubView title="Approve Budgets" onBack={() => setActiveFinanceView('hub')}><BudgetApproval /></FinanceSubView>}
+            {activeFinanceView === 'create-budget' && <FinanceSubView title="Create Budget Request" onBack={() => setActiveFinanceView('hub')}><CreateBudgetForm budgetForm={budgetForm} setBudgetForm={setBudgetForm} budgets={budgets} setBudgets={setBudgets} /></FinanceSubView>}
+            {activeFinanceView === 'budget' && <FinanceSubView title="Approve Budgets" onBack={() => setActiveFinanceView('hub')}><BudgetApproval budgets={budgets} setBudgets={setBudgets} /></FinanceSubView>}
             {activeFinanceView === 'tracker' && <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}><ContributionTracker members={members} pledgeForm={pledgeForm} setPledgeForm={setPledgeForm} pledges={pledges} setPledges={setPledges} /></FinanceSubView>}
             {activeFinanceView === 'welfare' && <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}><WelfareMatrix members={members} welfareData={welfareData} setWelfareData={setWelfareData} selectedWelfareMember={selectedWelfareMember} setSelectedWelfareMember={setSelectedWelfareMember} /></FinanceSubView>}
             {activeFinanceView === 'balance-sheet' && <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}><BalanceSheet totalIncome={totalIncome} totalExpenses={totalExpenses} closingBalance={closingBalance} /></FinanceSubView>}
-            {activeFinanceView === 'report' && <FinanceSubView title="Account Report" onBack={() => setActiveFinanceView('hub')}><AccountReport openingBalance={openingBalance} closingBalance={closingBalance} netMovement={netMovement} incomes={incomes} expenses={expenses} tithes={tithes} pledges={pledges} welfareData={welfareData} /></FinanceSubView>}
+            {activeFinanceView === 'report' && <FinanceSubView title="Account Report" onBack={() => setActiveFinanceView('hub')}><AccountReport openingBalance={openingBalance} closingBalance={closingBalance} netMovement={netMovement} incomes={incomes} setIncomes={setIncomes} expenses={expenses} setExpenses={setExpenses} tithes={tithes} setTithes={setTithes} pledges={pledges} setPledges={setPledges} welfareData={welfareData} setWelfareData={setWelfareData} /></FinanceSubView>}
           </div>
         )}
 
@@ -395,11 +399,67 @@ function TitheForm({ titheForm, setTitheForm, members, tithes, setTithes }) {
   );
 }
 
-function BudgetApproval() {
+function CreateBudgetForm({ budgetForm, setBudgetForm, budgets, setBudgets }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-      <p style={{ color: '#64748b', fontSize: '13px' }}>Review and approve branch budget requests.</p>
-      <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No pending budgets.</div>
+      <label style={labelStyle}>Branch Name</label>
+      <input type="text" placeholder="e.g. Main Branch" style={inputStyle} value={budgetForm.branch} onChange={(e)=>setBudgetForm({...budgetForm, branch: e.target.value})} />
+      <label style={labelStyle}>Description / Purpose</label>
+      <textarea placeholder="Budget breakdown details" style={{ ...inputStyle, height: '70px' }} value={budgetForm.description} onChange={(e)=>setBudgetForm({...budgetForm, description: e.target.value})} />
+      <label style={labelStyle}>Amount Requested (GHS)</label>
+      <input type="number" placeholder="0.00" style={inputStyle} value={budgetForm.amount} onChange={(e)=>setBudgetForm({...budgetForm, amount: e.target.value})} />
+      <label style={labelStyle}>Date</label>
+      <input type="date" style={inputStyle} value={budgetForm.date} onChange={(e)=>setBudgetForm({...budgetForm, date: e.target.value})} />
+      <button onClick={() => { if(budgetForm.branch && budgetForm.amount){ setBudgets([...budgets, { ...budgetForm, status: 'Pending' }]); setBudgetForm({ branch: '', description: '', amount: '', date: '' }); alert('Budget request submitted successfully for approval!'); }}} style={primaryBtnStyle}>Submit Budget Request</button>
+    </div>
+  );
+}
+
+function BudgetApproval({ budgets, setBudgets }) {
+  const handleStatusChange = (index, newStatus) => {
+    const updated = [...budgets];
+    updated[index].status = newStatus;
+    setBudgets(updated);
+  };
+
+  return (
+    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+      <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '15px' }}>Review, approve, or reject branch budget requests.</p>
+      {budgets.length === 0 ? (
+        <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No budget requests found.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#2563eb', color: '#fff', textAlign: 'left' }}>
+                <th style={{ padding: '10px' }}>BRANCH</th>
+                <th style={{ padding: '10px' }}>DESCRIPTION</th>
+                <th style={{ padding: '10px' }}>AMOUNT</th>
+                <th style={{ padding: '10px' }}>STATUS</th>
+                <th style={{ padding: '10px' }}>ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              {budgets.map((b, idx) => (
+                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{b.branch}</td>
+                  <td style={{ padding: '10px' }}>{b.description}</td>
+                  <td style={{ padding: '10px' }}>GHS {Number(b.amount).toFixed(2)}</td>
+                  <td style={{ padding: '10px' }}>
+                    <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', backgroundColor: b.status === 'Approved' ? '#dcfce7' : b.status === 'Rejected' ? '#fee2e2' : '#fef3c7', color: b.status === 'Approved' ? '#16a34a' : b.status === 'Rejected' ? '#dc2626' : '#d97706' }}>
+                      {b.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px', display: 'flex', gap: '6px' }}>
+                    <button onClick={() => handleStatusChange(idx, 'Approved')} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Approve</button>
+                    <button onClick={() => handleStatusChange(idx, 'Rejected')} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Reject</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -496,9 +556,22 @@ function WelfareMatrix({ members, welfareData, setWelfareData, selectedWelfareMe
 }
 
 function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
+  const downloadBalanceSheet = () => {
+    const reportText = `--- GRACEPOINT CHMS BALANCE SHEET ---\nTotal Income: GHS ${totalIncome.toFixed(2)}\nTotal Expenses: GHS ${totalExpenses.toFixed(2)}\nCurrent Closing Balance: GHS ${closingBalance.toFixed(2)}\n`;
+    const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Balance_Sheet_Report.txt';
+    link.click();
+  };
+
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: '#1e293b' }}>Balance Sheet Summary</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>Balance Sheet Summary</h3>
+        <button onClick={downloadBalanceSheet} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📥 Download Report</button>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
         <div style={{ padding: '15px', backgroundColor: '#f0fdf4', borderRadius: '8px' }}>
           <p style={{ fontSize: '12px', color: '#166534', margin: '0 0 5px 0' }}>Total Income</p>
@@ -517,12 +590,71 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
   );
 }
 
-function AccountReport({ openingBalance, closingBalance, netMovement, incomes, expenses, tithes, pledges, welfareData }) {
+function AccountReport({ openingBalance, closingBalance, netMovement, incomes, setIncomes, expenses, setExpenses, tithes, setTithes, pledges, setPledges, welfareData, setWelfareData }) {
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+  const startEdit = (type, index, item) => {
+    setEditingIndex({ type, index });
+    setEditForm({ ...item });
+  };
+
+  const saveEdit = (type, index) => {
+    if (type === 'tithe') {
+      const updated = [...tithes];
+      updated[index] = editForm;
+      setTithes(updated);
+    } else if (type === 'income') {
+      const updated = [...incomes];
+      updated[index] = editForm;
+      setIncomes(updated);
+    } else if (type === 'pledge') {
+      const updated = [...pledges];
+      updated[index] = editForm;
+      setPledges(updated);
+    } else if (type === 'expense') {
+      const updated = [...expenses];
+      updated[index] = editForm;
+      setExpenses(updated);
+    }
+    setEditingIndex(null);
+    setEditForm(null);
+  };
+
+  const handleDelete = (type, index) => {
+    if (!confirm('Are you sure you want to delete this record?')) return;
+    if (type === 'tithe') setTithes(tithes.filter((_, i) => i !== index));
+    if (type === 'income') setIncomes(incomes.filter((_, i) => i !== index));
+    if (type === 'pledge') setPledges(pledges.filter((_, i) => i !== index));
+    if (type === 'expense') setExpenses(expenses.filter((_, i) => i !== index));
+  };
+
+  const downloadAccountReport = () => {
+    let reportText = `--- GRACEPOINT CHMS OFFICIAL ACCOUNT STATEMENT ---\n`;
+    reportText += `Opening Balance: GHS ${openingBalance.toFixed(2)}\nNet Movement: GHS ${netMovement.toFixed(2)}\nClosing Balance: GHS ${closingBalance.toFixed(2)}\n\n`;
+    reportText += `--- TRANSACTIONS ---\n`;
+    
+    tithes.forEach(t => reportText += `Tithe | ${t.date || 'N/A'} | ${t.member} | GHS ${t.amount}\n`);
+    incomes.forEach(inc => reportText += `Income | ${inc.date || 'N/A'} | ${inc.description} | GHS ${inc.amount}\n`);
+    pledges.forEach(p => reportText += `Pledge | Current | ${p.member} (${p.purpose}) | GHS ${p.amount}\n`);
+    expenses.forEach(exp => reportText += `Expense | ${exp.date || 'N/A'} | ${exp.description} | -GHS ${Number(exp.qty)*Number(exp.rate)}\n`);
+
+    const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Account_Statement_Report.txt';
+    link.click();
+  };
+
   let runningBalance = openingBalance;
 
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: '#1e293b' }}>Official Account Statement Ledger</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>Official Account Statement Ledger (Super Admin Mode)</h3>
+        <button onClick={downloadAccountReport} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📥 Download Report</button>
+      </div>
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px', textAlign: 'center' }}>
         <div style={{ padding: '12px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
@@ -548,6 +680,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, e
               <th style={{ padding: '8px' }}>INCOME</th>
               <th style={{ padding: '8px' }}>EXPENSES</th>
               <th style={{ padding: '8px' }}>BALANCE</th>
+              <th style={{ padding: '8px' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -557,46 +690,82 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, e
               <td style={{ padding: '8px' }}>-</td>
               <td style={{ padding: '8px' }}>-</td>
               <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {openingBalance.toFixed(2)}</td>
+              <td style={{ padding: '8px' }}>-</td>
             </tr>
 
             {/* Tithes */}
             {tithes.map((t, idx) => {
-              runningBalance += Number(t.amount || 0);
+              const isEditing = editingIndex?.type === 'tithe' && editingIndex?.index === idx;
+              runningBalance += Number(isEditing ? editForm.amount : (t.amount || 0));
               return (
                 <tr key={`tithe-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '8px' }}>{t.date || 'N/A'}</td>
+                  <td style={{ padding: '8px' }}>{isEditing ? <input type="date" value={editForm.date} onChange={(e)=>setEditForm({...editForm, date: e.target.value})} style={{width:'90px'}} /> : (t.date || 'N/A')}</td>
                   <td style={{ padding: '8px' }}>Tithe ({t.member})</td>
-                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(t.amount).toFixed(2)}</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>
+                    {isEditing ? <input type="number" value={editForm.amount} onChange={(e)=>setEditForm({...editForm, amount: e.target.value})} style={{width:'70px'}} /> : `GHS ${Number(t.amount).toFixed(2)}`}
+                  </td>
                   <td style={{ padding: '8px' }}>-</td>
                   <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                  <td style={{ padding: '8px', display: 'flex', gap: '4px' }}>
+                    {isEditing ? (
+                      <button onClick={() => saveEdit('tithe', idx)} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>Save</button>
+                    ) : (
+                      <button onClick={() => startEdit('tithe', idx, t)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>✏️</button>
+                    )}
+                    <button onClick={() => handleDelete('tithe', idx)} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>🗑️</button>
+                  </td>
                 </tr>
               );
             })}
 
             {/* Incomes */}
             {incomes.map((inc, idx) => {
-              runningBalance += Number(inc.amount || 0);
+              const isEditing = editingIndex?.type === 'income' && editingIndex?.index === idx;
+              runningBalance += Number(isEditing ? editForm.amount : (inc.amount || 0));
               return (
                 <tr key={`inc-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '8px' }}>{inc.date || 'N/A'}</td>
-                  <td style={{ padding: '8px' }}>Income ({inc.description})</td>
-                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(inc.amount).toFixed(2)}</td>
+                  <td style={{ padding: '8px' }}>{isEditing ? <input type="date" value={editForm.date} onChange={(e)=>setEditForm({...editForm, date: e.target.value})} style={{width:'90px'}} /> : (inc.date || 'N/A')}</td>
+                  <td style={{ padding: '8px' }}>
+                    {isEditing ? <input type="text" value={editForm.description} onChange={(e)=>setEditForm({...editForm, description: e.target.value})} style={{width:'110px'}} /> : `Income (${inc.description})`}
+                  </td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>
+                    {isEditing ? <input type="number" value={editForm.amount} onChange={(e)=>setEditForm({...editForm, amount: e.target.value})} style={{width:'70px'}} /> : `GHS ${Number(inc.amount).toFixed(2)}`}
+                  </td>
                   <td style={{ padding: '8px' }}>-</td>
                   <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                  <td style={{ padding: '8px', display: 'flex', gap: '4px' }}>
+                    {isEditing ? (
+                      <button onClick={() => saveEdit('income', idx)} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>Save</button>
+                    ) : (
+                      <button onClick={() => startEdit('income', idx, inc)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>✏️</button>
+                    )}
+                    <button onClick={() => handleDelete('income', idx)} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>🗑️</button>
+                  </td>
                 </tr>
               );
             })}
 
             {/* Pledges */}
             {pledges.map((p, idx) => {
-              runningBalance += Number(p.amount || 0);
+              const isEditing = editingIndex?.type === 'pledge' && editingIndex?.index === idx;
+              runningBalance += Number(isEditing ? editForm.amount : (p.amount || 0));
               return (
                 <tr key={`pledge-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '8px' }}>Current</td>
                   <td style={{ padding: '8px' }}>Pledge ({p.member} - {p.purpose})</td>
-                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(p.amount).toFixed(2)}</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>
+                    {isEditing ? <input type="number" value={editForm.amount} onChange={(e)=>setEditForm({...editForm, amount: e.target.value})} style={{width:'70px'}} /> : `GHS ${Number(p.amount).toFixed(2)}`}
+                  </td>
                   <td style={{ padding: '8px' }}>-</td>
                   <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                  <td style={{ padding: '8px', display: 'flex', gap: '4px' }}>
+                    {isEditing ? (
+                      <button onClick={() => saveEdit('pledge', idx)} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>Save</button>
+                    ) : (
+                      <button onClick={() => startEdit('pledge', idx, p)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>✏️</button>
+                    )}
+                    <button onClick={() => handleDelete('pledge', idx)} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>🗑️</button>
+                  </td>
                 </tr>
               );
             })}
@@ -613,21 +782,42 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, e
                   <td style={{ padding: '8px', color: '#16a34a', fontWeight: 'bold' }}>GHS {Number(val).toFixed(2)}</td>
                   <td style={{ padding: '8px' }}>-</td>
                   <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                  <td style={{ padding: '8px' }}>
+                    <button onClick={() => { const updated = {...welfareData}; delete updated[key]; setWelfareData(updated); }} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>🗑️</button>
+                  </td>
                 </tr>
               );
             })}
 
             {/* Expenses */}
             {expenses.map((exp, idx) => {
-              const expTotal = Number(exp.qty || 0) * Number(exp.rate || 0);
+              const isEditing = editingIndex?.type === 'expense' && editingIndex?.index === idx;
+              const expTotal = Number(isEditing ? editForm.qty : (exp.qty || 0)) * Number(isEditing ? editForm.rate : (exp.rate || 0));
               runningBalance -= expTotal;
               return (
                 <tr key={`exp-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '8px' }}>{exp.date || 'N/A'}</td>
-                  <td style={{ padding: '8px' }}>Expense ({exp.description})</td>
+                  <td style={{ padding: '8px' }}>{isEditing ? <input type="date" value={editForm.date} onChange={(e)=>setEditForm({...editForm, date: e.target.value})} style={{width:'90px'}} /> : (exp.date || 'N/A')}</td>
+                  <td style={{ padding: '8px' }}>
+                    {isEditing ? <input type="text" value={editForm.description} onChange={(e)=>setEditForm({...editForm, description: e.target.value})} style={{width:'110px'}} /> : `Expense (${exp.description})`}
+                  </td>
                   <td style={{ padding: '8px' }}>-</td>
-                  <td style={{ padding: '8px', color: '#dc2626', fontWeight: 'bold' }}>GHS {expTotal.toFixed(2)}</td>
+                  <td style={{ padding: '8px', color: '#dc2626', fontWeight: 'bold' }}>
+                    {isEditing ? (
+                      <div style={{display:'flex', gap:'4px'}}>
+                        <input type="number" value={editForm.qty} onChange={(e)=>setEditForm({...editForm, qty: e.target.value})} placeholder="Qty" style={{width:'40px'}} />
+                        <input type="number" value={editForm.rate} onChange={(e)=>setEditForm({...editForm, rate: e.target.value})} placeholder="Rate" style={{width:'40px'}} />
+                      </div>
+                    ) : `GHS ${expTotal.toFixed(2)}`}
+                  </td>
                   <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS {runningBalance.toFixed(2)}</td>
+                  <td style={{ padding: '8px', display: 'flex', gap: '4px' }}>
+                    {isEditing ? (
+                      <button onClick={() => saveEdit('expense', idx)} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>Save</button>
+                    ) : (
+                      <button onClick={() => startEdit('expense', idx, exp)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>✏️</button>
+                    )}
+                    <button onClick={() => handleDelete('expense', idx)} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>🗑️</button>
+                  </td>
                 </tr>
               );
             })}
