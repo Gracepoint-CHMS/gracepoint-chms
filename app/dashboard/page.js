@@ -257,13 +257,39 @@ export default function AdminDashboard() {
     }
   }
 
-  // Real Scanner Functions
+  // Self-Loading & Real Scanner Functions
   function startRealScanner() {
-    if (typeof Html5Qrcode === 'undefined') {
-      alert("Scanner library is still loading. Please wait a moment and try again.");
+    if (typeof window.Html5Qrcode !== 'undefined') {
+      initializeScanner(window.Html5Qrcode);
       return;
     }
 
+    let existingScript = document.getElementById('html5-qrcode-script');
+    if (existingScript) {
+      existingScript.onload = () => initializeScanner(window.Html5Qrcode);
+      alert("Loading scanner library, please tap Start again in 2 seconds.");
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'html5-qrcode-script';
+    script.src = 'https://unpkg.com/html5-qrcode';
+    script.async = true;
+    script.onload = () => {
+      if (window.Html5Qrcode) {
+        initializeScanner(window.Html5Qrcode);
+      } else {
+        alert("Failed to initialize scanner library.");
+      }
+    };
+    script.onerror = () => {
+      alert("Failed to download scanner library. Check your network.");
+    };
+    document.body.appendChild(script);
+    alert("Downloading scanner library for the first time... please tap Start again in a moment.");
+  }
+
+  function initializeScanner(Html5QrcodeClass) {
     if (html5QrCodeInstance) {
       try {
         html5QrCodeInstance.clear();
@@ -272,7 +298,7 @@ export default function AdminDashboard() {
       }
     }
 
-    html5QrCodeInstance = new Html5Qrcode("reader");
+    html5QrCodeInstance = new Html5QrcodeClass("reader");
     
     html5QrCodeInstance.start(
       { facingMode: "environment" }, 
