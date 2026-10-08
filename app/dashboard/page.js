@@ -30,19 +30,45 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('members'); 
   const [activeFinanceView, setActiveFinanceView] = useState('hub'); 
 
-  // Persistent Financial Ledger States (Saved in localStorage so they never disappear on refresh)
-  const [openingBalance, setOpeningBalance] = useState(() => Number(localStorage.getItem('gp_opening_balance') || 2484.32));
+  // Safe initial states for server-side rendering
+  const [openingBalance, setOpeningBalance] = useState(2484.32);
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [newBalanceInput, setNewBalanceInput] = useState('2484.32');
 
-  const [incomes, setIncomes] = useState(() => JSON.parse(localStorage.getItem('gp_incomes') || '[]'));
-  const [expenses, setExpenses] = useState(() => JSON.parse(localStorage.getItem('gp_expenses') || '[]'));
-  const [tithes, setTithes] = useState(() => JSON.parse(localStorage.getItem('gp_tithes') || '[]'));
-  const [pledges, setPledges] = useState(() => JSON.parse(localStorage.getItem('gp_pledges') || '[]'));
-  const [budgets, setBudgets] = useState(() => JSON.parse(localStorage.getItem('gp_budgets') || '[]'));
-  const [welfareData, setWelfareData] = useState(() => JSON.parse(localStorage.getItem('gp_welfare') || '{}'));
+  const [incomes, setIncomes] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [tithes, setTithes] = useState([]);
+  const [pledges, setPledges] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [welfareData, setWelfareData] = useState({});
 
-  // Auto-save financial updates to localStorage
+  // Load from localStorage safely on client mount to prevent server build crashes
+  useEffect(() => {
+    const savedBal = localStorage.getItem('gp_opening_balance');
+    if (savedBal) {
+      setOpeningBalance(Number(savedBal));
+      setNewBalanceInput(savedBal);
+    }
+    const savedInc = localStorage.getItem('gp_incomes');
+    if (savedInc) setIncomes(JSON.parse(savedInc));
+
+    const savedExp = localStorage.getItem('gp_expenses');
+    if (savedExp) setExpenses(JSON.parse(savedExp));
+
+    const savedTithes = localStorage.getItem('gp_tithes');
+    if (savedTithes) setTithes(JSON.parse(savedTithes));
+
+    const savedPledges = localStorage.getItem('gp_pledges');
+    if (savedPledges) setPledges(JSON.parse(savedPledges));
+
+    const savedBudgets = localStorage.getItem('gp_budgets');
+    if (savedBudgets) setBudgets(JSON.parse(savedBudgets));
+
+    const savedWelfare = localStorage.getItem('gp_welfare');
+    if (savedWelfare) setWelfareData(JSON.parse(savedWelfare));
+  }, []);
+
+  // Auto-save changes to localStorage
   useEffect(() => { localStorage.setItem('gp_opening_balance', openingBalance); }, [openingBalance]);
   useEffect(() => { localStorage.setItem('gp_incomes', JSON.stringify(incomes)); }, [incomes]);
   useEffect(() => { localStorage.setItem('gp_expenses', JSON.stringify(expenses)); }, [expenses]);
