@@ -12,6 +12,7 @@ export default function AdminDashboard() {
   const [events, setEvents] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   
   // Navigation tabs
   const [activeTab, setActiveTab] = useState('members');
@@ -134,6 +135,37 @@ export default function AdminDashboard() {
     const { error } = await supabase.from('announcements').delete().eq('id', id);
     if (error) alert('Error: ' + error.message);
     else setAnnouncements(announcements.filter(a => a.id !== id));
+  }
+
+  // Image Upload Handler using MEMBER-PHOTOS bucket
+  async function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('MEMBER-PHOTOS')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      alert('Error uploading image: ' + uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('MEMBER-PHOTOS')
+      .getPublicUrl(filePath);
+
+    setEditingMember({
+      ...editingMember,
+      photo_url: publicUrlData.publicUrl
+    });
+    setUploading(false);
   }
 
   // Add Handlers
@@ -474,14 +506,14 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Profile Photo URL</label>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Upload New Profile Photo</label>
               <input 
-                type="text" 
-                placeholder="https://..." 
-                value={editingMember.photo_url || ''} 
-                onChange={e => setEditingMember({...editingMember, photo_url: e.target.value})} 
-                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }} 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageUpload} 
+                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', boxSizing: 'border-box', backgroundColor: '#f9fafb' }} 
               />
+              {uploading && <p style={{ fontSize: '12px', color: '#2563eb', margin: '0' }}>Uploading image to storage...</p>}
 
               <label style={{ fontSize: '12px', fontWeight: 'bold' }}>First Name</label>
               <input type="text" value={editingMember.first_name || ''} onChange={e => setEditingMember({...editingMember, first_name: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
