@@ -219,12 +219,15 @@ export default function AdminDashboard() {
     }
   }
 
-  // Robust Attendance Insert helper function
+  // Ultra-Robust Attendance Insert helper function addressing event_id constraint
   async function insertAttendanceRecord(recordData) {
     const targetMember = members.find(m => m.email === recordData.member_email || m.id === recordData.member_id);
     const todayStr = new Date().toISOString().split('T')[0];
+    const defaultEventId = events.length > 0 ? events[0].id : '00000000-0000-0000-0000-000000000000';
 
     const fallbackPayloads = [
+      { service_date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id, event_id: defaultEventId },
+      { date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id, event_id: defaultEventId },
       { service_date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
       { date: recordData.service_date || todayStr, status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
       { status: recordData.status || 'Present', member_id: targetMember?.id || recordData.member_id },
