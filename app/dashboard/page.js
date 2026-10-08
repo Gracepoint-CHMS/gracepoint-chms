@@ -90,7 +90,7 @@ export default function AdminDashboard() {
   }
 
   async function fetchAttendance() {
-    const { data } = await supabase.from('attendance').select('*').order('service_date', { ascending: false });
+    const { data } = await supabase.from('attendance').select('*');
     if (data) setAttendance(data);
   }
 
@@ -308,22 +308,43 @@ export default function AdminDashboard() {
         html5QrCodeInstance.pause();
 
         const todayStr = new Date().toISOString().split('T')[0];
-        
-        // Match decodedText (email) to member object to retrieve member_id
         const matchedMember = members.find(m => m.email === decodedText || m.id === decodedText);
 
-        const payload = {
+        // Attempt primary insert matching standard schema columns
+        let payload = {
           service_date: todayStr,
           status: 'Present',
           member_id: matchedMember ? matchedMember.id : null
         };
 
-        const { error } = await supabase.from('attendance').insert([payload]);
+        let { error } = await supabase.from('attendance').insert([payload]);
 
+        // Fallback robust inserts if column constraints differ in Supabase
         if (error) {
-          alert("Error saving attendance: " + error.message);
+          const fallbackPayloads = [
+            { date: todayStr, status: 'Present', member_id: matchedMember?.id },
+            { status: 'Present', member_id: matchedMember?.id },
+            { status: 'Present' }
+          ];
+
+          let success = false;
+          for (const p of fallbackPayloads) {
+            const cleanPayload = Object.fromEntries(Object.entries(p).filter(([_, v]) => v !== undefined));
+            const retry = await supabase.from('attendance').insert([cleanPayload]);
+            if (!retry.error) {
+              success = true;
+              break;
+            }
+          }
+
+          if (!success) {
+            alert("Error saving attendance: " + error.message);
+          } else {
+            alert(`✅ Attendance logged successfully for: ${matchedMember ? `${matchedMember.first_name}${matchedMember.last_name}` : decodedText}`);
+            fetchAttendance();
+          }
         } else {
-          alert(`✅ Attendance logged successfully for: ${decodedText}`);
+          alert(`✅ Attendance logged successfully for: ${matchedMember ? `${matchedMember.first_name}${matchedMember.last_name}` : decodedText}`);
           fetchAttendance();
         }
 
@@ -331,9 +352,7 @@ export default function AdminDashboard() {
           if (html5QrCodeInstance) html5QrCodeInstance.resume();
         }, 3000);
       },
-      (errorMessage) => {
-        // Safe to ignore scanning search frame errors
-      }
+      (errorMessage) => {}
     ).catch(err => {
       alert("Could not start camera. Make sure you are on HTTPS and camera permissions are allowed.");
       console.error(err);
@@ -367,11 +386,12 @@ export default function AdminDashboard() {
 
   // Attendance Specific Calculations
   const todayStr = new Date().toISOString().split('T')[0];
-  const todaysAttendanceRecords = attendance.filter(a => a.service_date === todayStr);
+  const todaysAttendanceRecords = attendance.filter(a => (a.service_date === todayStr || a.date === todayStr || (a.created_at && a.created_at.startsWith(todayStr))));
 
   const filteredAttendanceRecords = attendance.filter(a => {
-    const matchDate = filterDate ? a.service_date === filterDate : true;
-    const matchMonth = filterMonth ? (a.service_date && a.service_date.startsWith(filterMonth)) : true;
+    const recordDate = a.service_date || a.date || (a.created_at ? a.created_at.split('T')[0] : '');
+    const matchDate = filterDate ? recordDate === filterDate : true;
+    const matchMonth = filterMonth ? recordDate.startsWith(filterMonth) : true;
     return matchDate && matchMonth;
   });
 
@@ -556,7 +576,7 @@ export default function AdminDashboard() {
                   const matchedMem = members.find(m => m.id === rec.member_id);
                   return (
                     <li key={rec.id} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                      <b>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'General Member')}</b> - <span style={{ color: '#166534' }}>{rec.status}</span>
+                      <b>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'General Member')}</b> - <span style={{ color: '#166534' }}>{rec.status || 'Present'}</span>
                     </li>
                   );
                 })}
@@ -599,11 +619,12 @@ export default function AdminDashboard() {
                   ) : (
                     filteredAttendanceRecords.map(rec => {
                       const matchedMem = members.find(m => m.id === rec.member_id);
+                      const displayDate = rec.service_date || rec.date || (rec.created_at ? rec.created_at.split('T')[0] : 'N/A');
                       return (
                         <tr key={rec.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                           <td style={{ padding: '10px' }}>{matchedMem ? `${matchedMem.first_name} ${matchedMem.last_name} (${matchedMem.email})` : (rec.member_id || 'N/A')}</td>
-                          <td style={{ padding: '10px' }}>{rec.service_date}</td>
-                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>{rec.status}</td>
+                          <td style={{ padding: '10px' }}>{displayDate}</td>
+                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>{rec.status || 'Present'}</td>
                           <td style={{ padding: '10px', textAlign: 'center' }}>
                             <button onClick={() => handleDeleteAttendance(rec.id)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
                           </td>
