@@ -50,7 +50,12 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body style={{ margin: 0, fontFamily: 'sans-serif' }}>
         <nav style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', fontSize: '18px' }}>Gracepoint CHMS</span>
+       <img 
+  src="https://wpxlhynehmbyhqheupdu.supabase.co/storage/v1/object/public/member-photos/IMG-20260121-WA0002%20(1).jpg" 
+  alt="Gracepoint Logo" 
+  style={{ height: '35px', width: '35px', borderRadius: '50%', objectFit: 'cover', marginRight: '10px' }} 
+/>
+   <span style={{ fontWeight: 'bold', fontSize: '18px' }}>Gracepoint CHMS</span>
           <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
             <Link href="/register" style={{ color: '#fff', textDecoration: 'none' }}>Register</Link>
             
