@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   });
 
   const [newAttendance, setNewAttendance] = useState({
-    member_email: '', service_date: new Date().toISOString().split('T')[0], department: 'General', status: 'Present'
+    member_email: '', service_date: new Date().toISOString().split('T')[0], status: 'Present'
   });
 
   const [newEvent, setNewEvent] = useState({
@@ -308,7 +308,7 @@ export default function AdminDashboard() {
 
         const todayStr = new Date().toISOString().split('T')[0];
         const { error } = await supabase.from('attendance').insert([
-          { member_email: decodedText, service_date: todayStr, status: 'Present', department: 'General' }
+          { member_email: decodedText, service_date: todayStr, status: 'Present' }
         ]);
 
         if (error) {
@@ -520,9 +520,6 @@ export default function AdminDashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <h2 style={{ fontSize: '20px', fontWeight: 'bold' }}>Attendance Scanner</h2>
-            <button onClick={() => alert('Monthly Database Report Export')} style={{ backgroundColor: '#10b981', color: '#fff', padding: '8px 14px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              📊 View Monthly Database
-            </button>
           </div>
 
           {/* Real Camera Scanner Box Section */}
@@ -548,7 +545,7 @@ export default function AdminDashboard() {
               <ul style={{ paddingLeft: '20px', margin: '0' }}>
                 {todaysAttendanceRecords.map(rec => (
                   <li key={rec.id} style={{ fontSize: '14px', marginBottom: '4px' }}>
-                    <b>{rec.member_email || 'General Member'}</b> - <span style={{ color: '#166534' }}>{rec.status}</span> ({rec.department})
+                    <b>{rec.member_email || 'General Member'}</b> - <span style={{ color: '#166534' }}>{rec.status}</span>
                   </li>
                 ))}
               </ul>
@@ -569,15 +566,14 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <button onClick={() => {}} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', flex: '1' }}>Filter</button>
-              <button onClick={() => { setFilterDate(''); setFilterMonth(''); }} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', flex: '1' }}>Reset Filter</button>
+              <button onClick={() => { setFilterDate(''); setFilterMonth(''); }} style={{ backgroundColor: '#6b7280', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', flex: '1' }}>Reset Filter</button>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                    <th style={{ padding: '10px' }}>MEMBER NAME / EMAIL</th>
+                    <th style={{ padding: '10px' }}>MEMBER EMAIL</th>
                     <th style={{ padding: '10px' }}>DATE</th>
                     <th style={{ padding: '10px' }}>STATUS</th>
                     <th style={{ padding: '10px', textAlign: 'center' }}>ACTION</th>
@@ -717,15 +713,6 @@ export default function AdminDashboard() {
 
               <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Service Date</label>
               <input type="date" required value={newAttendance.service_date} onChange={e => setNewAttendance({...newAttendance, service_date: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
-
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Department / Group</label>
-              <select value={newAttendance.department} onChange={e => setNewAttendance({...newAttendance, department: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
-                <option value="General">General Service</option>
-                <option value="LOVE">LOVE</option>
-                <option value="UNITY">UNITY</option>
-                <option value="CARE">CARE</option>
-                <option value="RESPECT">RESPECT</option>
-              </select>
 
               <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Status</label>
               <select value={newAttendance.status} onChange={e => setNewAttendance({...newAttendance, status: e.target.value})} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
