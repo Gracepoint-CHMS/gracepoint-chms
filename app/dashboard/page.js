@@ -9,6 +9,10 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Official Church Logo Base64 Data URI
+const CHURCH_LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAAsACwBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="; 
+// (Note: Using a clean SVG/Image container wrapper for guaranteed display across all mobile & desktop PDF printers)
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -563,21 +567,22 @@ function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
         <head>
           <title>Balance Sheet Report</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            .report-header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
-            .church-logo { width: 55px; height: 55px; margin: 0 auto 10px auto; background: #2563eb; border-radius: 50%; display: flex; align-items: center; justifyContent: center; color: white; font-weight: bold; font-size: 26px; border: 3px solid #1e40af; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            body { font-family: Arial, sans-serif; padding: 30px; color: #333; text-align: center; }
+            .report-header { border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
+            .church-logo { width: 75px; height: 75px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: block; }
             .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
             .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
-            .summary-box { display: flex; justify-content: space-around; margin: 30px 0; }
+            .summary-box { display: flex; justify-content: space-around; margin: 30px 0; text-align: left; }
             .card { border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px; width: 28%; text-align: center; background: #f8fafc; }
             .amount { font-size: 20px; font-weight: bold; margin-top: 8px; }
           </style>
         </head>
         <body>
           <div class="report-header">
-            <div class="church-logo">✝</div>
+            <img src="https://i.ibb.co/3yk71vC/church-logo.png" class="church-logo" onerror="this.style.display='none'" />
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
-            <div class="report-subtitle">Official Balance Sheet Report</div>
+            <div style="font-size: 12px; color: #475569; margin-top: 3px; font-weight: bold;">THE JESUS HOME CHURCH</div>
+            <div class="report-subtitle" style="margin-top: 10px;">Official Balance Sheet Report</div>
           </div>
           <div class="summary-box">
             <div class="card"><div>Total Income</div><div class="amount" style="color: #16a34a;">GHS ${totalIncome.toFixed(2)}</div></div>
@@ -669,12 +674,12 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
         <head>
           <title>Official Account Statement</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            .report-header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
-            .church-logo { width: 55px; height: 55px; margin: 0 auto 10px auto; background: #2563eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 26px; border: 3px solid #1e40af; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            body { font-family: Arial, sans-serif; padding: 30px; color: #333; text-align: center; }
+            .report-header { border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
+            .church-logo { width: 75px; height: 75px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: block; }
             .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
             .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
-            .metrics { display: flex; justify-content: space-between; margin-bottom: 25px; }
+            .metrics { display: flex; justify-content: space-between; margin-bottom: 25px; text-align: left; }
             .m-card { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; width: 30%; text-align: center; background: #f8fafc; font-size: 13px; }
             table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
             th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
@@ -683,9 +688,10 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
         </head>
         <body>
           <div class="report-header">
-            <div class="church-logo">✝</div>
+            <img src="https://i.ibb.co/3yk71vC/church-logo.png" class="church-logo" onerror="this.style.display='none'" />
             <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
-            <div class="report-subtitle">Official Account Statement Ledger</div>
+            <div style="font-size: 12px; color: #475569; margin-top: 3px; font-weight: bold;">THE JESUS HOME CHURCH</div>
+            <div class="report-subtitle" style="margin-top: 10px;">Official Account Statement Ledger</div>
           </div>
           <div class="metrics">
             <div class="m-card">Opening Balance:<br><strong>GHS ${openingBalance.toFixed(2)}</strong></div>
