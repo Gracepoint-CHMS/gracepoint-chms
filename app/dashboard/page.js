@@ -12,8 +12,8 @@ const supabase = createClient(
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('members'); // 'members', 'contributions', 'attendance', 'events', 'announcements'
-  const [activeFinanceView, setActiveFinanceView] = useState('hub'); // 'hub', 'income', 'expense', 'budget', 'tracker', 'welfare', 'balance-sheet', 'report'
+  const [activeTab, setActiveTab] = useState('members'); 
+  const [activeFinanceView, setActiveFinanceView] = useState('hub'); 
 
   // Finance states
   const [openingBalance, setOpeningBalance] = useState('2,484.32');
@@ -57,7 +57,7 @@ export default function AdminDashboard() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
       
-      {/* TOP HEADER BAR matching your layout */}
+      {/* TOP HEADER BAR */}
       <div style={{ backgroundColor: '#2563eb', color: '#fff', padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Gracepoint CHMS</span>
@@ -71,13 +71,13 @@ export default function AdminDashboard() {
       <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginBottom: '15px' }}>Admin Dashboard</h1>
 
-        {/* Action buttons row matching your screenshot */}
+        {/* Action buttons row */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
           <button onClick={() => router.push('/portal')} style={{ backgroundColor: '#4f46e5', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>My Portal</button>
           <button onClick={handleLogout} style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
         </div>
 
-        {/* NAVIGATION TABS matching your screenshot */}
+        {/* NAVIGATION TABS */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <button onClick={() => setActiveTab('members')} style={tabBtnStyle(activeTab === 'members')}>Members</button>
           <button onClick={() => { setActiveTab('contributions'); setActiveFinanceView('hub'); }} style={tabBtnStyle(activeTab === 'contributions')}>Contributions</button>
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
             >
               <option value="All Departments">All Departments</option>
               <option value="Choir">Choir</option>
-              media value="Media">Media</option>
+              <option value="Media">Media</option>
               <option value="Ushers">Ushers</option>
             </select>
 
@@ -135,12 +135,11 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 2: CONTRIBUTIONS & FINANCE MANAGEMENT INTEGRATION */}
+        {/* TAB 2: CONTRIBUTIONS & FINANCE MANAGEMENT */}
         {activeTab === 'contributions' && (
           <div>
             {activeFinanceView === 'hub' && (
               <div>
-                {/* Edit Opening Balance Bar */}
                 <div style={{ marginBottom: '15px' }}>
                   <button onClick={() => setIsEditingBalance(!isEditingBalance)} style={{ backgroundColor: '#fff', border: '1px solid #cbd5e1', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     ✏️ Edit Opening Balance
@@ -156,13 +155,11 @@ export default function AdminDashboard() {
                 <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b', marginBottom: '5px' }}>Finance Management</h2>
                 <p style={{ color: '#64748b', marginBottom: '20px', fontSize: '14px' }}>Select an action below to manage church finances.</p>
 
-                {/* Opening Balance Card matching reference */}
                 <div style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                   <span style={{ color: '#4b5563', fontWeight: '600' }}>Opening balance:</span>
                   <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>GHS {openingBalance}</span>
                 </div>
 
-                {/* Grid Cards matching your exact reference design */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '15px' }}>
                   <FinanceCard title="Record Income" icon="➕" onClick={() => setActiveFinanceView('income')} />
                   <FinanceCard title="Record Expenses" icon="➖" onClick={() => setActiveFinanceView('expense')} />
@@ -175,7 +172,6 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {/* Sub-views inside Contributions */}
             {activeFinanceView === 'income' && <FinanceSubView title="Record Income" onBack={() => setActiveFinanceView('hub')}><IncomeForm /></FinanceSubView>}
             {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm /></FinanceSubView>}
             {activeFinanceView === 'budget' && <FinanceSubView title="Approve Budgets" onBack={() => setActiveFinanceView('hub')}><BudgetApproval /></FinanceSubView>}
@@ -186,7 +182,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* OTHER TABS */}
         {activeTab === 'attendance' && <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '10px' }}>Attendance module view.</div>}
         {activeTab === 'events' && <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '10px' }}>Events module view.</div>}
         {activeTab === 'announcements' && <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '10px' }}>Announcements module view.</div>}
@@ -196,7 +191,6 @@ export default function AdminDashboard() {
   );
 }
 
-// UI Components
 function FinanceCard({ title, icon, onClick }) {
   return (
     <div onClick={onClick} style={{ backgroundColor: '#fff', padding: '22px', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
