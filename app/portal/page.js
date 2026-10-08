@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 export default function MemberPortal() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+ const [contributions, setContributions] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,7 +33,14 @@ export default function MemberPortal() {
         .single();
 
       if (data) {
-        setUserProfile(data);
+        setUserProfile(data);  const { data: contribData } = await supabase
+    .from('contributions')
+    .select('*')
+    .eq('member_email', user.email);
+  if (contribData) {
+    setContributions(contribData);
+  }
+
       } else {
         // Fallback user profile if record doesn't exist yet
         setUserProfile({
@@ -173,7 +181,35 @@ export default function MemberPortal() {
                 <div style={{ fontSize: '13px', color: '#2563eb', marginTop: '10px', fontWeight: '500' }}>
                   📞 +233245914937 • ✉️ prophetbewis@gmail.com[span_5](start_span)[span_5](end_span)
                 </div>
-              </div>
+              </div>{/* My Contributions Card */}
+<div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+  <h3 style={{ fontSize: '16px', color: '#1d4ed8', marginBottom: '15px' }}>My Welfare & Financial Contributions</h3>
+  {contributions.length === 0 ? (
+    <p style={{ fontSize: '14px', color: '#666' }}>No contributions recorded yet.</p>
+  ) : (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left', color: '#444' }}>
+            <th style={{ padding: '8px' }}>Type</th>
+            <th style={{ padding: '8px' }}>Amount</th>
+            <th style={{ padding: '8px' }}>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {contributions.map((item, index) => (
+            <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
+              <td style={{ padding: '8px' }}>{item.type || item.contribution_type || 'Contribution'}</td>
+              <td style={{ padding: '8px', fontWeight: 'bold', color: '#16a34a' }}>{item.amount}</td>
+              <td style={{ padding: '8px', color: '#666' }}>{item.date || item.created_at?.split('T')[0]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
+
 
               {/* Church Activities Card */}
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
