@@ -30,17 +30,26 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('members'); 
   const [activeFinanceView, setActiveFinanceView] = useState('hub'); 
 
-  // Finance global ledger states
-  const [openingBalance, setOpeningBalance] = useState(2484.32);
+  // Persistent Financial Ledger States (Saved in localStorage so they never disappear on refresh)
+  const [openingBalance, setOpeningBalance] = useState(() => Number(localStorage.getItem('gp_opening_balance') || 2484.32));
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [newBalanceInput, setNewBalanceInput] = useState('2484.32');
 
-  const [incomes, setIncomes] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [tithes, setTithes] = useState([]);
-  const [pledges, setPledges] = useState([]);
-  const [budgets, setBudgets] = useState([]);
-  const [welfareData, setWelfareData] = useState({});
+  const [incomes, setIncomes] = useState(() => JSON.parse(localStorage.getItem('gp_incomes') || '[]'));
+  const [expenses, setExpenses] = useState(() => JSON.parse(localStorage.getItem('gp_expenses') || '[]'));
+  const [tithes, setTithes] = useState(() => JSON.parse(localStorage.getItem('gp_tithes') || '[]'));
+  const [pledges, setPledges] = useState(() => JSON.parse(localStorage.getItem('gp_pledges') || '[]'));
+  const [budgets, setBudgets] = useState(() => JSON.parse(localStorage.getItem('gp_budgets') || '[]'));
+  const [welfareData, setWelfareData] = useState(() => JSON.parse(localStorage.getItem('gp_welfare') || '{}'));
+
+  // Auto-save financial updates to localStorage
+  useEffect(() => { localStorage.setItem('gp_opening_balance', openingBalance); }, [openingBalance]);
+  useEffect(() => { localStorage.setItem('gp_incomes', JSON.stringify(incomes)); }, [incomes]);
+  useEffect(() => { localStorage.setItem('gp_expenses', JSON.stringify(expenses)); }, [expenses]);
+  useEffect(() => { localStorage.setItem('gp_tithes', JSON.stringify(tithes)); }, [tithes]);
+  useEffect(() => { localStorage.setItem('gp_pledges', JSON.stringify(pledges)); }, [pledges]);
+  useEffect(() => { localStorage.setItem('gp_budgets', JSON.stringify(budgets)); }, [budgets]);
+  useEffect(() => { localStorage.setItem('gp_welfare', JSON.stringify(welfareData)); }, [welfareData]);
 
   // Form states
   const [incomeForm, setIncomeForm] = useState({ description: '', amount: '', date: '' });
