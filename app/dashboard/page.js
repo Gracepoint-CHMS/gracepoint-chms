@@ -125,7 +125,6 @@ export default function AdminDashboard() {
   async function handleSaveMember(e) {
     e.preventDefault();
     
-    // Clean payload to match standard Supabase text/json column types safely
     const payload = {
       first_name: newMemberForm.first_name,
       last_name: newMemberForm.last_name,
@@ -141,22 +140,28 @@ export default function AdminDashboard() {
       sub_departments: Array.isArray(newMemberForm.sub_departments) ? newMemberForm.sub_departments.join(', ') : newMemberForm.sub_departments
     };
 
-    if (editingMemberId !== null) {
-      const { error } = await supabase.from('members').update(payload).eq('id', editingMemberId);
-      if (error) {
-        alert('Error updating member: ' + error.message);
-      } else {
+    try {
+      if (editingMemberId !== null && editingMemberId !== undefined) {
+        const { error } = await supabase
+          .from('members')
+          .update(payload)
+          .eq('id', editingMemberId);
+
+        if (error) throw error;
+
         setMembers(members.map(m => m.id === editingMemberId ? { ...m, ...newMemberForm } : m));
         setEditingMemberId(null);
         setShowAddMember(false);
         resetMemberForm();
         alert('Member updated successfully!');
-      }
-    } else {
-      const { data, error } = await supabase.from('members').insert([payload]).select();
-      if (error) {
-        alert('Error adding member: ' + error.message);
       } else {
+        const { data, error } = await supabase
+          .from('members')
+          .insert([payload])
+          .select();
+
+        if (error) throw error;
+
         if (data && data.length > 0) {
           setMembers([...members, { ...data[0], sub_departments: newMemberForm.sub_departments }]);
         }
@@ -164,6 +169,8 @@ export default function AdminDashboard() {
         resetMemberForm();
         alert('Member added successfully!');
       }
+    } catch (err) {
+      alert('Error saving member: ' + err.message);
     }
   }
 
@@ -214,7 +221,6 @@ export default function AdminDashboard() {
     });
   }
 
-  // Calculate totals for Balance Sheet & Ledger
   const totalIncome = incomes.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) +
                       tithes.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) +
                       pledges.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) +
@@ -235,7 +241,6 @@ export default function AdminDashboard() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
       
-      {/* TOP HEADER BAR */}
       <div style={{ backgroundColor: '#2563eb', color: '#fff', padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Gracepoint CHMS (Super Admin)</span>
@@ -249,13 +254,11 @@ export default function AdminDashboard() {
       <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginBottom: '15px' }}>Admin Dashboard</h1>
 
-        {/* Action buttons row */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
           <button onClick={() => router.push('/portal')} style={{ backgroundColor: '#4f46e5', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>My Portal</button>
           <button onClick={handleLogout} style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
         </div>
 
-        {/* NAVIGATION TABS */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <button onClick={() => setActiveTab('members')} style={tabBtnStyle(activeTab === 'members')}>Members</button>
           <button onClick={() => { setActiveTab('contributions'); setActiveFinanceView('hub'); }} style={tabBtnStyle(activeTab === 'contributions')}>Contributions</button>
@@ -264,7 +267,6 @@ export default function AdminDashboard() {
           <button onClick={() => setActiveTab('announcements')} style={tabBtnStyle(activeTab === 'announcements')}>Announcements</button>
         </div>
 
-        {/* TAB 1: MEMBERS */}
         {activeTab === 'members' && (
           <div>
             <input 
@@ -314,7 +316,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Photo Upload Section */}
                 <div style={{ marginBottom: '15px' }}>
                   <label style={labelStyle}>Member Photo Upload</label>
                   <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ ...inputStyle, padding: '6px' }} />
@@ -351,7 +352,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Core Departments Selection */}
                 <div style={{ marginBottom: '15px' }}>
                   <label style={labelStyle}>Core Department (Required)</label>
                   <select style={inputStyle} value={newMemberForm.core_department} onChange={(e)=>setNewMemberForm({...newMemberForm, core_department: e.target.value})}>
@@ -359,7 +359,6 @@ export default function AdminDashboard() {
                   </select>
                 </div>
 
-                {/* Sub Departments Multi-Selection Checkboxes */}
                 <div style={{ marginBottom: '15px' }}>
                   <label style={labelStyle}>Sub-Departments (Select one or more)</label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
@@ -385,7 +384,6 @@ export default function AdminDashboard() {
               {members.filter(m => m.first_name?.toLowerCase().includes(searchTerm.toLowerCase())).map((m, idx) => (
                 <div key={idx} style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1.2fr auto', gap: '15px', alignItems: 'center' }}>
                   
-                  {/* Photo & Name */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {m.photo_url ? (
                       <img src={m.photo_url} alt="Profile" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb' }} />
@@ -400,7 +398,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Contact & Address & Sub-depts */}
                   <div>
                     <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>CONTACT & LOCATION</p>
                     <p style={{ fontSize: '13px', color: '#1e293b', margin: 0 }}>📧 {m.email}</p>
@@ -409,7 +406,6 @@ export default function AdminDashboard() {
                     <p style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '3px' }}>Sub-Depts: {Array.isArray(m.sub_departments) ? m.sub_departments.join(', ') : (m.sub_departments || 'None')}</p>
                   </div>
 
-                  {/* Important Dates */}
                   <div>
                     <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>CHURCH MILESTONES</p>
                     <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>🎂 DOB: {m.dob || 'N/A'}</p>
@@ -417,7 +413,6 @@ export default function AdminDashboard() {
                     <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>💧 Baptized: {m.date_baptized || 'N/A'}</p>
                   </div>
 
-                  {/* Admin Actions */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <button onClick={() => startEditMember(m)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Edit</button>
                     <button onClick={() => handleDeleteMember(m.id)} style={{ backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Delete</button>
@@ -429,7 +424,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 2: CONTRIBUTIONS & FINANCE MANAGEMENT */}
         {activeTab === 'contributions' && (
           <div>
             {activeFinanceView === 'hub' && (
@@ -480,7 +474,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 3: ATTENDANCE */}
         {activeTab === 'attendance' && (
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Attendance Records</h2>
@@ -508,7 +501,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 4: EVENTS */}
         {activeTab === 'events' && (
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Church Events</h2>
@@ -533,7 +525,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 5: ANNOUNCEMENTS */}
         {activeTab === 'announcements' && (
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Church Announcements</h2>
@@ -987,7 +978,6 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
               <td style={{ padding: '8px' }}>-</td>
             </tr>
 
-            {/* Tithes */}
             {tithes.map((t, idx) => {
               const isEditing = editingIndex?.type === 'tithe' && editingIndex?.index === idx;
               runningBalance += Number(isEditing ? editForm.amount : (t.amount || 0));
@@ -1012,7 +1002,6 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
               );
             })}
 
-            {/* Incomes */}
             {incomes.map((inc, idx) => {
               const isEditing = editingIndex?.type === 'income' && editingIndex?.index === idx;
               runningBalance += Number(isEditing ? editForm.amount : (inc.amount || 0));
@@ -1039,7 +1028,6 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
               );
             })}
 
-            {/* Pledges */}
             {pledges.map((p, idx) => {
               const isEditing = editingIndex?.type === 'pledge' && editingIndex?.index === idx;
               runningBalance += Number(isEditing ? editForm.amount : (p.amount || 0));
@@ -1064,7 +1052,6 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
               );
             })}
 
-            {/* Welfare Entries */}
             {Object.entries(welfareData).map(([key, val], idx) => {
               if (!val || Number(val) === 0) return null;
               runningBalance += Number(val);
@@ -1083,7 +1070,6 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
               );
             })}
 
-            {/* Expenses */}
             {expenses.map((exp, idx) => {
               const isEditing = editingIndex?.type === 'expense' && editingIndex?.index === idx;
               const expTotal = Number(isEditing ? editForm.qty : (exp.qty || 0)) * Number(isEditing ? editForm.rate : (exp.rate || 0));
