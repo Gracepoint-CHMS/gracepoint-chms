@@ -23,6 +23,10 @@ export default function AdminDashboard() {
   const [roleFilter, setRoleFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
 
+  // Attendance Filter States
+  const [filterDate, setFilterDate] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
+
   // Editing state
   const [editingMember, setEditingMember] = useState(null);
 
@@ -46,7 +50,7 @@ export default function AdminDashboard() {
   });
 
   const [newAttendance, setNewAttendance] = useState({
-    member_email: '', service_date: '', department: 'General', status: 'Present'
+    member_email: '', service_date: new Date().toISOString().split('T')[0], department: 'General', status: 'Present'
   });
 
   const [newEvent, setNewEvent] = useState({
@@ -266,6 +270,16 @@ export default function AdminDashboard() {
       (typeFilter ? c.contribution_type === typeFilter : true);
   });
 
+  // Attendance Specific Calculations
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaysAttendanceRecords = attendance.filter(a => a.service_date === todayStr);
+
+  const filteredAttendanceRecords = attendance.filter(a => {
+    const matchDate = filterDate ? a.service_date === filterDate : true;
+    const matchMonth = filterMonth ? (a.service_date && a.service_date.startsWith(filterMonth)) : true;
+    return matchDate && matchMonth;
+  });
+
   // Summary Metrics
   const totalWelfare = contributions.filter(c => c.contribution_type === 'Welfare').reduce((sum, c) => sum + Number(c.amount), 0);
   const totalTithes = contributions.filter(c => c.contribution_type === 'Tithe').reduce((sum, c) => sum + Number(c.amount), 0);
@@ -415,38 +429,140 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB 3: ATTENDANCE */}
+      {/* TAB 3: ATTENDANCE SCANNER & DASHBOARD (Matching UI Reference) */}
       {activeTab === 'attendance' && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>Service Attendance Logs</h2>
-            <button onClick={() => setShowAttendanceModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '10px 15px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>+ Log Attendance</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Top Bar with Monthly Database Action */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold' }}>Attendance Scanner</h2>
+            <button onClick={() => alert('Monthly Database Report Export')} style={{ backgroundColor: '#10b981', color: '#fff', padding: '8px 14px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              📊 View Monthly Database
+            </button>
           </div>
-          <div style={{ overflowX: 'auto', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                  <th style={{ padding: '12px' }}>Service Date</th>
-                  <th style={{ padding: '12px' }}>Member Email</th>
-                  <th style={{ padding: '12px' }}>Department</th>
-                  <th style={{ padding: '12px' }}>Status</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attendance.map(a => (
-                  <tr key={a.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px' }}>{a.service_date}</td>
-                    <td style={{ padding: '12px' }}>{a.member_email || 'General'}</td>
-                    <td style={{ padding: '12px' }}>{a.department || 'General'}</td>
-                    <td style={{ padding: '12px', color: '#166534', fontWeight: 'bold' }}>{a.status}</td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <button onClick={() => handleDeleteAttendance(a.id)} style={{ padding: '6px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Delete</button>
-                    </td>
-                  </tr>
+
+          {/* Scanner Box Section */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
+              <button onClick={() => alert('Scanner Started')} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Start/Resume Scanner</button>
+              <button onClick={() => alert('Scanner Stopped')} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '10px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Stop Scanner</button>
+            </div>
+            {/* Camera Viewfinder Mock */}
+            <div style={{ position: 'relative', width: '100%', maxWidth: '500px', height: '280px', backgroundColor: '#111', margin: '0 auto', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              <div style={{ border: '3px dashed #fff', width: '70%', height: '60%', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>
+                [ Camera Feed / QR Scanner View ]
+              </div>
+            </div>
+          </div>
+
+          {/* Today's Attendance Section */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold' }}>Today's Attendance</h3>
+              <button onClick={() => setShowAttendanceModal(true)} style={{ backgroundColor: '#10b981', color: '#fff', padding: '6px 12px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>+ Manual Log</button>
+            </div>
+            {todaysAttendanceRecords.length === 0 ? (
+              <p style={{ color: '#6b7280', fontSize: '14px' }}>No attendance yet for today.</p>
+            ) : (
+              <ul style={{ paddingLeft: '20px', margin: '0' }}>
+                {todaysAttendanceRecords.map(rec => (
+                  <li key={rec.id} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                    <b>{rec.member_email || 'General Member'}</b> - <span style={{ color: '#166534' }}>{rec.status}</span> ({rec.department})
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            )}
+          </div>
+
+          {/* View Attendance Filter Section */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>View Attendance</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>DATE:</label>
+                <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>MONTH:</label>
+                <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+              <button onClick={() => {}} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', flex: '1' }}>Filter</button>
+              <button onClick={() => { setFilterDate(''); setFilterMonth(''); }} style={{ backgroundColor: '#1d4ed8', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', flex: '1' }}>Reset Filter</button>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '10px' }}>MEMBER NAME / EMAIL</th>
+                    <th style={{ padding: '10px' }}>DATE</th>
+                    <th style={{ padding: '10px' }}>STATUS</th>
+                    <th style={{ padding: '10px', textAlign: 'center' }}>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAttendanceRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ padding: '15px', textAlign: 'center', color: '#6b7280' }}>No records found.</td>
+                    </tr>
+                  ) : (
+                    filteredAttendanceRecords.map(rec => (
+                      <tr key={rec.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '10px' }}>{rec.member_email || 'N/A'}</td>
+                        <td style={{ padding: '10px' }}>{rec.service_date}</td>
+                        <td style={{ padding: '10px', fontWeight: 'bold', color: '#166534' }}>{rec.status}</td>
+                        <td style={{ padding: '10px', textAlign: 'center' }}>
+                          <button onClick={() => handleDeleteAttendance(rec.id)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Consistent Absentees Section */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>Consistent Absentees (For this month)</h3>
+            <p style={{ color: '#4b5563', fontSize: '14px', margin: '0' }}>• No consistent absentees this month</p>
+          </div>
+
+          {/* Attendance Heatmap Section */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>Attendance Heatmap (Sundays of this month)</h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '10px' }}>MEMBER</th>
+                    <th style={{ padding: '10px', textAlign: 'center' }}>Status Grid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.slice(0, 10).map(m => (
+                    <tr key={m.id || m.email} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '10px' }}>{m.first_name} {m.last_name}</td>
+                      <td style={{ padding: '10px', textAlign: 'center' }}>
+                        <span style={{ display: 'inline-block', width: '20px', height: '20px', backgroundColor: '#dc2626', borderRadius: '4px' }} title="Absent"></span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Attendance Trends Section */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px' }}>Attendance Trends</h3>
+            <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: '6px' }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>📈 Members Present Overview Chart</p>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                <span style={{ width: '12px', height: '12px', backgroundColor: '#3b82f6', display: 'inline-block' }}></span> Members Present
+              </div>
+            </div>
           </div>
         </div>
       )}
