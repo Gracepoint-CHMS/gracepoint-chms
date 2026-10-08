@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import './globals.css';
 
 export default function RootLayout({ children }) {
   const [role, setRole] = useState(null);
@@ -24,6 +22,7 @@ export default function RootLayout({ children }) {
     }
     checkUserSession();
 
+    // Dynamically inject the PWA manifest for mobile installation
     const link = document.createElement('link');
     link.rel = 'manifest';
     link.href = '/manifest.json';
