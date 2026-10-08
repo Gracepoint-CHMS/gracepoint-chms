@@ -24,7 +24,6 @@ export default function RootLayout({ children }) {
     }
     checkUserSession();
 
-    // Dynamically inject the PWA manifest so mobile browsers can install it
     const link = document.createElement('link');
     link.rel = 'manifest';
     link.href = '/manifest.json';
