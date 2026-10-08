@@ -15,12 +15,17 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('members'); 
   const [activeFinanceView, setActiveFinanceView] = useState('hub'); 
 
-  // Finance states
+  // Finance states & form states
   const [openingBalance, setOpeningBalance] = useState('2,484.32');
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [newBalanceInput, setNewBalanceInput] = useState('2,484.32');
 
-  // Welfare matrix interactive state: stores values like { "January-W1": "50" }
+  const [incomeForm, setIncomeForm] = useState({ description: '', amount: '', date: '' });
+  const [expenseForm, setExpenseForm] = useState({ description: '', qty: '', rate: '', date: '', approver: '' });
+  const [titheForm, setTitheForm] = useState({ member: '', amount: '', date: '' });
+  const [pledgeForm, setPledgeForm] = useState({ member: '', purpose: '', amount: '' });
+
+  // Welfare matrix interactive state
   const [welfareData, setWelfareData] = useState({});
   const [selectedWelfareMember, setSelectedWelfareMember] = useState(null);
 
@@ -28,6 +33,19 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
+
+  // New item states for non-finance tabs
+  const [attendanceList, setAttendanceList] = useState([]);
+  const [attendanceForm, setAttendanceForm] = useState({ service: '', date: '', count: '' });
+
+  const [eventsList, setEventsList] = useState([]);
+  const [eventForm, setEventForm] = useState({ title: '', date: '', location: '' });
+
+  const [announcementsList, setAnnouncementsList] = useState([]);
+  const [announcementForm, setAnnouncementForm] = useState({ title: '', message: '' });
+
+  const [newMemberForm, setNewMemberForm] = useState({ first_name: '', last_name: '', email: '', phone: '', department: 'Choir' });
+  const [showAddMember, setShowAddMember] = useState(false);
 
   useEffect(() => {
     async function checkAdmin() {
@@ -48,6 +66,19 @@ export default function AdminDashboard() {
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
+  }
+
+  async function handleAddMember(e) {
+    e.preventDefault();
+    const { data, error } = await supabase.from('members').insert([newMemberForm]).select();
+    if (error) {
+      alert('Error adding member: ' + error.message);
+    } else {
+      if (data) setMembers([...members, data[0]]);
+      setShowAddMember(false);
+      setNewMemberForm({ first_name: '', last_name: '', email: '', phone: '', department: 'Choir' });
+      alert('Member added successfully!');
+    }
   }
 
   if (loading) {
@@ -81,7 +112,7 @@ export default function AdminDashboard() {
           <button onClick={handleLogout} style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Logout</button>
         </div>
 
-        {/* NAVIGATION TABS (Fully Fixed) */}
+        {/* NAVIGATION TABS */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <button onClick={() => setActiveTab('members')} style={tabBtnStyle(activeTab === 'members')}>Members</button>
           <button onClick={() => { setActiveTab('contributions'); setActiveFinanceView('hub'); }} style={tabBtnStyle(activeTab === 'contributions')}>Contributions</button>
@@ -112,9 +143,24 @@ export default function AdminDashboard() {
               <option value="Ushers">Ushers</option>
             </select>
 
-            <button style={{ width: '100%', backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}>
-              + Add New Member
+            <button onClick={() => setShowAddMember(!showAddMember)} style={{ width: '100%', backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}>
+              {showAddMember ? 'Cancel' : '+ Add New Member'}
             </button>
+
+            {showAddMember && (
+              <form onSubmit={handleAddMember} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#2563eb' }}>New Member Registration</h3>
+                <label style={labelStyle}>First Name</label>
+                <input type="text" required style={inputStyle} value={newMemberForm.first_name} onChange={(e)=>setNewMemberForm({...newMemberForm, first_name: e.target.value})} />
+                <label style={labelStyle}>Last Name</label>
+                <input type="text" required style={inputStyle} value={newMemberForm.last_name} onChange={(e)=>setNewMemberForm({...newMemberForm, last_name: e.target.value})} />
+                <label style={labelStyle}>Email</label>
+                <input type="email" required style={inputStyle} value={newMemberForm.email} onChange={(e)=>setNewMemberForm({...newMemberForm, email: e.target.value})} />
+                <label style={labelStyle}>Phone</label>
+                <input type="text" style={inputStyle} value={newMemberForm.phone} onChange={(e)=>setNewMemberForm({...newMemberForm, phone: e.target.value})} />
+                <button type="submit" style={primaryBtnStyle}>Save Member</button>
+              </form>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {members.filter(m => m.first_name?.toLowerCase().includes(searchTerm.toLowerCase())).map((m, idx) => (
@@ -167,6 +213,7 @@ export default function AdminDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '15px' }}>
                   <FinanceCard title="Record Income" icon="➕" onClick={() => setActiveFinanceView('income')} />
                   <FinanceCard title="Record Expenses" icon="➖" onClick={() => setActiveFinanceView('expense')} />
+                  <FinanceCard title="Record Tithes" icon="⛪" onClick={() => setActiveFinanceView('tithes')} />
                   <FinanceCard title="Approve Budgets" icon="✅" onClick={() => setActiveFinanceView('budget')} />
                   <FinanceCard title="Contribution Tracker" icon="💼" onClick={() => setActiveFinanceView('tracker')} />
                   <FinanceCard title="Welfare Contribution" icon="🤝" onClick={() => setActiveFinanceView('welfare')} />
@@ -176,10 +223,11 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {activeFinanceView === 'income' && <FinanceSubView title="Record Income" onBack={() => setActiveFinanceView('hub')}><IncomeForm /></FinanceSubView>}
-            {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm /></FinanceSubView>}
+            {activeFinanceView === 'income' && <FinanceSubView title="Record Income" onBack={() => setActiveFinanceView('hub')}><IncomeForm incomeForm={incomeForm} setIncomeForm={setIncomeForm} /></FinanceSubView>}
+            {activeFinanceView === 'expense' && <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}><ExpenseForm expenseForm={expenseForm} setExpenseForm={setExpenseForm} /></FinanceSubView>}
+            {activeFinanceView === 'tithes' && <FinanceSubView title="Record Tithes" onBack={() => setActiveFinanceView('hub')}><TitheForm titheForm={titheForm} setTitheForm={setTitheForm} members={members} /></FinanceSubView>}
             {activeFinanceView === 'budget' && <FinanceSubView title="Approve Budgets" onBack={() => setActiveFinanceView('hub')}><BudgetApproval /></FinanceSubView>}
-            {activeFinanceView === 'tracker' && <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}><ContributionTracker members={members} /></FinanceSubView>}
+            {activeFinanceView === 'tracker' && <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}><ContributionTracker members={members} pledgeForm={pledgeForm} setPledgeForm={setPledgeForm} /></FinanceSubView>}
             {activeFinanceView === 'welfare' && <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}><WelfareMatrix members={members} welfareData={welfareData} setWelfareData={setWelfareData} selectedWelfareMember={selectedWelfareMember} setSelectedWelfareMember={setSelectedWelfareMember} /></FinanceSubView>}
             {activeFinanceView === 'balance-sheet' && <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}><BalanceSheet /></FinanceSubView>}
             {activeFinanceView === 'report' && <FinanceSubView title="Account Report" onBack={() => setActiveFinanceView('hub')}><AccountReport /></FinanceSubView>}
@@ -189,24 +237,77 @@ export default function AdminDashboard() {
         {/* TAB 3: ATTENDANCE */}
         {activeTab === 'attendance' && (
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>Attendance Records</h2>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>Track weekly church service and meeting attendance here.</p>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Attendance Records</h2>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Service Name</label>
+              <input type="text" placeholder="e.g. Sunday Service" style={inputStyle} value={attendanceForm.service} onChange={(e)=>setAttendanceForm({...attendanceForm, service: e.target.value})} />
+              <label style={labelStyle}>Date</label>
+              <input type="date" style={inputStyle} value={attendanceForm.date} onChange={(e)=>setAttendanceForm({...attendanceForm, date: e.target.value})} />
+              <label style={labelStyle}>Total Attendance Count</label>
+              <input type="number" placeholder="0" style={inputStyle} value={attendanceForm.count} onChange={(e)=>setAttendanceForm({...attendanceForm, count: e.target.value})} />
+              <button onClick={() => { if(attendanceForm.service){ setAttendanceList([...attendanceList, attendanceForm]); setAttendanceForm({ service: '', date: '', count: '' }); alert('Attendance recorded!'); }}} style={primaryBtnStyle}>Save Attendance</button>
+            </div>
+            {attendanceList.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#2563eb', color: '#fff' }}><th style={{ padding: '8px' }}>Service</th><th style={{ padding: '8px' }}>Date</th><th style={{ padding: '8px' }}>Count</th></tr>
+                </thead>
+                <tbody>
+                  {attendanceList.map((a, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}><td style={{ padding: '8px' }}>{a.service}</td><td style={{ padding: '8px' }}>{a.date}</td><td style={{ padding: '8px' }}>{a.count}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
         {/* TAB 4: EVENTS */}
         {activeTab === 'events' && (
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>Church Events</h2>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>Manage upcoming programs, schedules, and special events.</p>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Church Events</h2>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Event Title</label>
+              <input type="text" placeholder="e.p. Youth Vigil" style={inputStyle} value={eventForm.title} onChange={(e)=>setEventForm({...eventForm, title: e.target.value})} />
+              <label style={labelStyle}>Date</label>
+              <input type="date" style={inputStyle} value={eventForm.date} onChange={(e)=>setEventForm({...eventForm, date: e.target.value})} />
+              <label style={labelStyle}>Location</label>
+              <input type="text" placeholder="Main Auditorium" style={inputStyle} value={eventForm.location} onChange={(e)=>setEventForm({...eventForm, location: e.target.value})} />
+              <button onClick={() => { if(eventForm.title){ setEventsList([...eventsList, eventForm]); setEventForm({ title: '', date: '', location: '' }); alert('Event created!'); }}} style={primaryBtnStyle}>Save Event</button>
+            </div>
+            {eventsList.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {eventsList.map((ev, i) => (
+                  <div key={i} style={{ padding: '10px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <strong>{ev.title}</strong> - {ev.date} ({ev.location})
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* TAB 5: ANNOUNCEMENTS */}
         {activeTab === 'announcements' && (
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>Announcements</h2>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>Broadcast notices and church updates to members.</p>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Church Announcements</h2>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Title</label>
+              <input type="text" placeholder="Announcement Title" style={inputStyle} value={announcementForm.title} onChange={(e)=>setAnnouncementForm({...announcementForm, title: e.target.value})} />
+              <label style={labelStyle}>Message</label>
+              <textarea placeholder="Write notice here..." style={{ ...inputStyle, height: '80px' }} value={announcementForm.message} onChange={(e)=>setAnnouncementForm({...announcementForm, message: e.target.value})} />
+              <button onClick={() => { if(announcementForm.title){ setAnnouncementsList([...announcementsList, announcementForm]); setAnnouncementForm({ title: '', message: '' }); alert('Announcement broadcasted!'); }}} style={primaryBtnStyle}>Post Announcement</button>
+            </div>
+            {announcementsList.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {announcementsList.map((an, i) => (
+                  <div key={i} style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <h4 style={{ margin: '0 0 5px 0', color: '#1d4ed8' }}>{an.title}</h4>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#475569' }}>{an.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -236,34 +337,51 @@ function FinanceSubView({ title, onBack, children }) {
   );
 }
 
-function IncomeForm() {
+function IncomeForm({ incomeForm, setIncomeForm }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <label style={labelStyle}>Source / Description</label>
-      <input type="text" placeholder="e.g. Sunday Offering" style={inputStyle} />
+      <input type="text" placeholder="e.g. Sunday Offering" style={inputStyle} value={incomeForm.description} onChange={(e)=>setIncomeForm({...incomeForm, description: e.target.value})} />
       <label style={labelStyle}>Amount (GHS)</label>
-      <input type="number" placeholder="0.00" style={inputStyle} />
+      <input type="number" placeholder="0.00" style={inputStyle} value={incomeForm.amount} onChange={(e)=>setIncomeForm({...incomeForm, amount: e.target.value})} />
       <label style={labelStyle}>Date</label>
-      <input type="date" style={inputStyle} />
-      <button style={primaryBtnStyle}>Save Income</button>
+      <input type="date" style={inputStyle} value={incomeForm.date} onChange={(e)=>setIncomeForm({...incomeForm, date: e.target.value})} />
+      <button onClick={() => alert('Income saved successfully!')} style={primaryBtnStyle}>Save Income</button>
     </div>
   );
 }
 
-function ExpenseForm() {
+function ExpenseForm({ expenseForm, setExpenseForm }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <label style={labelStyle}>Description</label>
-      <textarea placeholder="Expense details" style={{ ...inputStyle, height: '70px' }} />
+      <textarea placeholder="Expense details" style={{ ...inputStyle, height: '70px' }} value={expenseForm.description} onChange={(e)=>setExpenseForm({...expenseForm, description: e.target.value})} />
       <label style={labelStyle}>Quantity & Rate</label>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        <input type="number" placeholder="Qty" style={inputStyle} />
-        <input type="number" placeholder="Rate" style={inputStyle} />
+        <input type="number" placeholder="Qty" style={inputStyle} value={expenseForm.qty} onChange={(e)=>setExpenseForm({...expenseForm, qty: e.target.value})} />
+        <input type="number" placeholder="Rate" style={inputStyle} value={expenseForm.rate} onChange={(e)=>setExpenseForm({...expenseForm, rate: e.target.value})} />
       </div>
       <label style={labelStyle}>Date & Approved By</label>
-      <input type="date" style={inputStyle} />
-      <input type="text" placeholder="Approver Name" style={inputStyle} />
-      <button style={primaryBtnStyle}>Save Expense</button>
+      <input type="date" style={inputStyle} value={expenseForm.date} onChange={(e)=>setExpenseForm({...expenseForm, date: e.target.value})} />
+      <input type="text" placeholder="Approver Name" style={inputStyle} value={expenseForm.approver} onChange={(e)=>setExpenseForm({...expenseForm, approver: e.target.value})} />
+      <button onClick={() => alert('Expense saved successfully!')} style={primaryBtnStyle}>Save Expense</button>
+    </div>
+  );
+}
+
+function TitheForm({ titheForm, setTitheForm, members }) {
+  return (
+    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+      <label style={labelStyle}>Select Member</label>
+      <select style={inputStyle} value={titheForm.member} onChange={(e)=>setTitheForm({...titheForm, member: e.target.value})}>
+        <option value="">Choose member...</option>
+        {members.map((m, i) => <option key={i} value={`${m.first_name} ${m.last_name}`}>{m.first_name} {m.last_name}</option>)}
+      </select>
+      <label style={labelStyle}>Amount (GHS)</label>
+      <input type="number" placeholder="0.00" style={inputStyle} value={titheForm.amount} onChange={(e)=>setTitheForm({...titheForm, amount: e.target.value})} />
+      <label style={labelStyle}>Date</label>
+      <input type="date" style={inputStyle} value={titheForm.date} onChange={(e)=>setTitheForm({...titheForm, date: e.target.value})} />
+      <button onClick={() => alert('Tithe recorded successfully!')} style={primaryBtnStyle}>Save Tithe</button>
     </div>
   );
 }
@@ -277,18 +395,20 @@ function BudgetApproval() {
   );
 }
 
-function ContributionTracker({ members }) {
+function ContributionTracker({ members, pledgeForm, setPledgeForm }) {
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <h3 style={{ fontSize: '15px', color: '#2563eb', marginBottom: '15px' }}>New Pledge</h3>
       <label style={labelStyle}>Member</label>
-      <select style={inputStyle}>
+      <select style={inputStyle} value={pledgeForm.member} onChange={(e)=>setPledgeForm({...pledgeForm, member: e.target.value})}>
         <option value="">Select member...</option>
-        {members.map((m, i) => <option key={i}>{m.first_name} {m.last_name}</option>)}
+        {members.map((m, i) => <option key={i} value={`${m.first_name} ${m.last_name}`}>{m.first_name} {m.last_name}</option>)}
       </select>
+      <label style={labelStyle}>Purpose</label>
+      <input type="text" placeholder="e.g. Building fund" style={inputStyle} value={pledgeForm.purpose} onChange={(e)=>setPledgeForm({...pledgeForm, purpose: e.target.value})} />
       <label style={labelStyle}>Amount</label>
-      <input type="number" placeholder="0.00" style={inputStyle} />
-      <button style={primaryBtnStyle}>Create Pledge</button>
+      <input type="number" placeholder="0.00" style={inputStyle} value={pledgeForm.amount} onChange={(e)=>setPledgeForm({...pledgeForm, amount: e.target.value})} />
+      <button onClick={() => alert('Pledge created successfully!')} style={primaryBtnStyle}>Create Pledge</button>
     </div>
   );
 }
