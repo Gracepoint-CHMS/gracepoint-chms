@@ -1,31 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
 
-export default function MemberPortal() {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export default function PortalPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
- const [contributions, setContributions] = useState([]);
+  const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [contributions, setContributions] = useState([]);
   const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [language, setLanguage] = useState('English');
+  const [activeFinanceView, setActiveFinanceView] = useState('hub'); // 'hub', 'tracker', 'welfare', 'balance-sheet', 'expense', 'budget', 'report'
+  
+  // Interactive sub-view form & filter states
+  const [selectedWelfareMember, setSelectedWelfareMember] = useState(null);
+  const [expenseForm, setExpenseForm] = useState({ description: '', quantity: '', rate: '', date: '', approvedBy: '', remarks: '' });
+  const [budgetFilter, setBudgetFilter] = useState('All');
+  const [pledgeForm, setPledgeForm] = useState({ member: '', purpose: '', amount: '' });
 
   useEffect(() => {
-    fetchMemberProfile();
-  }, []);
-
-  async function fetchMemberProfile() {
-    try {
+    async function fetchUserData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push('/login');
         return;
       }
+      setUser(user);
 
-      // Fetch member details from members table based on auth email
+      // Fetch member profile
       const { data, error } = await supabase
         .from('members')
         .select('*')
@@ -33,29 +41,29 @@ export default function MemberPortal() {
         .single();
 
       if (data) {
-        setUserProfile(data);  const { data: contribData } = await supabase
-    .from('contributions')
-    .select('*')
-    .eq('member_email', user.email);
-  if (contribData) {
-    setContributions(contribData);
-  }
-
+        setUserProfile(data);
       } else {
-        // Fallback user profile if record doesn't exist yet
         setUserProfile({
           first_name: user.user_metadata?.first_name || 'Member',
           last_name: user.user_metadata?.last_name || '',
           email: user.email,
-          phone: user.user_metadata?.phone || '+233...'
+          phone: user.user_metadata?.phone || ''
         });
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
+
+      // Fetch contributions from Supabase
+      const { data: contribData } = await supabase
+        .from('contributions')
+        .select('*')
+        .eq('member_email', user.email);
+      if (contribData) {
+        setContributions(contribData);
+      }
+
       setLoading(false);
     }
-  }
+    fetchUserData();
+  }, [router]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -63,248 +71,426 @@ export default function MemberPortal() {
   }
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif' }}><p>Loading Portal...</p></div>;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif' }}>
+        <p style={{ color: '#1d4ed8', fontWeight: '500' }}>Loading your portal...</p>
+      </div>
+    );
   }
 
-  const memberEmail = userProfile?.email || 'member@gracepoint.com';
-  const memberFullName = `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim() || 'Church Member';
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(memberEmail)}`;
-
   return (
-    <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f3f4f6', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
       
-      {/* TOP HEADER */}
-      <div style={{ backgroundColor: '#1e3a8a', color: '#fff', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)} 
-            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}
-          >
-            ☰
-          </button>
-          <span style={{ fontWeight: 'bold', fontSize: '16px' }}>Gracepoint CHMS</span>
-        </div>
+      {/* SIDEBAR NAVIGATION */}
+      <div style={{ width: '260px', backgroundColor: '#1e293b', color: '#fff', display: 'flex', flexDirection: 'column', padding: '20px' }}>
+        <h2 style={{ fontSize: '18px', marginBottom: '30px', fontWeight: 'bold', color: '#60a5fa' }}>Gracepoint Portal</h2>
+        
+        <button onClick={() => { setActiveMenu('dashboard'); setActiveFinanceView('hub'); }} style={{ ...sidebarBtnStyle, backgroundColor: activeMenu === 'dashboard' ? '#334155' : 'transparent' }}>
+          🏠 Dashboard
+        </button>
+        <button onClick={() => setActiveMenu('profile')} style={{ ...sidebarBtnStyle, backgroundColor: activeMenu === 'profile' ? '#334155' : 'transparent' }}>
+          👤 Profile
+        </button>
+        <button onClick={() => setActiveMenu('finances')} style={{ ...sidebarBtnStyle, backgroundColor: activeMenu === 'finances' ? '#334155' : 'transparent' }}>
+          💳 Finance Management
+        </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-            <span>Language</span>
-            <select 
-              value={language} 
-              onChange={(e) => setLanguage(e.target.value)} 
-              style={{ padding: '4px 8px', borderRadius: '4px', border: 'none', backgroundColor: '#fff', color: '#333', fontSize: '13px', cursor: 'pointer' }}
-            >
-              <option value="English">English</option>
-              <option value="Twi">Twi</option>
-              <option value="French">French</option>
-            </select>
-          </div>
-
-          <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', overflow: 'hidden' }}>
-            {userProfile?.photo_url ? (
-              <img src={userProfile.photo_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <span>{memberFullName[0]}</span>
-            )}
-          </div>
-
-          <button 
-            onClick={handleLogout} 
-            title="Logout"
-            style={{ background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center' }}
-          >
-            ➔
+        <div style={{ marginTop: 'auto' }}>
+          <button onClick={handleLogout} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>
+            Logout
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: '1', position: 'relative' }}>
+      {/* MAIN CONTENT AREA */}
+      <div style={{ flex: 1, padding: '30px', overflowY: 'auto' }}>
         
-        {/* SIDEBAR DRAWER */}
-        {sidebarOpen && (
-          <div style={{ position: 'fixed', top: '56px', left: 0, width: '260px', height: 'calc(100vh - 56px)', backgroundColor: '#1e3a8a', color: '#fff', zIndex: 100, boxShadow: '4px 0 10px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', padding: '20px 0' }}>
-            <div style={{ padding: '0 20px 15px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>MAIN</div>
-            
-            <button 
-              onClick={() => { setActiveMenu('dashboard'); setSidebarOpen(false); }} 
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'dashboard' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'dashboard' ? 'bold' : 'normal' }}
-            >
-              🏠 Dashboard
-            </button>
-            <button 
-              onClick={() => { setActiveMenu('profile'); setSidebarOpen(false); }} 
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'profile' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'profile' ? 'bold' : 'normal' }}
-            >
-              👤 Profile
-            </button>
-            <button 
-              onClick={() => { setActiveMenu('fellowship'); setSidebarOpen(false); }} 
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'fellowship' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'fellowship' ? 'bold' : 'normal' }}
-            >
-              ⛪ House Fellowship
-            </button>
-            <button 
-              onClick={() => { setActiveMenu('attendance'); setSidebarOpen(false); }} 
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', backgroundColor: activeMenu === 'attendance' ? '#3b82f6' : 'transparent', color: '#fff', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: activeMenu === 'attendance' ? 'bold' : 'normal' }}
-            >
-              📅 Attendance QR Code
-            </button>
+        {/* VIEW 1: CHURCH DASHBOARD & CONTRIBUTIONS */}
+        {activeMenu === 'dashboard' && (
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', marginBottom: '5px' }}>
+              Welcome back, {userProfile?.first_name || 'Member'}!
+            </h1>
+            <p style={{ color: '#64748b', marginBottom: '25px' }}>Here is an overview of your church portal and contributions.</p>
 
-            <div style={{ padding: '25px 20px 10px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>COMMUNICATION</div>
-            <div style={{ padding: '10px 20px', fontSize: '14px', color: '#cbd5e1', cursor: 'pointer' }}>Announcements</div>
+            {/* Church Information Card */}
+            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: '18px', color: '#1e293b', marginBottom: '8px' }}>Gracepoint Prophetic Church (The Jesus Home Church)</h2>
+              <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '8px' }}>Just before Dr Boateng Hospital Jerusalem, Techiman Ghana</p>
+              <div style={{ fontSize: '13px', color: '#2563eb' }}>
+                📞 +233245914937 • ✉️ prophetbewis@gmail.com
+              </div>
+            </div>
 
-            <div style={{ padding: '20px 20px 10px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>EVENTS & MINISTRY</div>
-            <div style={{ padding: '10px 20px', fontSize: '14px', color: '#cbd5e1', cursor: 'pointer' }}>Upcoming Events</div>
-
-            <div style={{ padding: '20px 20px 10px 20px', fontSize: '12px', fontWeight: 'bold', color: '#93c5fd', letterSpacing: '1px' }}>SPIRITUAL CORNER</div>
-            <div style={{ padding: '10px 20px', fontSize: '14px', color: '#cbd5e1', cursor: 'pointer' }}>Daily Devotional</div>
-          </div>
-        )}
-
-        {/* MAIN CONTENT AREA */}
-        <div style={{ flex: '1', padding: '20px', maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-          
-          {/* VIEW 1: CHURCH DASHBOARD */}
-          {activeMenu === 'dashboard' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              {/* Church Information Card */}
-              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '25px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-                <div style={{ width: '70px', height: '70px', margin: '0 auto 15px auto', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #bfdbfe' }}>
-                  <span style={{ fontSize: '28px' }}>⛪</span>
-                </div>
-                <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '5px' }}>
-                  Gracepoint Prophetic Church <br />(The Jesus Home Church)[span_3](start_span)[span_3](end_span)
-                </h2>
-                <p style={{ fontSize: '13px', color: '#4b5563', margin: '8px 0', lineHeight: '1.5' }}>
-                  Just before Dr Boateng Hospital Jerusalem, Techiman Ghana. GPS.BT-0230-4894[span_4](start_span)[span_4](end_span)
-                </p>
-                <div style={{ fontSize: '13px', color: '#2563eb', marginTop: '10px', fontWeight: '500' }}>
-                  📞 +233245914937 • ✉️ prophetbewis@gmail.com[span_5](start_span)[span_5](end_span)
-                </div>
-              </div>{/* My Contributions Card */}
-<div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-  <h3 style={{ fontSize: '16px', color: '#1d4ed8', marginBottom: '15px' }}>My Welfare & Financial Contributions</h3>
-  {contributions.length === 0 ? (
-    <p style={{ fontSize: '14px', color: '#666' }}>No contributions recorded yet.</p>
-  ) : (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left', color: '#444' }}>
-            <th style={{ padding: '8px' }}>Type</th>
-            <th style={{ padding: '8px' }}>Amount</th>
-            <th style={{ padding: '8px' }}>Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {contributions.map((item, index) => (
-            <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <td style={{ padding: '8px' }}>{item.type || item.contribution_type || 'Contribution'}</td>
-              <td style={{ padding: '8px', fontWeight: 'bold', color: '#16a34a' }}>{item.amount}</td>
-              <td style={{ padding: '8px', color: '#666' }}>{item.date || item.created_at?.split('T')[0]}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )}
-</div>
-
-
-              {/* Church Activities Card */}
-              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '15px' }}>Church Activities</h3>
+            {/* My Contributions Card */}
+            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ fontSize: '16px', color: '#1d4ed8', marginBottom: '15px' }}>My Welfare & Financial Contributions</h3>
+              {contributions.length === 0 ? (
+                <p style={{ fontSize: '14px', color: '#666' }}>No contributions recorded yet.</p>
+              ) : (
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>
-                        <th style={{ padding: '10px' }}>ACTIVITY</th>
-                        <th style={{ padding: '10px' }}>DAY(S)</th>
-                        <th style={{ padding: '10px' }}>TIME</th>
+                      <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left', color: '#444' }}>
+                        <th style={{ padding: '8px' }}>Type</th>
+                        <th style={{ padding: '8px' }}>Amount</th>
+                        <th style={{ padding: '8px' }}>Date</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                        <td style={{ padding: '10px' }}>Sunday Service</td>
-                        <td style={{ padding: '10px' }}>Sundays</td>
-                        <td style={{ padding: '10px' }}>8:00 AM</td>
+                      {contributions.map((item, index) => (
+                        <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '8px' }}>{item.type || item.contribution_type || 'Contribution'}</td>
+                          <td style={{ padding: '8px', fontWeight: 'bold', color: '#16a34a' }}>{item.amount}</td>
+                          <td style={{ padding: '8px', color: '#666' }}>{item.date || item.created_at?.split('T')[0]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 2: PROFILE */}
+        {activeMenu === 'profile' && (
+          <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', color: '#1e293b' }}>Member Profile</h2>
+            <p><strong>First Name:</strong> {userProfile?.first_name}</p>
+            <p><strong>Last Name:</strong> {userProfile?.last_name}</p>
+            <p><strong>Email:</strong> {userProfile?.email}</p>
+            <p><strong>Phone:</strong> {userProfile?.phone}</p>
+          </div>
+        )}
+
+        {/* VIEW 3: FINANCE MANAGEMENT SUITE */}
+        {activeMenu === 'finances' && (
+          <div>
+            {/* FINANCE HUB */}
+            {activeFinanceView === 'hub' && (
+              <div>
+                <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1e293b', marginBottom: '5px' }}>Finance Management</h1>
+                <p style={{ color: '#64748b', marginBottom: '20px' }}>Select an action below to manage church finances.</p>
+
+                {/* Opening Balance Card */}
+                <div style={{ backgroundColor: '#fff', padding: '15px 20px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <span style={{ color: '#4b5563', fontWeight: '500' }}>Opening Balance:</span>
+                  <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>GHS 2,484.32</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '15px' }}>
+                  <FinanceCard title="Contribution Tracker" icon="💼" onClick={() => setActiveFinanceView('tracker')} />
+                  <FinanceCard title="Welfare Contribution" icon="🤝" onClick={() => setActiveFinanceView('welfare')} />
+                  <FinanceCard title="Balance Sheet" icon="⚖️" onClick={() => setActiveFinanceView('balance-sheet')} />
+                  <FinanceCard title="Account Report" icon="💳" onClick={() => setActiveFinanceView('report')} />
+                  <FinanceCard title="Record Income / Expense" icon="➕" onClick={() => setActiveFinanceView('expense')} />
+                  <FinanceCard title="Approve Budgets" icon="✅" onClick={() => setActiveFinanceView('budget')} />
+                </div>
+              </div>
+            )}
+
+            {/* 1. CONTRIBUTION TRACKER SUB-VIEW */}
+            {activeFinanceView === 'tracker' && (
+              <FinanceSubView title="Contribution Tracker" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                  <MetricCard label="0 pledges" />
+                  <MetricCard label="0% of target" />
+                </div>
+                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '15px', marginBottom: '15px', color: '#1d4ed8' }}>➕ New Pledge</h3>
+                  <label style={labelStyle}>Member</label>
+                  <select style={inputStyle} value={pledgeForm.member} onChange={(e)=>setPledgeForm({...pledgeForm, member: e.target.value})}>
+                    <option value="">Select member...</option>
+                    <option value="Ziem Ruth Nancy">Ziem Ruth Nancy</option>
+                    <option value="Rita Tiwaa">Rita Tiwaa</option>
+                  </select>
+                  <label style={labelStyle}>Purpose</label>
+                  <input type="text" placeholder="e.g. Building fund" style={inputStyle} value={pledgeForm.purpose} onChange={(e)=>setPledgeForm({...pledgeForm, purpose: e.target.value})} />
+                  <label style={labelStyle}>Amount</label>
+                  <input type="number" placeholder="0.00" style={inputStyle} value={pledgeForm.amount} onChange={(e)=>setPledgeForm({...pledgeForm, amount: e.target.value})} />
+                  <button style={primaryBtnStyle}>+ Create</button>
+                </div>
+              </FinanceSubView>
+            )}
+
+            {/* 2. WELFARE CONTRIBUTION SUB-VIEW */}
+            {activeFinanceView === 'welfare' && (
+              <FinanceSubView title="Welfare Contribution" onBack={() => setActiveFinanceView('hub')}>
+                {!selectedWelfareMember ? (
+                  <div>
+                    <input type="text" placeholder="Search member..." style={{ ...inputStyle, marginBottom: '15px' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                      {['Ziem Ruth Nancy', 'Rita Tiwaa', 'Ayitey Godfred', 'Frinpong Gifty', 'Rebecca Owusu'].map((name, i) => (
+                        <div key={i} onClick={() => setSelectedWelfareMember(name)} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '10px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                          <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e1', margin: '0 auto 8px' }}></div>
+                          <p style={{ fontSize: '13px', fontWeight: '500', color: '#1e293b' }}>{name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                      <h3 style={{ fontSize: '16px', color: '#1d4ed8' }}>{selectedWelfareMember}</h3>
+                      <button onClick={() => setSelectedWelfareMember(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 'bold' }}>✕ Close</button>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px' }}>Click any box to enter amount</p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#3b82f6', color: '#fff' }}>
+                            <th style={{ padding: '8px' }}>Months</th>
+                            <th style={{ padding: '8px' }}>1st Week</th>
+                            <th style={{ padding: '8px' }}>2nd Week</th>
+                            <th style={{ padding: '8px' }}>3rd Week</th>
+                            <th style={{ padding: '8px' }}>4th Week</th>
+                            <th style={{ padding: '8px' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '8px', fontWeight: 'bold' }}>{m}</td>
+                              {[1, 2, 3, 4, 'Total'].map((w, wIdx) => (
+                                <td key={wIdx} style={{ padding: '8px', border: '1px solid #e2e8f0' }}>0</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button style={{ ...primaryBtnStyle, marginTop: '15px' }}>Save</button>
+                  </div>
+                )}
+              </FinanceSubView>
+            )}
+
+            {/* 3. BALANCE SHEET SUB-VIEW */}
+            {activeFinanceView === 'balance-sheet' && (
+              <FinanceSubView title="Balance Sheet" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <input type="date" style={{ ...inputStyle, marginBottom: '10px' }} />
+                  <input type="date" style={{ ...inputStyle, marginBottom: '10px' }} />
+                  <button style={primaryBtnStyle}>Filter</button>
+                </div>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#2563eb', color: '#fff', textAlign: 'left' }}>
+                        <th style={{ padding: '10px' }}>Total Expenses</th>
+                        <th style={{ padding: '10px' }}>Balance</th>
                       </tr>
-                      <tr>
-                        <td style={{ padding: '10px' }}>Midweek Service</td>
-                        <td style={{ padding: '10px' }}>Wednesdays</td>
-                        <td style={{ padding: '10px' }}>5:30 PM</td>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px', color: '#dc2626' }}>GHS 0</td>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>GHS 2,672.32</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px', color: '#dc2626' }}>GHS 200</td>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>GHS 2,673.32</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </FinanceSubView>
+            )}
 
-              {/* Church Bank Details Card */}
-              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '15px' }}>Church Bank Details</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#374151' }}>
-                  <div><b>Account Name:</b> Gracepoint Prophetic Church[span_6](start_span)[span_6](end_span)</div>
-                  <div><b>Account Number:</b> 0530502114[span_7](start_span)[span_7](end_span)</div>
-                  <div><b>Bank Name:</b> MTN Ghana[span_8](start_span)[span_8](end_span)</div>
-                  <div><b>Account Type:</b> savings[span_9](start_span)[span_9](end_span)</div>
+            {/* 4. EXPENSE LOGGING SUB-VIEW */}
+            {activeFinanceView === 'expense' && (
+              <FinanceSubView title="Record Expenses" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <label style={labelStyle}>Description</label>
+                  <textarea placeholder="Enter expense description" style={{ ...inputStyle, height: '70px' }} value={expenseForm.description} onChange={(e)=>setExpenseForm({...expenseForm, description: e.target.value})} />
+                  
+                  <label style={labelStyle}>Quantity</label>
+                  <input type="number" placeholder="Enter quantity" style={inputStyle} value={expenseForm.quantity} onChange={(e)=>setExpenseForm({...expenseForm, quantity: e.target.value})} />
+                  
+                  <label style={labelStyle}>Rate</label>
+                  <input type="number" placeholder="Enter rate per item" style={inputStyle} value={expenseForm.rate} onChange={(e)=>setExpenseForm({...expenseForm, rate: e.target.value})} />
+                  
+                  <label style={labelStyle}>Total Cost</label>
+                  <input type="text" disabled placeholder="Auto-calculated total" style={{ ...inputStyle, backgroundColor: '#f8fafc' }} value={expenseForm.quantity && expenseForm.rate ? `GHS ${expenseForm.quantity * expenseForm.rate}` : ''} />
+                  
+                  <label style={labelStyle}>Date</label>
+                  <input type="date" style={inputStyle} value={expenseForm.date} onChange={(e)=>setExpenseForm({...expenseForm, date: e.target.value})} />
+                  
+                  <label style={labelStyle}>Approved By</label>
+                  <input type="text" placeholder="Name of approver" style={inputStyle} value={expenseForm.approvedBy} onChange={(e)=>setExpenseForm({...expenseForm, approvedBy: e.target.value})} />
+                  
+                  <label style={labelStyle}>Remarks</label>
+                  <textarea placeholder="Additional notes or remarks" style={{ ...inputStyle, height: '60px' }} value={expenseForm.remarks} onChange={(e)=>setExpenseForm({...expenseForm, remarks: e.target.value})} />
+                  
+                  <button style={primaryBtnStyle}>Save Expense</button>
                 </div>
-              </div>
+              </FinanceSubView>
+            )}
 
-            </div>
-          )}
-
-          {/* VIEW 2: PROFILE */}
-          {activeMenu === 'profile' && (
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '20px' }}>My Profile</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '14px' }}>
-                <div><b>Full Name:</b> {memberFullName}</div>
-                <div><b>Email:</b> {memberEmail}</div>
-                <div><b>Phone:</b> {userProfile?.phone || 'N/A'}</div>
-                <div><b>Department:</b> {userProfile?.core_department || 'General'}</div>
-                <div><b>Role:</b> {userProfile?.role || 'member'}</div>
-              </div>
-            </div>
-          )}
-
-          {/* VIEW 3: HOUSE FELLOWSHIP */}
-          {activeMenu === 'fellowship' && (
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '15px' }}>House Fellowship</h2>
-              <p style={{ fontSize: '14px', color: '#4b5563' }}>You are assigned to the Jerusalem House Fellowship center. Meetings take place every Tuesday at 6:00 PM.</p>
-            </div>
-          )}
-
-          {/* VIEW 4: ATTENDANCE QR CODE */}
-          {activeMenu === 'attendance' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e3a8a', textAlign: 'center' }}>Attendance QR Code</h2>
-              
-              <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.08)', width: '100%', maxWidth: '380px', boxSizing: 'border-box' }}>
-                <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '12px', display: 'inline-block', marginBottom: '15px', border: '1px solid #e2e8f0' }}>
-                  <img src={qrCodeUrl} alt="Attendance QR Code" style={{ width: '220px', height: '220px', display: 'block' }} />
+            {/* 5. BUDGET APPROVAL SUB-VIEW */}
+            {activeFinanceView === 'budget' && (
+              <FinanceSubView title="Admin Budget Approval" onBack={() => setActiveFinanceView('hub')}>
+                <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '15px' }}>Review, approve, or adjust budget requests submitted by branches.</p>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <label style={labelStyle}>Filter by Status</label>
+                  <select style={inputStyle} value={budgetFilter} onChange={(e)=>setBudgetFilter(e.target.value)}>
+                    <option value="All">All</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                  </select>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <span style={badgeStyle}>0 Total</span>
+                    <span style={{ ...badgeStyle, backgroundColor: '#fef3c7', color: '#d97706' }}>0 Pending</span>
+                    <span style={{ ...badgeStyle, backgroundColor: '#dcfce7', color: '#16a34a' }}>0 Approved</span>
+                  </div>
                 </div>
-                
-                <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1f2937', marginBottom: '8px' }}>{memberFullName}</h3>
-                <p style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.4' }}>
-                  Show this QR code to the admin to mark your attendance[span_10](start_span)[span_10](end_span).
-                </p>
-              </div>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#2563eb', color: '#fff', textAlign: 'left' }}>
+                        <th style={{ padding: '10px' }}>BRANCH</th>
+                        <th style={{ padding: '10px' }}>DESCRIPTION</th>
+                        <th style={{ padding: '10px' }}>AMOUNT REQUESTED</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td colSpan="3" style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>No budget requests found.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </FinanceSubView>
+            )}
 
-              <a 
-                href={qrCodeUrl} 
-                download="Attendance_QR.png"
-                target="_blank"
-                rel="noreferrer"
-                style={{ backgroundColor: '#2563eb', color: '#fff', padding: '12px 24px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-              >
-                Download QR Code
-              </a>
-            </div>
-          )}
+            {/* 6. ACCOUNT REPORT SUB-VIEW */}
+            {activeFinanceView === 'report' && (
+              <FinanceSubView title="Account Statement" onBack={() => setActiveFinanceView('hub')}>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', display: 'flex', gap: '10px' }}>
+                  <button style={{ ...primaryBtnStyle, flex: 1, backgroundColor: '#1e293b' }}>Print</button>
+                  <button style={{ ...primaryBtnStyle, flex: 1, backgroundColor: '#16a34a' }}>Download PDF</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '15px' }}>
+                  <MetricCard label="Opening Balance: GHS 2,484.32" />
+                  <MetricCard label="Closing Balance: GHS 11,010.32" />
+                  <MetricCard label="Net Movement: GHS 8,526" />
+                </div>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#1e293b', color: '#fff', textAlign: 'left' }}>
+                        <th style={{ padding: '8px' }}>DATE</th>
+                        <th style={{ padding: '8px' }}>DESCRIPTION</th>
+                        <th style={{ padding: '8px' }}>INCOME</th>
+                        <th style={{ padding: '8px' }}>EXPENSES</th>
+                        <th style={{ padding: '8px' }}>BALANCE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>18 Dec 2025</td>
+                        <td style={{ padding: '8px' }}>Opening Balance</td>
+                        <td style={{ padding: '8px' }}>-</td>
+                        <td style={{ padding: '8px' }}>-</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS 2,484.32</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>18 Dec 2025</td>
+                        <td style={{ padding: '8px' }}>Income (Special Event)</td>
+                        <td style={{ padding: '8px', color: '#16a34a' }}>GHS 188</td>
+                        <td style={{ padding: '8px' }}>-</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>GHS 2,672.32</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </FinanceSubView>
+            )}
+          </div>
+        )}
 
-        </div>
       </div>
     </div>
   );
 }
+
+// Reusable UI Components & Styles
+function FinanceCard({ title, icon, onClick }) {
+  return (
+    <div onClick={onClick} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transition: 'transform 0.1s' }}>
+      <div style={{ fontSize: '28px', marginBottom: '8px' }}>{icon}</div>
+      <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#1e293b' }}>{title}</h3>
+    </div>
+  );
+}
+
+function FinanceSubView({ title, onBack, children }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px' }}>
+        <button onClick={onBack} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontWeight: 'bold' }}>← Back</button>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MetricCard({ label }) {
+  return (
+    <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', fontWeight: 'bold', color: '#1e293b', fontSize: '14px' }}>
+      {label}
+    </div>
+  );
+}
+
+const sidebarBtnStyle = {
+  width: '100%',
+  padding: '12px 15px',
+  textAlign: 'left',
+  background: 'transparent',
+  border: 'none',
+  color: '#cbd5e1',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  marginBottom: '8px',
+  fontSize: '14px',
+  fontWeight: '500'
+};
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px',
+  borderRadius: '8px',
+  border: '1px solid #cbd5e1',
+  marginBottom: '15px',
+  fontSize: '14px'
+};
+
+const labelStyle = {
+  display: 'block',
+  fontSize: '13px',
+  fontWeight: '600',
+  color: '#475569',
+  marginBottom: '5px'
+};
+
+const primaryBtnStyle = {
+  width: '100%',
+  padding: '12px',
+  backgroundColor: '#2563eb',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '8px',
+  fontWeight: 'bold',
+  cursor: 'pointer'
+};
+
+const badgeStyle = {
+  padding: '6px 12px',
+  borderRadius: '6px',
+  backgroundColor: '#e0f2fe',
+  color: '#0369a1',
+  fontSize: '12px',
+  fontWeight: 'bold'
+};
