@@ -11,6 +11,19 @@ const supabase = createClient(
 
 const EXACT_CHURCH_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAAsACwBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
 
+const CORE_DEPT_OPTIONS = ['LOVE', 'UNITY', 'CARE', 'RESPECT'];
+const SUB_DEPT_OPTIONS = [
+  'Ushering Department',
+  'Choir/Music Department',
+  'Prayer Warriors',
+  'General Assembly',
+  'Men Ministry',
+  'Women Ministry',
+  'Children Ministry',
+  'Evangelical department',
+  'Pastoral Department'
+];
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -56,8 +69,8 @@ export default function AdminDashboard() {
     date_baptized: '',
     home_address: '',
     home_town: '',
-    core_department: 'Choir',
-    sub_department: 'Main'
+    core_department: 'LOVE',
+    sub_departments: []
   });
 
   // Non-finance tab states
@@ -87,10 +100,32 @@ export default function AdminDashboard() {
     router.push('/login');
   }
 
+  // Handle local image file upload conversion to Base64 string
+  function handlePhotoUpload(e) {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewMemberForm(prev => ({ ...prev, photo_url: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function handleSubDeptToggle(dept) {
+    setNewMemberForm(prev => {
+      const exists = prev.sub_departments.includes(dept);
+      if (exists) {
+        return { ...prev, sub_departments: prev.sub_departments.filter(d => d !== dept) };
+      } else {
+        return { ...prev, sub_departments: [...prev.sub_departments, dept] };
+      }
+    });
+  }
+
   async function handleSaveMember(e) {
     e.preventDefault();
     if (editingMemberId !== null) {
-      // Update existing
       const { error } = await supabase.from('members').update(newMemberForm).eq('id', editingMemberId);
       if (error) {
         alert('Error updating member: ' + error.message);
@@ -102,7 +137,6 @@ export default function AdminDashboard() {
         alert('Member updated successfully!');
       }
     } else {
-      // Insert new
       const { data, error } = await supabase.from('members').insert([newMemberForm]).select();
       if (error) {
         alert('Error adding member: ' + error.message);
@@ -128,8 +162,8 @@ export default function AdminDashboard() {
       date_baptized: member.date_baptized || '',
       home_address: member.home_address || '',
       home_town: member.home_town || '',
-      core_department: member.core_department || 'Choir',
-      sub_department: member.sub_department || 'Main'
+      core_department: member.core_department || 'LOVE',
+      sub_departments: member.sub_departments || []
     });
     setShowAddMember(true);
   }
@@ -157,8 +191,8 @@ export default function AdminDashboard() {
       date_baptized: '',
       home_address: '',
       home_town: '',
-      core_department: 'Choir',
-      sub_department: 'Main'
+      core_department: 'LOVE',
+      sub_departments: []
     });
   }
 
@@ -229,10 +263,7 @@ export default function AdminDashboard() {
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
               <option value="All Departments">All Departments</option>
-              <option value="Choir">Choir</option>
-              <option value="Media">Media</option>
-              <option value="Ushers">Ushers</option>
-              <option value="Protocol">Protocol</option>
+              {CORE_DEPT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
 
             <button onClick={() => { setShowAddMember(!showAddMember); setEditingMemberId(null); resetMemberForm(); }} style={{ width: '100%', backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}>
@@ -265,8 +296,16 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <label style={labelStyle}>Photo URL (Image link)</label>
-                <input type="text" placeholder="https://..." style={inputStyle} value={newMemberForm.photo_url} onChange={(e)=>setNewMemberForm({...newMemberForm, photo_url: e.target.value})} />
+                {/* Photo Upload Section */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={labelStyle}>Member Photo Upload</label>
+                  <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ ...inputStyle, padding: '6px' }} />
+                  {newMemberForm.photo_url && (
+                    <div style={{ marginTop: '8px' }}>
+                      <img src={newMemberForm.photo_url} alt="Preview" style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb' }} />
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                   <div>
@@ -294,20 +333,29 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={labelStyle}>Core Department</label>
-                    <select style={inputStyle} value={newMemberForm.core_department} onChange={(e)=>setNewMemberForm({...newMemberForm, core_department: e.target.value})}>
-                      <option value="Choir">Choir</option>
-                      <option value="Media">Media</option>
-                      <option value="Ushers">Ushers</option>
-                      <option value="Protocol">Protocol</option>
-                      <option value="Evangelism">Evangelism</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Sub-Department / Unit</label>
-                    <input type="text" placeholder="e.g. Soprano, Live Streaming" style={inputStyle} value={newMemberForm.sub_department} onChange={(e)=>setNewMemberForm({...newMemberForm, sub_department: e.target.value})} />
+                {/* Core Departments Selection */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={labelStyle}>Core Department (Required)</label>
+                  <select style={inputStyle} value={newMemberForm.core_department} onChange={(e)=>setNewMemberForm({...newMemberForm, core_department: e.target.value})}>
+                    {CORE_DEPT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                </div>
+
+                {/* Sub Departments Multi-Selection Checkboxes */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={labelStyle}>Sub-Departments (Select one or more)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                    {SUB_DEPT_OPTIONS.map(dept => (
+                      <label key={dept} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#334155' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={newMemberForm.sub_departments.includes(dept)} 
+                          onChange={() => handleSubDeptToggle(dept)} 
+                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                        {dept}
+                      </label>
+                    ))}
                   </div>
                 </div>
 
@@ -317,7 +365,7 @@ export default function AdminDashboard() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {members.filter(m => m.first_name?.toLowerCase().includes(searchTerm.toLowerCase())).map((m, idx) => (
-                <div key={idx} style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr auto', gap: '15px', alignItems: 'center' }}>
+                <div key={idx} style={{ backgroundColor: '#fff', padding: '18px 20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1.2fr auto', gap: '15px', alignItems: 'center' }}>
                   
                   {/* Photo & Name */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -330,16 +378,17 @@ export default function AdminDashboard() {
                     )}
                     <div>
                       <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '15px', display: 'block' }}>{m.first_name} {m.last_name}</span>
-                      <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>{m.core_department || 'Member'} ({m.sub_department || 'Main'})</span>
+                      <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 'bold', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>Core: {m.core_department || 'LOVE'}</span>
                     </div>
                   </div>
 
-                  {/* Contact & Address */}
+                  {/* Contact & Address & Sub-depts */}
                   <div>
                     <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>CONTACT & LOCATION</p>
                     <p style={{ fontSize: '13px', color: '#1e293b', margin: 0 }}>📧 {m.email}</p>
                     <p style={{ fontSize: '13px', color: '#475569', margin: 0 }}>📞 {m.phone || 'N/A'}</p>
                     <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>🏠 {m.home_address || 'No address'}, {m.home_town || ''}</p>
+                    <p style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '3px' }}>Sub-Depts: {Array.isArray(m.sub_departments) ? m.sub_departments.join(', ') : 'None'}</p>
                   </div>
 
                   {/* Important Dates */}
