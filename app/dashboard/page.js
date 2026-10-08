@@ -556,21 +556,46 @@ function WelfareMatrix({ members, welfareData, setWelfareData, selectedWelfareMe
 }
 
 function BalanceSheet({ totalIncome, totalExpenses, closingBalance }) {
-  const downloadBalanceSheet = () => {
-    const reportText = `--- GRACEPOINT CHMS BALANCE SHEET ---\nTotal Income: GHS ${totalIncome.toFixed(2)}\nTotal Expenses: GHS ${totalExpenses.toFixed(2)}\nCurrent Closing Balance: GHS ${closingBalance.toFixed(2)}\n`;
-    const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Balance_Sheet_Report.txt';
-    link.click();
+  const downloadBalanceSheetPDF = () => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Balance Sheet Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
+            .report-header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
+            .logo-check { display: inline-flex; align-items: center; justify-content: center; width: 45px; height: 45px; background-color: #2563eb; color: white; border-radius: 50%; font-size: 24px; margin-bottom: 10px; }
+            .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
+            .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
+            .summary-box { display: flex; justify-content: space-around; margin: 30px 0; }
+            .card { border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px; width: 28%; text-align: center; background: #f8fafc; }
+            .amount { font-size: 20px; font-weight: bold; margin-top: 8px; }
+          </style>
+        </head>
+        <body>
+          <div class="report-header">
+            <div class="logo-check">✓</div>
+            <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
+            <div class="report-subtitle">Official Balance Sheet Report</div>
+          </div>
+          <div class="summary-box">
+            <div class="card"><div>Total Income</div><div class="amount" style="color: #16a34a;">GHS ${totalIncome.toFixed(2)}</div></div>
+            <div class="card"><div>Total Expenses</div><div class="amount" style="color: #dc2626;">GHS ${totalExpenses.toFixed(2)}</div></div>
+            <div class="card"><div>Closing Balance</div><div class="amount" style="color: #2563eb;">GHS ${closingBalance.toFixed(2)}</div></div>
+          </div>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   return (
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>Balance Sheet Summary</h3>
-        <button onClick={downloadBalanceSheet} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📥 Download Report</button>
+        <button onClick={downloadBalanceSheetPDF} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📥 Print / Save PDF</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
         <div style={{ padding: '15px', backgroundColor: '#f0fdf4', borderRadius: '8px' }}>
@@ -629,22 +654,56 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
     if (type === 'expense') setExpenses(expenses.filter((_, i) => i !== index));
   };
 
-  const downloadAccountReport = () => {
-    let reportText = `--- GRACEPOINT CHMS OFFICIAL ACCOUNT STATEMENT ---\n`;
-    reportText += `Opening Balance: GHS ${openingBalance.toFixed(2)}\nNet Movement: GHS ${netMovement.toFixed(2)}\nClosing Balance: GHS ${closingBalance.toFixed(2)}\n\n`;
-    reportText += `--- TRANSACTIONS ---\n`;
-    
-    tithes.forEach(t => reportText += `Tithe | ${t.date || 'N/A'} | ${t.member} | GHS ${t.amount}\n`);
-    incomes.forEach(inc => reportText += `Income | ${inc.date || 'N/A'} | ${inc.description} | GHS ${inc.amount}\n`);
-    pledges.forEach(p => reportText += `Pledge | Current | ${p.member} (${p.purpose}) | GHS ${p.amount}\n`);
-    expenses.forEach(exp => reportText += `Expense | ${exp.date || 'N/A'} | ${exp.description} | -GHS ${Number(exp.qty)*Number(exp.rate)}\n`);
+  const downloadAccountReportPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    let currentBal = openingBalance;
 
-    const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Account_Statement_Report.txt';
-    link.click();
+    tithes.forEach(t => { currentBal += Number(t.amount||0); rowsHtml += `<tr><td>${t.date||'N/A'}</td><td>Tithe (${t.member})</td><td style="color:#16a34a;">GHS ${Number(t.amount).toFixed(2)}</td><td>-</td><td>GHS ${currentBal.toFixed(2)}</td></tr>`; });
+    incomes.forEach(inc => { currentBal += Number(inc.amount||0); rowsHtml += `<tr><td>${inc.date||'N/A'}</td><td>Income (${inc.description})</td><td style="color:#16a34a;">GHS ${Number(inc.amount).toFixed(2)}</td><td>-</td><td>GHS ${currentBal.toFixed(2)}</td></tr>`; });
+    pledges.forEach(p => { currentBal += Number(p.amount||0); rowsHtml += `<tr><td>Current</td><td>Pledge (${p.member} - ${p.purpose})</td><td style="color:#16a34a;">GHS ${Number(p.amount).toFixed(2)}</td><td>-</td><td>GHS ${currentBal.toFixed(2)}</td></tr>`; });
+    expenses.forEach(exp => { const expT = Number(exp.qty||0)*Number(exp.rate||0); currentBal -= expT; rowsHtml += `<tr><td>${exp.date||'N/A'}</td><td>Expense (${exp.description})</td><td>-</td><td style="color:#dc2626;">GHS ${expT.toFixed(2)}</td><td>GHS ${currentBal.toFixed(2)}</td></tr>`; });
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Official Account Statement</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
+            .report-header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }
+            .logo-check { display: inline-flex; align-items: center; justify-content: center; width: 45px; height: 45px; background-color: #2563eb; color: white; border-radius: 50%; font-size: 24px; margin-bottom: 10px; }
+            .church-title { font-size: 20px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
+            .report-subtitle { font-size: 14px; color: #64748b; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
+            .metrics { display: flex; justify-content: space-between; margin-bottom: 25px; }
+            .m-card { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; width: 30%; text-align: center; background: #f8fafc; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+            th { background-color: #1e293b; color: white; }
+          </style>
+        </head>
+        <body>
+          <div class="report-header">
+            <div class="logo-check">✓</div>
+            <div class="church-title">GRACEPOINT PROPHETIC CHURCH</div>
+            <div class="report-subtitle">Official Account Statement Ledger</div>
+          </div>
+          <div class="metrics">
+            <div class="m-card">Opening Balance:<br><strong>GHS ${openingBalance.toFixed(2)}</strong></div>
+            <div class="m-card">Net Movement:<br><strong style="color:${netMovement>=0?'#16a34a':'#dc2626'}">GHS ${netMovement.toFixed(2)}</strong></div>
+            <div class="m-card">Closing Balance:<br><strong style="color:#0284c7">GHS ${closingBalance.toFixed(2)}</strong></div>
+          </div>
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th>Income</th><th>Expenses</th><th>Balance</th></tr></thead>
+            <tbody>
+              <tr><td>Initial</td><td><strong>Opening Balance</strong></td><td>-</td><td>-</td><td><strong>GHS ${openingBalance.toFixed(2)}</strong></td></tr>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   let runningBalance = openingBalance;
@@ -653,7 +712,7 @@ function AccountReport({ openingBalance, closingBalance, netMovement, incomes, s
     <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>Official Account Statement Ledger (Super Admin Mode)</h3>
-        <button onClick={downloadAccountReport} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📥 Download Report</button>
+        <button onClick={downloadAccountReportPDF} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>📥 Print / Save PDF</button>
       </div>
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px', textAlign: 'center' }}>
