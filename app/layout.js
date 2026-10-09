@@ -22,7 +22,7 @@ export default function RootLayout({ children }) {
     }
     checkUserSession();
 
-    // Dynamically inject the PWA manifest for mobile installation
+    // Dynamically inject the PWA manifest
     const link = document.createElement('link');
     link.rel = 'manifest';
     link.href = '/manifest.json';
@@ -32,6 +32,15 @@ export default function RootLayout({ children }) {
     meta.name = 'theme-color';
     meta.content = '#2563eb';
     document.head.appendChild(meta);
+
+    // Register the Service Worker for native PWA installation
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((reg) => console.log('Service Worker registered!', reg))
+          .catch((err) => console.log('Service Worker registration failed:', err));
+      });
+    }
   }, []);
 
   return (
