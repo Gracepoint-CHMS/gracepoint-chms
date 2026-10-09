@@ -14,11 +14,11 @@ export default function RootLayout({ children }) {
   useEffect(() => {
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .catch((err) => {
           console.log('SW registration failed: ', err);
         });
-      });
     }
 
     async function checkUserSession() {
@@ -43,9 +43,7 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Gracepoint CHMS - Member Portal</title>
       </head>
-      <body>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
