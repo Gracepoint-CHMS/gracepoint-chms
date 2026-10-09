@@ -12,6 +12,13 @@ export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('member');
   const [loading, setLoading] = useState(true);
+  
+  // Auth Form State
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Dashboard State
   const [activeTab, setActiveTab] = useState('members');
   const [financeView, setFinanceView] = useState('hub');
   
@@ -20,6 +27,18 @@ export default function Home() {
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [selectedMemberForWelfare, setSelectedMemberForWelfare] = useState(null);
   const [openingBalance, setOpeningBalance] = useState('2,484.32');
+
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [showAttendanceForm, setShowAttendanceForm] = useState(false);
+  const [attendanceForm, setAttendanceForm] = useState({ service_date: '', department: 'General', status: 'Present' });
+
+  const [eventsList, setEventsList] = useState([]);
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [eventForm, setEventForm] = useState({ title: '', date: '', description: '' });
+
+  const [announcementsList, setAnnouncementsList] = useState([]);
+  const [showAnnounceForm, setShowAnnounceForm] = useState(false);
+  const [announceForm, setAnnounceForm] = useState({ title: '', message: '' });
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -52,24 +71,24 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    async function getData() {
+    async function getUserData() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session && session.user) {
         setUser(session.user);
         const { data: memberData } = await supabase
           .from('members')
-          .select('*')
+          .select('role')
           .eq('email', session.user.email)
           .single();
 
-        if (memberData) {
+        if (memberData && memberData.role) {
           setRole(memberData.role);
         }
       }
-
       fetchMembers();
+      setLoading(false);
     }
-    getData();
+    getUserData();
   }, []);
 
   async function fetchMembers() {
@@ -80,8 +99,21 @@ export default function Home() {
     if (allMembers) {
       setMembers(allMembers);
     }
-    setLoading(false);
   }
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailInput,
+      password: passwordInput,
+    });
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      window.location.reload();
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -94,6 +126,17 @@ export default function Home() {
       setFormData({ ...formData, sub_departments: current.filter(d => d !== dept) });
     } else {
       setFormData({ ...formData, sub_departments: [...current, dept] });
+    }
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo_url: reader.result });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -148,11 +191,64 @@ export default function Home() {
   if (loading) {
     return (
       <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'system-ui, sans-serif', color: '#64748b' }}>
-        <p>Loading dashboard...</p>
+        <p>Loading application...</p>
       </div>
     );
   }
 
+  // If user is not authenticated, show Login Screen
+  if (!user) {
+    return (
+      <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem' }}>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint CHMS</h1>
+            <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>Portal Sign In</p>
+          </div>
+          <div style={{ padding: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem' }}>Sign In to Your Account</h2>
+            {authError && (
+              <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                {authError}
+              </div>
+            )}
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Email Address</label>
+                <input 
+                  type="email" 
+                  value={emailInput} 
+                  onChange={(e) => setEmailInput(e.target.value)} 
+                  required 
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                  placeholder="Enter your email"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Password</label>
+                <input 
+                  type="password" 
+                  value={passwordInput} 
+                  onChange={(e) => setPasswordInput(e.target.value)} 
+                  required 
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                  placeholder="Enter your password"
+                />
+              </div>
+              <button 
+                type="submit" 
+                style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '1rem', cursor: 'pointer', marginTop: '0.5rem' }}
+              >
+                Login
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Authenticated Admin Dashboard
   return (
     <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
       
@@ -161,8 +257,9 @@ export default function Home() {
           Gracepoint CHMS
         </h1>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.9rem', cursor: 'pointer' }}>Language: English</span>
+          <span style={{ fontSize: '0.9rem' }}>Language: English</span>
           <button 
+            type="button"
             onClick={handleLogout}
             style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}
           >
@@ -178,10 +275,14 @@ export default function Home() {
         </h2>
 
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <button style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
+          <button type="button" style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
             My Portal
           </button>
-          <button onClick={handleLogout} style={{ backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
+          <button 
+            type="button" 
+            onClick={handleLogout} 
+            style={{ backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}
+          >
             Logout
           </button>
         </div>
@@ -194,6 +295,7 @@ export default function Home() {
             return (
               <button 
                 key={tab}
+                type="button"
                 onClick={() => { setActiveTab(tab.toLowerCase()); setFinanceView('hub'); setShowRegisterForm(false); }}
                 style={{ 
                   backgroundColor: isActive ? '#2563eb' : '#f1f5f9', 
@@ -212,6 +314,7 @@ export default function Home() {
           })}
         </div>
 
+        {/* Members Tab */}
         {activeTab === 'members' && (
           <div>
             {!showRegisterForm ? (
@@ -241,9 +344,13 @@ export default function Home() {
                     return (
                       <div key={m.id || index} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                          <div style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                            {initials}
-                          </div>
+                          {m.photo_url ? (
+                            <img src={m.photo_url} alt="Member" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                              {initials}
+                            </div>
+                          )}
                           <div>
                             <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Photo & Name</div>
                             <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#0f172a' }}>{nameStr}</div>
@@ -346,8 +453,9 @@ export default function Home() {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Member Photo URL / Image Link</label>
-                    <input type="text" value={formData.photo_url} onChange={(e) => setFormData({...formData, photo_url: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="https://..." />
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Upload Member Photo</label>
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', boxSizing: 'border-box' }} />
+                    {formData.photo_url && <p style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.25rem' }}>Photo attached successfully!</p>}
                   </div>
 
                   <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.5rem' }}>
@@ -359,6 +467,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* Contributions Tab */}
         {activeTab === 'contributions' && (
           <div>
             {financeView === 'hub' && (
@@ -368,7 +477,7 @@ export default function Home() {
                     <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Opening Balance</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {openingBalance}</div>
                   </div>
-                  <button onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(val); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
+                  <button type="button" onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(val); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
                     ✏️ Edit Opening Balance
                   </button>
                 </div>
@@ -421,7 +530,7 @@ export default function Home() {
 
             {financeView === 'welfare' && (
               <div>
-                <button onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                <button type="button" onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
 
@@ -449,7 +558,7 @@ export default function Home() {
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
                         {`${selectedMemberForWelfare.first_name || ''} ${selectedMemberForWelfare.last_name || ''}`.trim() || selectedMemberForWelfare.email}
                       </h3>
-                      <button onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                      <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
                     <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions (Jan - Dec, 4 weeks/month):</p>
                     
@@ -479,7 +588,7 @@ export default function Home() {
                       </table>
                     </div>
 
-                    <button onClick={() => { alert('Welfare records saved!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
+                    <button type="button" onClick={() => { alert('Welfare records saved!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
                       Save Welfare Records
                     </button>
                   </div>
@@ -491,7 +600,7 @@ export default function Home() {
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
                 <h3 style={{ textTransform: 'capitalize', color: '#0f172a', marginBottom: '0.5rem' }}>{financeView.replace('_', ' ')} Module</h3>
                 <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>Module active and functional.</p>
-                <button onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem 1.25rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem 1.25rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
                   ← Back to Finance Hub
                 </button>
               </div>
@@ -499,24 +608,169 @@ export default function Home() {
           </div>
         )}
 
+        {/* Attendance Tab */}
         {activeTab === 'attendance' && (
-          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-            <h3>Service Attendance Logs</h3>
-            <p>Attendance tracking module ready.</p>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Service Attendance Logs</h3>
+              <button type="button" onClick={() => setShowAttendanceForm(!showAttendanceForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                {showAttendanceForm ? 'Cancel' : '+ Log Attendance'}
+              </button>
+            </div>
+
+            {showAttendanceForm && (
+              <form onSubmit={(e) => { e.preventDefault(); setAttendanceLogs([attendanceForm, ...attendanceLogs]); setAttendanceForm({ service_date: '', department: 'General', status: 'Present' }); setShowAttendanceForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>New Attendance Record</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Service Date</label>
+                    <input type="date" required value={attendanceForm.service_date} onChange={(e) => setAttendanceForm({...attendanceForm, service_date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Department</label>
+                    <select value={attendanceForm.department} onChange={(e) => setAttendanceForm({...attendanceForm, department: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="General">General</option>
+                      <option value="LOVE">LOVE</option>
+                      <option value="UNITY">UNITY</option>
+                      <option value="CARE">CARE</option>
+                      <option value="RESPECT">RESPECT</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Status</label>
+                    <select value={attendanceForm.status} onChange={(e) => setAttendanceForm({...attendanceForm, status: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="Present">Present</option>
+                      <option value="Absent">Absent</option>
+                      <option value="Excused">Excused</option>
+                    </select>
+                  </div>
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Save Attendance Log
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontWeight: 'bold', color: '#0f172a', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+              <span>Service Date</span>
+              <span>Department</span>
+              <span>Status</span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {attendanceLogs.length > 0 ? (
+                attendanceLogs.map((log, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontSize: '0.9rem', color: '#334155' }}>
+                    <span>{log.service_date}</span>
+                    <span>{log.department}</span>
+                    <span style={{ fontWeight: 'bold', color: log.status === 'Present' ? '#16a34a' : '#dc2626' }}>{log.status}</span>
+                  </div>
+                ))
+              ) : (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>No attendance logs recorded yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
+        {/* Events Tab */}
         {activeTab === 'events' && (
-          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-            <h3>Church Events</h3>
-            <p>Program schedules and calendar management.</p>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Church Events</h3>
+              <button type="button" onClick={() => setShowEventForm(!showEventForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                {showEventForm ? 'Cancel' : '+ Add Event'}
+              </button>
+            </div>
+
+            {showEventForm && (
+              <form onSubmit={(e) => { e.preventDefault(); setEventsList([eventForm, ...eventsList]); setEventForm({ title: '', date: '', description: '' }); setShowEventForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Create New Event</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Event Title</label>
+                    <input type="text" required value={eventForm.title} onChange={(e) => setEventForm({...eventForm, title: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Event title" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Event Date</label>
+                    <input type="date" required value={eventForm.date} onChange={(e) => setEventForm({...eventForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Description</label>
+                    <textarea value={eventForm.description} onChange={(e) => setEventForm({...eventForm, description: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', height: '4rem' }} placeholder="Event details..." />
+                  </div>
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Publish Event
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {eventsList.length > 0 ? (
+                eventsList.map((ev, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <h4 style={{ margin: 0, color: '#1e3a8a', fontSize: '1rem' }}>{ev.title}</h4>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>{ev.date}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155' }}>{ev.description}</p>
+                  </div>
+                ))
+              ) : (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>No upcoming events scheduled yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
+        {/* Announcements Tab */}
         {activeTab === 'announcements' && (
-          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-            <h3>Church Announcements</h3>
-            <p>Congregational broadcasts and updates.</p>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Church Announcements</h3>
+              <button type="button" onClick={() => setShowAnnounceForm(!showAnnounceForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                {showAnnounceForm ? 'Cancel' : '+ Post Announcement'}
+              </button>
+            </div>
+
+            {showAnnounceForm && (
+              <form onSubmit={(e) => { e.preventDefault(); setAnnouncementsList([announceForm, ...announcementsList]); setAnnounceForm({ title: '', message: '' }); setShowAnnounceForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>New Announcement</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Title</label>
+                    <input type="text" required value={announceForm.title} onChange={(e) => setAnnounceForm({...announceForm, title: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Announcement title" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Message</label>
+                    <textarea required value={announceForm.message} onChange={(e) => setAnnounceForm({...announceForm, message: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', height: '4rem' }} placeholder="Broadcast message..." />
+                  </div>
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Broadcast Announcement
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {announcementsList.length > 0 ? (
+                announcementsList.map((ann, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#1e3a8a', fontSize: '1rem' }}>{ann.title}</h4>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155' }}>{ann.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>No announcements broadcasted yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
