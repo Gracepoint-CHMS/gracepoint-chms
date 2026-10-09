@@ -1,59 +1,51 @@
 body {
-  background-color: #f1f5f9;
+  background-color: #f8fafc;
   font-family: system-ui, -apple-system, sans-serif;
   color: #1e293b;
   margin: 0;
   padding: 0;
 }
 
-header {
+header, .bg-blue-900 {
   background-color: #1e3a8a;
-  color: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  color: #ffffff;
 }
 
-.min-h-screen { min-height: 100vh; }
-.bg-slate-100 { background-color: #f1f5f9; }
-.bg-slate-50 { background-color: #f8fafc; }
-.bg-white { background-color: #ffffff; }
-.bg-blue-900 { background-color: #1e3a8a; }
-.bg-blue-100 { background-color: #dbeafe; }
-.bg-red-600 { background-color: #dc2626; }
-.text-white { color: #ffffff; }
-.text-slate-800 { color: #1e293b; }
-.text-slate-600 { color: #475569; }
-.text-slate-500 { color: #64748b; }
-.text-green-600 { color: #16a34a; }
-.text-blue-600 { color: #2563eb; }
-.text-amber-600 { color: #d97706; }
-.text-blue-800 { color: #1e40af; }
-.font-bold { font-weight: 700; }
-.font-medium { font-weight: 500; }
-.shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); }
-.rounded-lg { border-radius: 0.5rem; }
-.rounded-full { border-radius: 9999px; }
-.rounded { border-radius: 0.25rem; }
-.max-w-4xl { max-width: 56rem; margin-left: auto; margin-right: auto; }
-.mx-auto { margin-left: auto; margin-right: auto; }
-.px-4 { padding-left: 1rem; padding-right: 1rem; }
-.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
-.p-6 { padding: 1.5rem; }
-.p-4 { padding: 1rem; }
-.mt-6 { margin-top: 1.5rem; }
-.mt-1 { margin-top: 0.25rem; }
-.mb-4 { margin-bottom: 1rem; }
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.justify-between { justify-content: space-between; }
-.items-center { align-items: center; }
-.gap-4 { gap: 1rem; }
-.grid { display: grid; }
-.grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-.border { border-width: 1px; border-style: solid; }
-.border-slate-200 { border-color: #e2e8f0; }
-.text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-.text-2xl { font-size: 1.5rem; line-height: 2rem; }
-.text-xs { font-size: 0.75rem; line-height: 1rem; }
-.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-.uppercase { text-transform: uppercase; }
-.pb-12 { padding-bottom: 3rem; }
+.max-w-4xl {
+  max-width: 56rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.p-6, .p-4 {
+  padding: 1.5rem;
+}
+
+.bg-white {
+  background-color: #ffffff;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 1rem;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.flex {
+  display: flex;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.items-center {
+  align-items: center;
+}
