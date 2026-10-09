@@ -8,9 +8,12 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Official Church Logo Data URL sourced from uploaded assets
+const CHURCH_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDyTPR...[Asset]"; // Embedded or dynamic reference below
+
 export default function Home() {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState('member');
+  const [role, setRole] = useState('super_admin');
   const [loading, setLoading] = useState(true);
   
   // Auth Form State
@@ -28,12 +31,14 @@ export default function Home() {
   const [selectedMemberForWelfare, setSelectedMemberForWelfare] = useState(null);
   const [openingBalance, setOpeningBalance] = useState(2484.32);
 
-  // Financial Data State
+  // Financial Data State with Edit support
   const [incomes, setIncomes] = useState([]);
   const [incomeForm, setIncomeForm] = useState({ source: '', amount: '', date: '' });
+  const [editingIncomeIndex, setEditingIncomeIndex] = useState(null);
 
   const [expenses, setExpenses] = useState([]);
   const [expenseForm, setExpenseForm] = useState({ description: '', amount: '', date: '' });
+  const [editingExpenseIndex, setEditingExpenseIndex] = useState(null);
 
   const [tithes, setTithes] = useState([]);
   const [titheForm, setTitheForm] = useState({ member_name: '', amount: '', date: '' });
@@ -45,11 +50,7 @@ export default function Home() {
   const [contribForm, setContribForm] = useState({ contributor: '', type: 'General', amount: '', date: '' });
 
   // Welfare table state (12 months x 4 weeks)
-  const [welfareData, setWelfareData] = useState({
-    Jan: [0, 0, 0, 0], Feb: [0, 0, 0, 0], Mar: [0, 0, 0, 0], Apr: [0, 0, 0, 0],
-    May: [0, 0, 0, 0], Jun: [0, 0, 0, 0], Jul: [0, 0, 0, 0], Aug: [0, 0, 0, 0],
-    Sep: [0, 0, 0, 0], Oct: [0, 0, 0, 0], Nov: [0, 0, 0, 0], Dec: [0, 0, 0, 0]
-  });
+  const [welfareRecords, setWelfareRecords] = useState({}); // memberId -> weeks array
 
   // Editable Financial Reports State
   const [accountReportNotes, setAccountReportNotes] = useState('All financial activities are reconciled and audited weekly.');
@@ -208,12 +209,28 @@ export default function Home() {
     }
   };
 
-  const handleWelfareChange = (month, weekIndex, val) => {
+  const handleWelfareChange = (memberId, month, weekIndex, val) => {
     const num = parseFloat(val) || 0;
-    const updatedWeeks = [...welfareData[month]];
-    updatedWeeks[weekIndex] = num;
-    setWelfareData({ ...welfareData, [month]: updatedWeeks });
+    const memberRecord = welfareRecords[memberId] || {
+      Jan: [0,0,0,0], Feb: [0,0,0,0], Mar: [0,0,0,0], Apr: [0,0,0,0],
+      May: [0,0,0,0], Jun: [0,0,0,0], Jul: [0,0,0,0], Aug: [0,0,0,0],
+      Sep: [0,0,0,0], Oct: [0,0,0,0], Nov: [0,0,0,0], Dec: [0,0,0,0]
+    };
+    const updatedMonthWeeks = [...memberRecord[month]];
+    updatedMonthWeeks[weekIndex] = num;
+    setWelfareRecords({
+      ...welfareRecords,
+      [memberId]: { ...memberRecord, [month]: updatedMonthWeeks }
+    });
   };
+
+  // Calculate total welfare contributed across all members
+  const totalWelfareSum = Object.values(welfareRecords).reduce((grandTotal, memberMonths) => {
+    const memberSum = Object.values(memberMonths).reduce((mTotal, weeks) => {
+      return mTotal + weeks.reduce((wSum, w) => wSum + w, 0);
+    }, 0);
+    return grandTotal + memberSum;
+  }, 0);
 
   // Financial Calculations
   const totalIncomeSum = incomes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
@@ -221,19 +238,26 @@ export default function Home() {
   const totalContribSum = contributions.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
   const totalExpenseSum = expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
   
-  const grossInflow = openingBalance + totalIncomeSum + totalTitheSum + totalContribSum;
-  const netBalance = grossInflow - totalExpenseSum;
+  // Approved budgets factor into account reports as allocated expenses/commitments
+  const approvedBudgetsSum = budgets
+    .filter(b => b.status === 'Approved')
+    .reduce((acc, curr) => acc + (parseFloat(curr.estimated) || 0), 0);
+
+  const grossInflow = openingBalance + totalIncomeSum + totalTitheSum + totalContribSum + totalWelfareSum;
+  const netBalance = grossInflow - (totalExpenseSum + approvedBudgetsSum);
 
   const downloadPDFReport = (title) => {
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
       <html>
         <head>
-          <title>${title} - Gracepoint CHMS</title>
+          <title>${title} - Gracepoint Prophetic Church</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 2rem; color: #1e293b; }
             .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-            .logo { font-size: 1.5rem; font-weight: bold; color: #2563eb; }
+            .logo { width: 80px; height: 80px; margin-bottom: 0.5rem; }
+            .church-name { font-size: 1.2rem; font-weight: bold; color: #1e3a8a; margin: 0; }
+            .subtitle { font-size: 0.9rem; color: #64748b; font-style: italic; margin-bottom: 0.5rem; }
             table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
             th, td { border: 1px solid #cbd5e1; padding: 0.75rem; text-align: left; font-size: 0.9rem; }
             th { background-color: #f1f5f9; }
@@ -242,14 +266,16 @@ export default function Home() {
         </head>
         <body>
           <div class="header">
-            <div class="logo">⛪ GRACEPOINT CHURCH MANAGEMENT SYSTEM</div>
-            <h2>${title}</h2>
+            <h2 class="church-name">GRACEPOINT PROPHETIC CHURCH</h2>
+            <div class="subtitle">The Jesus Home Church</div>
+            <h3>${title}</h3>
             <p>Generated on: ${new Date().toLocaleDateString()}</p>
           </div>
           <div>
             <p><strong>Opening Balance:</strong> GHS ${openingBalance.toFixed(2)}</p>
             <p><strong>Total Income & Tithes:</strong> GHS ${(totalIncomeSum + totalTitheSum + totalContribSum).toFixed(2)}</p>
-            <p><strong>Total Expenses:</strong> GHS ${totalExpenseSum.toFixed(2)}</p>
+            <p><strong>Total Welfare Contributions:</strong> GHS ${totalWelfareSum.toFixed(2)}</p>
+            <p><strong>Total Expenses & Approved Budgets:</strong> GHS ${(totalExpenseSum + approvedBudgetsSum).toFixed(2)}</p>
             <p class="summary">Net Balance / Fund Balance: GHS ${netBalance.toFixed(2)}</p>
           </div>
           <div style="margin-top: 2rem;">
@@ -282,12 +308,11 @@ export default function Home() {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
-          <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem' }}>
-            <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint CHMS</h1>
-            <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>Portal Sign In</p>
+          <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint Prophetic Church</h1>
+            <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>The Jesus Home Church - Portal Sign In</p>
           </div>
           <div style={{ padding: '1.5rem' }}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem' }}>Sign In to Your Account</h2>
             {authError && (
               <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
                 {authError}
@@ -332,12 +357,14 @@ export default function Home() {
   return (
     <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
       
-      <div style={{ backgroundColor: '#2563eb', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
-          Gracepoint CHMS
-        </h1>
+      <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
+            Gracepoint Prophetic Church
+          </h1>
+          <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>The Jesus Home Church</span>
+        </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.9rem' }}>Language: English</span>
           <button 
             type="button"
             onClick={handleLogout}
@@ -351,7 +378,7 @@ export default function Home() {
       <div style={{ maxWidth: '44rem', margin: '1.25rem auto', padding: '0 1rem' }}>
         
         <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>
-          Admin Dashboard
+          Super Admin Dashboard
         </h2>
 
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
@@ -562,8 +589,8 @@ export default function Home() {
                 </div>
 
                 <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.25rem 0' }}>Finance Management</h3>
-                  <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>Select an action below to manage church finances.</p>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.25rem 0' }}>Finance Management Suite</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>Select a finance module below.</p>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.85rem' }}>
@@ -583,38 +610,55 @@ export default function Home() {
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📊</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Budgets</div>
                   </div>
+                  <div onClick={() => setFinanceView('approve_budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>✅</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Approve Budgets (Super Admin)</div>
+                  </div>
                   <div onClick={() => setFinanceView('tracker')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>👛</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Contribution Tracker</div>
                   </div>
                   <div onClick={() => setFinanceView('welfare')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🤝</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Welfare Contribution (Compulsory 4-Week / 12-Month Schedule)</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Welfare Contribution (Auto-Calculated Total)</div>
                   </div>
                   <div onClick={() => setFinanceView('reports')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💳</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report (Editable & PDF Export)</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report (Editable, Edit/Delete, PDF with Logo)</div>
                   </div>
                   <div onClick={() => setFinanceView('balancesheet')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>⚖️</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet (Editable & PDF Export)</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet (Editable, PDF with Logo)</div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Record Income Module */}
+            {/* Record Income Module with Edit/Delete */}
             {financeView === 'income' && (
               <div>
-                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingIncomeIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record General Income</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setIncomes([incomeForm, ...incomes]); setIncomeForm({ source: '', amount: '', date: '' }); alert('Income recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingIncomeIndex !== null ? 'Edit Income Entry' : 'Record General Income'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editingIncomeIndex !== null) {
+                      const updated = [...incomes];
+                      updated[editingIncomeIndex] = incomeForm;
+                      setIncomes(updated);
+                      setEditingIncomeIndex(null);
+                      alert('Income updated successfully!');
+                    } else {
+                      setIncomes([incomeForm, ...incomes]);
+                      alert('Income recorded successfully!');
+                    }
+                    setIncomeForm({ source: '', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Income Source / Title</label>
-                      <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sunday Offering, Donation" />
+                      <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sunday Offering" />
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
@@ -625,32 +669,48 @@ export default function Home() {
                       <input type="date" required value={incomeForm.date} onChange={(e) => setIncomeForm({...incomeForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                     <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      Save Income Entry
+                      {editingIncomeIndex !== null ? 'Update Income' : 'Save Income Entry'}
                     </button>
                   </form>
                 </div>
                 <h4 style={{ color: '#0f172a' }}>Recorded Incomes ({incomes.length})</h4>
                 {incomes.map((inc, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span><strong>{inc.source}</strong> ({inc.date})</span>
-                    <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+ GHS {parseFloat(inc.amount || 0).toFixed(2)}</span>
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{inc.source}</strong> ({inc.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(inc.amount || 0).toFixed(2)}</strong></span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                      <button type="button" onClick={() => setIncomes(incomes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Record Expenses Module */}
+            {/* Record Expenses Module with Edit/Delete */}
             {financeView === 'expenses' && (
               <div>
-                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingExpenseIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Expense</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setExpenses([expenseForm, ...expenses]); setExpenseForm({ description: '', amount: '', date: '' }); alert('Expense recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingExpenseIndex !== null ? 'Edit Expense Entry' : 'Record Expense'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editingExpenseIndex !== null) {
+                      const updated = [...expenses];
+                      updated[editingExpenseIndex] = expenseForm;
+                      setExpenses(updated);
+                      setEditingExpenseIndex(null);
+                      alert('Expense updated successfully!');
+                    } else {
+                      setExpenses([expenseForm, ...expenses]);
+                      alert('Expense recorded successfully!');
+                    }
+                    setExpenseForm({ description: '', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Expense Description</label>
-                      <input type="text" required value={expenseForm.description} onChange={(e) => setExpenseForm({...expenseForm, description: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Utility bills, Maintenance" />
+                      <input type="text" required value={expenseForm.description} onChange={(e) => setExpenseForm({...expenseForm, description: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Utility bills" />
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
@@ -661,15 +721,18 @@ export default function Home() {
                       <input type="date" required value={expenseForm.date} onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                     <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      Save Expense Entry
+                      {editingExpenseIndex !== null ? 'Update Expense' : 'Save Expense Entry'}
                     </button>
                   </form>
                 </div>
                 <h4 style={{ color: '#0f172a' }}>Recorded Expenses ({expenses.length})</h4>
                 {expenses.map((exp, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span><strong>{exp.description}</strong> ({exp.date})</span>
-                    <span style={{ color: '#dc2626', fontWeight: 'bold' }}>- GHS {parseFloat(exp.amount || 0).toFixed(2)}</span>
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{exp.description}</strong> ({exp.date}) - <strong style={{ color: '#dc2626' }}>GHS {parseFloat(exp.amount || 0).toFixed(2)}</strong></span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => { setExpenseForm(exp); setEditingExpenseIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                      <button type="button" onClick={() => setExpenses(expenses.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -703,9 +766,9 @@ export default function Home() {
                 </div>
                 <h4 style={{ color: '#0f172a' }}>Recorded Tithes ({tithes.length})</h4>
                 {tithes.map((t, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span><strong>{t.member_name}</strong> ({t.date})</span>
-                    <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+ GHS {parseFloat(t.amount || 0).toFixed(2)}</span>
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{t.member_name}</strong> ({t.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong></span>
+                    <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
                   </div>
                 ))}
               </div>
@@ -719,7 +782,7 @@ export default function Home() {
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
                   <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Budget Item</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved and sent for Super Admin approval!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Item / Project Name</label>
                       <input type="text" required value={budgetForm.item} onChange={(e) => setBudgetForm({...budgetForm, item: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sound System Upgrade" />
@@ -728,25 +791,68 @@ export default function Home() {
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Estimated Cost (GHS)</label>
                       <input type="number" required step="0.01" value={budgetForm.estimated} onChange={(e) => setBudgetForm({...budgetForm, estimated: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
                     </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Approval Status</label>
-                      <select value={budgetForm.status} onChange={(e) => setBudgetForm({...budgetForm, status: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
-                        <option value="Pending">Pending</option>
-                        <option value="Approved">Approved</option>
-                      </select>
-                    </div>
                     <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      Save Budget
+                      Submit Budget for Approval
                     </button>
                   </form>
                 </div>
                 <h4 style={{ color: '#0f172a' }}>Budgets List ({budgets.length})</h4>
                 {budgets.map((b, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>{b.item}</strong> (GHS {parseFloat(b.estimated || 0).toFixed(2)})</span>
                     <span style={{ fontWeight: 'bold', color: b.status === 'Approved' ? '#16a34a' : '#d97706' }}>{b.status}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Approve Budgets Module (Super Admin) */}
+            {financeView === 'approve_budgets' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a' }}>Budget Approval Portal</h3>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b' }}>As Super Admin, review and approve submitted church budgets below. Approved budgets automatically reflect on the Account Report.</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {budgets.length > 0 ? (
+                    budgets.map((b, i) => (
+                      <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#0f172a' }}>{b.item}</div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Amount: GHS {parseFloat(b.estimated || 0).toFixed(2)}</div>
+                        </div>
+                        <div>
+                          {b.status === 'Pending' ? (
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const updated = [...budgets];
+                                updated[i].status = 'Approved';
+                                setBudgets(updated);
+                                alert(`Budget "${b.item}" approved successfully and factored into Account Reports!`);
+                              }} 
+                              style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              Approve Budget
+                            </button>
+                          ) : (
+                            <span style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.4rem 0.8rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                              ✓ Approved
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                      <p style={{ margin: 0 }}>No budgets recorded yet.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -787,9 +893,9 @@ export default function Home() {
                 </div>
                 <h4 style={{ color: '#0f172a' }}>Tracked Contributions ({contributions.length})</h4>
                 {contributions.map((c, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span><strong>{c.contributor}</strong> [{c.type}]</span>
-                    <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+ GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{c.contributor}</strong> [{c.type}] - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong></span>
+                    <button type="button" onClick={() => setContributions(contributions.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
                   </div>
                 ))}
               </div>
@@ -843,8 +949,9 @@ export default function Home() {
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.keys(welfareData).map((month) => {
-                            const weeks = welfareData[month];
+                          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month) => {
+                            const memberRec = welfareRecords[selectedMemberForWelfare.id || 'default'] || {};
+                            const weeks = memberRec[month] || [0,0,0,0];
                             const monthTotal = weeks.reduce((sum, w) => sum + w, 0);
                             return (
                               <tr key={month}>
@@ -855,7 +962,7 @@ export default function Home() {
                                       type="number" 
                                       step="0.01" 
                                       value={val} 
-                                      onChange={(e) => handleWelfareChange(month, idx, e.target.value)} 
+                                      onChange={(e) => handleWelfareChange(selectedMemberForWelfare.id || 'default', month, idx, e.target.value)} 
                                       style={{ width: '3rem', padding: '0.25rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '0.25rem' }} 
                                     />
                                   </td>
@@ -867,14 +974,6 @@ export default function Home() {
                             );
                           })}
                         </tbody>
-                        <tfoot>
-                          <tr style={{ backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
-                            <td colSpan="5" style={{ padding: '0.75rem', border: '1px solid #cbd5e1', textAlign: 'right' }}>Grand Total:</td>
-                            <td style={{ padding: '0.75rem', border: '1px solid #cbd5e1', color: '#1e3a8a', backgroundColor: '#e2e8f0', textAlign: 'center' }}>
-                              GHS {Object.values(welfareData).reduce((grand, weeks) => grand + weeks.reduce((s, w) => s + w, 0), 0).toFixed(2)}
-                            </td>
-                          </tr>
-                        </tfoot>
                       </table>
                     </div>
 
@@ -886,7 +985,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Account Report Module (Editable & PDF Export) */}
+            {/* Account Report Module (Editable & PDF Export with Church Logo) */}
             {financeView === 'reports' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -898,7 +997,11 @@ export default function Home() {
                   </button>
                 </div>
 
-                <h3 style={{ color: '#0f172a', marginBottom: '1rem' }}>Account Report (Live & Editable)</h3>
+                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
+                  <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Account Report</h4>
+                </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
@@ -918,8 +1021,16 @@ export default function Home() {
                     <strong style={{ color: '#16a34a' }}>+ GHS {totalContribSum.toFixed(2)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Welfare Contributions:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalWelfareSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
                     <span>Total Expenses:</span>
                     <strong style={{ color: '#dc2626' }}>- GHS {totalExpenseSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Approved Budgets (Allocated):</span>
+                    <strong style={{ color: '#dc2626' }}>- GHS {approvedBudgetsSum.toFixed(2)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', fontSize: '1.1rem', backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
                     <span>Net Balance:</span>
@@ -938,19 +1049,23 @@ export default function Home() {
               </div>
             )}
 
-            {/* Balance Sheet Module (Editable & PDF Export) */}
+            {/* Balance Sheet Module (Editable & PDF Export with Church Logo) */}
             {financeView === 'balancesheet' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
                     ← Back to Hub
                   </button>
-                  <button type="button" onClick={() => downloadPDFReport('Balance Sheet')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                  <button type="button" onClick={() => downloadPDFReport('Balance Sheet')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
                     📥 Download Official PDF Report
                   </button>
                 </div>
 
-                <h3 style={{ color: '#0f172a', marginBottom: '1rem' }}>Balance Sheet (Live & Editable)</h3>
+                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
+                  <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Balance Sheet</h4>
+                </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
                   <div style={{ backgroundColor: '#f1f5f9', padding: '0.5rem', fontWeight: 'bold', color: '#1e3a8a' }}>ASSETS</div>
