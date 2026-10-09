@@ -1,7 +1,13 @@
 'use client';
 
+import './globals.css';
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function RootLayout({ children }) {
   const [role, setRole] = useState(null);
@@ -36,8 +42,8 @@ export default function RootLayout({ children }) {
     // Register the Service Worker for native PWA installation
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then((reg) => console.log('Service Worker registered!', reg))
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then((reg) => console.log('Service Worker scope:', reg.scope))
           .catch((err) => console.log('Service Worker registration failed:', err));
       });
     }
