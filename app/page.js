@@ -8,9 +8,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Official Church Logo Data URL sourced from uploaded assets
-const CHURCH_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDyTPR...[Asset]"; // Embedded or dynamic reference below
-
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('super_admin');
@@ -42,15 +39,17 @@ export default function Home() {
 
   const [tithes, setTithes] = useState([]);
   const [titheForm, setTitheForm] = useState({ member_name: '', amount: '', date: '' });
+  const [editingTitheIndex, setEditingTitheIndex] = useState(null);
 
   const [budgets, setBudgets] = useState([]);
   const [budgetForm, setBudgetForm] = useState({ item: '', estimated: '', status: 'Pending' });
 
   const [contributions, setContributions] = useState([]);
   const [contribForm, setContribForm] = useState({ contributor: '', type: 'General', amount: '', date: '' });
+  const [editingContribIndex, setEditingContribIndex] = useState(null);
 
   // Welfare table state (12 months x 4 weeks)
-  const [welfareRecords, setWelfareRecords] = useState({}); // memberId -> weeks array
+  const [welfareRecords, setWelfareRecords] = useState({});
 
   // Editable Financial Reports State
   const [accountReportNotes, setAccountReportNotes] = useState('All financial activities are reconciled and audited weekly.');
@@ -224,7 +223,6 @@ export default function Home() {
     });
   };
 
-  // Calculate total welfare contributed across all members
   const totalWelfareSum = Object.values(welfareRecords).reduce((grandTotal, memberMonths) => {
     const memberSum = Object.values(memberMonths).reduce((mTotal, weeks) => {
       return mTotal + weeks.reduce((wSum, w) => wSum + w, 0);
@@ -232,13 +230,11 @@ export default function Home() {
     return grandTotal + memberSum;
   }, 0);
 
-  // Financial Calculations
   const totalIncomeSum = incomes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
   const totalTitheSum = tithes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
   const totalContribSum = contributions.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
   const totalExpenseSum = expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
   
-  // Approved budgets factor into account reports as allocated expenses/commitments
   const approvedBudgetsSum = budgets
     .filter(b => b.status === 'Approved')
     .reduce((acc, curr) => acc + (parseFloat(curr.estimated) || 0), 0);
@@ -255,7 +251,6 @@ export default function Home() {
           <style>
             body { font-family: Arial, sans-serif; padding: 2rem; color: #1e293b; }
             .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-            .logo { width: 80px; height: 80px; margin-bottom: 0.5rem; }
             .church-name { font-size: 1.2rem; font-weight: bold; color: #1e3a8a; margin: 0; }
             .subtitle { font-size: 0.9rem; color: #64748b; font-style: italic; margin-bottom: 0.5rem; }
             table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -738,15 +733,28 @@ export default function Home() {
               </div>
             )}
 
-            {/* Tithes Module */}
+            {/* Tithes Module with Edit/Delete */}
             {financeView === 'tithes' && (
               <div>
-                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingTitheIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Member Tithes</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setTithes([titheForm, ...tithes]); setTitheForm({ member_name: '', amount: '', date: '' }); alert('Tithe recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingTitheIndex !== null ? 'Edit Tithe Entry' : 'Record Member Tithes'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editingTitheIndex !== null) {
+                      const updated = [...tithes];
+                      updated[editingTitheIndex] = titheForm;
+                      setTithes(updated);
+                      setEditingTitheIndex(null);
+                      alert('Tithe updated successfully!');
+                    } else {
+                      setTithes([titheForm, ...tithes]);
+                      alert('Tithe recorded successfully!');
+                    }
+                    setTitheForm({ member_name: '', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Member Name</label>
                       <input type="text" required value={titheForm.member_name} onChange={(e) => setTitheForm({...titheForm, member_name: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
@@ -760,7 +768,7 @@ export default function Home() {
                       <input type="date" required value={titheForm.date} onChange={(e) => setTitheForm({...titheForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                     <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      Save Tithe Entry
+                      {editingTitheIndex !== null ? 'Update Tithe' : 'Save Tithe Entry'}
                     </button>
                   </form>
                 </div>
@@ -768,7 +776,10 @@ export default function Home() {
                 {tithes.map((t, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>{t.member_name}</strong> ({t.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong></span>
-                    <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                      <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -856,15 +867,28 @@ export default function Home() {
               </div>
             )}
 
-            {/* Contribution Tracker Module */}
+            {/* Contribution Tracker Module with Edit/Delete */}
             {financeView === 'tracker' && (
               <div>
-                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingContribIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Contribution Tracker</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setContributions([contribForm, ...contributions]); setContribForm({ contributor: '', type: 'General', amount: '', date: '' }); alert('Contribution recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingContribIndex !== null ? 'Edit Contribution Entry' : 'Contribution Tracker'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editingContribIndex !== null) {
+                      const updated = [...contributions];
+                      updated[editingContribIndex] = contribForm;
+                      setContributions(updated);
+                      setEditingContribIndex(null);
+                      alert('Contribution updated successfully!');
+                    } else {
+                      setContributions([contribForm, ...contributions]);
+                      alert('Contribution recorded successfully!');
+                    }
+                    setContribForm({ contributor: '', type: 'General', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contributor Name</label>
                       <input type="text" required value={contribForm.contributor} onChange={(e) => setContribForm({...contribForm, contributor: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Name or anonymous" />
@@ -887,7 +911,7 @@ export default function Home() {
                       <input type="date" required value={contribForm.date} onChange={(e) => setContribForm({...contribForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                     <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      Save Contribution
+                      {editingContribIndex !== null ? 'Update Contribution' : 'Save Contribution'}
                     </button>
                   </form>
                 </div>
@@ -895,7 +919,10 @@ export default function Home() {
                 {contributions.map((c, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>{c.contributor}</strong> [{c.type}] - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong></span>
-                    <button type="button" onClick={() => setContributions(contributions.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => { setContribForm(c); setEditingContribIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                      <button type="button" onClick={() => setContributions(contributions.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -985,7 +1012,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Account Report Module (Editable & PDF Export with Church Logo) */}
+            {/* Account Report Module with Full Edit/Delete Listings */}
             {financeView === 'reports' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1038,6 +1065,56 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Detailed Entries with Quick Edit/Delete Buttons */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Detailed Entries & Correction Management</h4>
+                  
+                  {incomes.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Incomes:</div>
+                      {incomes.map((inc, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span>{inc.source} (+GHS {inc.amount})</span>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); setFinanceView('income'); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
+                            <button type="button" onClick={() => setIncomes(incomes.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {tithes.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Tithes:</div>
+                      {tithes.map((t, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span>{t.member_name} (+GHS {t.amount})</span>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); setFinanceView('tithes'); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
+                            <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {expenses.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Expenses:</div>
+                      {expenses.map((exp, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span>{exp.description} (-GHS {exp.amount})</span>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button type="button" onClick={() => { setExpenseForm(exp); setEditingExpenseIndex(i); setFinanceView('expenses'); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
+                            <button type="button" onClick={() => setExpenses(expenses.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Notes / Audit Remarks</label>
                   <textarea 
@@ -1049,7 +1126,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Balance Sheet Module (Editable & PDF Export with Church Logo) */}
+            {/* Balance Sheet Module */}
             {financeView === 'balancesheet' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
