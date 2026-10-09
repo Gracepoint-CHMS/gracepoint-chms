@@ -57,10 +57,3 @@ header {
 .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
 .uppercase { text-transform: uppercase; }
 .pb-12 { padding-bottom: 3rem; }
-.space-y-6 > * + * { margin-top: 1.5rem; }
-
-@media (min-width: 640px) {
-  .sm\:flex-row { flex-direction: row; }
-  .sm\:text-left { text-align: left; }
-  .sm\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
