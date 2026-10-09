@@ -26,7 +26,34 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [selectedMemberForWelfare, setSelectedMemberForWelfare] = useState(null);
-  const [openingBalance, setOpeningBalance] = useState('2,484.32');
+  const [openingBalance, setOpeningBalance] = useState(2484.32);
+
+  // Financial Data State
+  const [incomes, setIncomes] = useState([]);
+  const [incomeForm, setIncomeForm] = useState({ source: '', amount: '', date: '' });
+
+  const [expenses, setExpenses] = useState([]);
+  const [expenseForm, setExpenseForm] = useState({ description: '', amount: '', date: '' });
+
+  const [tithes, setTithes] = useState([]);
+  const [titheForm, setTitheForm] = useState({ member_name: '', amount: '', date: '' });
+
+  const [budgets, setBudgets] = useState([]);
+  const [budgetForm, setBudgetForm] = useState({ item: '', estimated: '', status: 'Pending' });
+
+  const [contributions, setContributions] = useState([]);
+  const [contribForm, setContribForm] = useState({ contributor: '', type: 'General', amount: '', date: '' });
+
+  // Welfare table state (12 months x 4 weeks)
+  const [welfareData, setWelfareData] = useState({
+    Jan: [0, 0, 0, 0], Feb: [0, 0, 0, 0], Mar: [0, 0, 0, 0], Apr: [0, 0, 0, 0],
+    May: [0, 0, 0, 0], Jun: [0, 0, 0, 0], Jul: [0, 0, 0, 0], Aug: [0, 0, 0, 0],
+    Sep: [0, 0, 0, 0], Oct: [0, 0, 0, 0], Nov: [0, 0, 0, 0], Dec: [0, 0, 0, 0]
+  });
+
+  // Editable Financial Reports State
+  const [accountReportNotes, setAccountReportNotes] = useState('All financial activities are reconciled and audited weekly.');
+  const [balanceSheetNotes, setBalanceSheetNotes] = useState('Assets match total equity and liabilities.');
 
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [showAttendanceForm, setShowAttendanceForm] = useState(false);
@@ -181,6 +208,61 @@ export default function Home() {
     }
   };
 
+  const handleWelfareChange = (month, weekIndex, val) => {
+    const num = parseFloat(val) || 0;
+    const updatedWeeks = [...welfareData[month]];
+    updatedWeeks[weekIndex] = num;
+    setWelfareData({ ...welfareData, [month]: updatedWeeks });
+  };
+
+  // Financial Calculations
+  const totalIncomeSum = incomes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  const totalTitheSum = tithes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  const totalContribSum = contributions.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  const totalExpenseSum = expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  
+  const grossInflow = openingBalance + totalIncomeSum + totalTitheSum + totalContribSum;
+  const netBalance = grossInflow - totalExpenseSum;
+
+  const downloadPDFReport = (title) => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${title} - Gracepoint CHMS</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 2rem; color: #1e293b; }
+            .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+            .logo { font-size: 1.5rem; font-weight: bold; color: #2563eb; }
+            table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+            th, td { border: 1px solid #cbd5e1; padding: 0.75rem; text-align: left; font-size: 0.9rem; }
+            th { background-color: #f1f5f9; }
+            .summary { margin-top: 1.5rem; font-size: 1.1rem; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">⛪ GRACEPOINT CHURCH MANAGEMENT SYSTEM</div>
+            <h2>${title}</h2>
+            <p>Generated on: ${new Date().toLocaleDateString()}</p>
+          </div>
+          <div>
+            <p><strong>Opening Balance:</strong> GHS ${openingBalance.toFixed(2)}</p>
+            <p><strong>Total Income & Tithes:</strong> GHS ${(totalIncomeSum + totalTitheSum + totalContribSum).toFixed(2)}</p>
+            <p><strong>Total Expenses:</strong> GHS ${totalExpenseSum.toFixed(2)}</p>
+            <p class="summary">Net Balance / Fund Balance: GHS ${netBalance.toFixed(2)}</p>
+          </div>
+          <div style="margin-top: 2rem;">
+            <h4>Official Notes & Remarks:</h4>
+            <p>${title.includes('Balance') ? balanceSheetNotes : accountReportNotes}</p>
+          </div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const filteredMembers = members.filter((m) => {
     const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
     const email = (m.email || '').toLowerCase();
@@ -196,7 +278,6 @@ export default function Home() {
     );
   }
 
-  // If user is not authenticated, show Login Screen
   if (!user) {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -248,7 +329,6 @@ export default function Home() {
     );
   }
 
-  // Authenticated Admin Dashboard
   return (
     <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
       
@@ -377,7 +457,6 @@ export default function Home() {
                 {formSuccess && <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formSuccess}</div>}
 
                 <form onSubmit={handleRegisterMember} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>First Name *</label>
@@ -467,7 +546,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Contributions Tab */}
+        {/* Contributions & Finance Tab */}
         {activeTab === 'contributions' && (
           <div>
             {financeView === 'hub' && (
@@ -475,9 +554,9 @@ export default function Home() {
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Opening Balance</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {openingBalance}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {openingBalance.toFixed(2)}</div>
                   </div>
-                  <button type="button" onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(val); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
+                  <button type="button" onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(parseFloat(val) || 0); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
                     ✏️ Edit Opening Balance
                   </button>
                 </div>
@@ -504,10 +583,6 @@ export default function Home() {
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📊</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Budgets</div>
                   </div>
-                  <div onClick={() => setFinanceView('approve_budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>✅</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Approve Budgets</div>
-                  </div>
                   <div onClick={() => setFinanceView('tracker')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>👛</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Contribution Tracker</div>
@@ -518,16 +593,209 @@ export default function Home() {
                   </div>
                   <div onClick={() => setFinanceView('reports')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💳</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report (Editable & PDF Export)</div>
                   </div>
                   <div onClick={() => setFinanceView('balancesheet')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>⚖️</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet (Editable & PDF Export)</div>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Record Income Module */}
+            {financeView === 'income' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record General Income</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); setIncomes([incomeForm, ...incomes]); setIncomeForm({ source: '', amount: '', date: '' }); alert('Income recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Income Source / Title</label>
+                      <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sunday Offering, Donation" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={incomeForm.amount} onChange={(e) => setIncomeForm({...incomeForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={incomeForm.date} onChange={(e) => setIncomeForm({...incomeForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      Save Income Entry
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Incomes ({incomes.length})</h4>
+                {incomes.map((inc, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{inc.source}</strong> ({inc.date})</span>
+                    <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+ GHS {parseFloat(inc.amount || 0).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Record Expenses Module */}
+            {financeView === 'expenses' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Expense</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); setExpenses([expenseForm, ...expenses]); setExpenseForm({ description: '', amount: '', date: '' }); alert('Expense recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Expense Description</label>
+                      <input type="text" required value={expenseForm.description} onChange={(e) => setExpenseForm({...expenseForm, description: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Utility bills, Maintenance" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({...expenseForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={expenseForm.date} onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      Save Expense Entry
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Expenses ({expenses.length})</h4>
+                {expenses.map((exp, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{exp.description}</strong> ({exp.date})</span>
+                    <span style={{ color: '#dc2626', fontWeight: 'bold' }}>- GHS {parseFloat(exp.amount || 0).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tithes Module */}
+            {financeView === 'tithes' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Member Tithes</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); setTithes([titheForm, ...tithes]); setTitheForm({ member_name: '', amount: '', date: '' }); alert('Tithe recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Member Name</label>
+                      <input type="text" required value={titheForm.member_name} onChange={(e) => setTitheForm({...titheForm, member_name: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={titheForm.amount} onChange={(e) => setTitheForm({...titheForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={titheForm.date} onChange={(e) => setTitheForm({...titheForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      Save Tithe Entry
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Tithes ({tithes.length})</h4>
+                {tithes.map((t, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{t.member_name}</strong> ({t.date})</span>
+                    <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+ GHS {parseFloat(t.amount || 0).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Record Budgets Module */}
+            {financeView === 'budgets' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Budget Item</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Item / Project Name</label>
+                      <input type="text" required value={budgetForm.item} onChange={(e) => setBudgetForm({...budgetForm, item: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sound System Upgrade" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Estimated Cost (GHS)</label>
+                      <input type="number" required step="0.01" value={budgetForm.estimated} onChange={(e) => setBudgetForm({...budgetForm, estimated: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Approval Status</label>
+                      <select value={budgetForm.status} onChange={(e) => setBudgetForm({...budgetForm, status: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                      </select>
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      Save Budget
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Budgets List ({budgets.length})</h4>
+                {budgets.map((b, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{b.item}</strong> (GHS {parseFloat(b.estimated || 0).toFixed(2)})</span>
+                    <span style={{ fontWeight: 'bold', color: b.status === 'Approved' ? '#16a34a' : '#d97706' }}>{b.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Contribution Tracker Module */}
+            {financeView === 'tracker' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Contribution Tracker</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); setContributions([contribForm, ...contributions]); setContribForm({ contributor: '', type: 'General', amount: '', date: '' }); alert('Contribution recorded successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contributor Name</label>
+                      <input type="text" required value={contribForm.contributor} onChange={(e) => setContribForm({...contribForm, contributor: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Name or anonymous" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contribution Type</label>
+                      <select value={contribForm.type} onChange={(e) => setContribForm({...contribForm, type: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="General">General Offering</option>
+                        <option value="Building Fund">Building Fund</option>
+                        <option value="Harvest">Harvest / Special</option>
+                        <option value="Mission">Mission</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({...contribForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={contribForm.date} onChange={(e) => setContribForm({...contribForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      Save Contribution
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Tracked Contributions ({contributions.length})</h4>
+                {contributions.map((c, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{c.contributor}</strong> [{c.type}]</span>
+                    <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+ GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Welfare Contribution Matrix with Auto-Total Column */}
             {financeView === 'welfare' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -560,35 +828,57 @@ export default function Home() {
                       </h3>
                       <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions (Jan - Dec, 4 weeks/month):</p>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions with auto-calculated total column:</p>
                     
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#4f46e5', color: '#ffffff' }}>
                             <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>Months</th>
-                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>1st Week</th>
-                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>2nd Week</th>
-                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>3rd Week</th>
-                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>4th Week</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>1st Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>2nd Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>3rd Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>4th Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#3730a3' }}>Total</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month) => (
-                            <tr key={month}>
-                              <td style={{ padding: '0.5rem', border: '1px solid #cbd5e1', fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>{month}</td>
-                              {[1, 2, 3, 4].map((wk) => (
-                                <td key={wk} style={{ padding: '0.5rem', border: '1px solid #cbd5e1', textAlign: 'center' }}>
-                                  <input type="number" defaultValue="0" style={{ width: '3rem', padding: '0.25rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '0.25rem' }} />
+                          {Object.keys(welfareData).map((month) => {
+                            const weeks = welfareData[month];
+                            const monthTotal = weeks.reduce((sum, w) => sum + w, 0);
+                            return (
+                              <tr key={month}>
+                                <td style={{ padding: '0.5rem', border: '1px solid #cbd5e1', fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>{month}</td>
+                                {weeks.map((val, idx) => (
+                                  <td key={idx} style={{ padding: '0.5rem', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+                                    <input 
+                                      type="number" 
+                                      step="0.01" 
+                                      value={val} 
+                                      onChange={(e) => handleWelfareChange(month, idx, e.target.value)} 
+                                      style={{ width: '3rem', padding: '0.25rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '0.25rem' }} 
+                                    />
+                                  </td>
+                                ))}
+                                <td style={{ padding: '0.5rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#eef2ff', color: '#1e3a8a' }}>
+                                  {monthTotal.toFixed(2)}
                                 </td>
-                              ))}
-                            </tr>
-                          ))}
+                              </tr>
+                            );
+                          })}
                         </tbody>
+                        <tfoot>
+                          <tr style={{ backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                            <td colSpan="5" style={{ padding: '0.75rem', border: '1px solid #cbd5e1', textAlign: 'right' }}>Grand Total:</td>
+                            <td style={{ padding: '0.75rem', border: '1px solid #cbd5e1', color: '#1e3a8a', backgroundColor: '#e2e8f0', textAlign: 'center' }}>
+                              GHS {Object.values(welfareData).reduce((grand, weeks) => grand + weeks.reduce((s, w) => s + w, 0), 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
 
-                    <button type="button" onClick={() => { alert('Welfare records saved!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
+                    <button type="button" onClick={() => { alert('Welfare records saved successfully!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
                       Save Welfare Records
                     </button>
                   </div>
@@ -596,13 +886,97 @@ export default function Home() {
               </div>
             )}
 
-            {financeView !== 'hub' && financeView !== 'welfare' && (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center' }}>
-                <h3 style={{ textTransform: 'capitalize', color: '#0f172a', marginBottom: '0.5rem' }}>{financeView.replace('_', ' ')} Module</h3>
-                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>Module active and functional.</p>
-                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem 1.25rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                  ← Back to Finance Hub
-                </button>
+            {/* Account Report Module (Editable & PDF Export) */}
+            {financeView === 'reports' && (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ← Back to Hub
+                  </button>
+                  <button type="button" onClick={() => downloadPDFReport('Account Report')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    📥 Download Official PDF Report
+                  </button>
+                </div>
+
+                <h3 style={{ color: '#0f172a', marginBottom: '1rem' }}>Account Report (Live & Editable)</h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Opening Balance:</span>
+                    <strong>GHS {openingBalance.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total General Incomes:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalIncomeSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Tithes:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalTitheSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Contributions:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalContribSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Expenses:</span>
+                    <strong style={{ color: '#dc2626' }}>- GHS {totalExpenseSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', fontSize: '1.1rem', backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                    <span>Net Balance:</span>
+                    <span style={{ color: '#1e3a8a' }}>GHS {netBalance.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Notes / Audit Remarks</label>
+                  <textarea 
+                    value={accountReportNotes} 
+                    onChange={(e) => setAccountReportNotes(e.target.value)} 
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', minHeight: '5rem', boxSizing: 'border-box' }} 
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Balance Sheet Module (Editable & PDF Export) */}
+            {financeView === 'balancesheet' && (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ← Back to Hub
+                  </button>
+                  <button type="button" onClick={() => downloadPDFReport('Balance Sheet')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    📥 Download Official PDF Report
+                  </button>
+                </div>
+
+                <h3 style={{ color: '#0f172a', marginBottom: '1rem' }}>Balance Sheet (Live & Editable)</h3>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '0.5rem', fontWeight: 'bold', color: '#1e3a8a' }}>ASSETS</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Cash & Bank (Net Fund Balance):</span>
+                    <strong>GHS {netBalance.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '0.5rem', fontWeight: 'bold', color: '#1e3a8a', marginTop: '0.5rem' }}>LIABILITIES & EQUITY</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Liabilities:</span>
+                    <strong>GHS 0.00</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', fontSize: '1.1rem', backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                    <span>Total Equity / Fund:</span>
+                    <span style={{ color: '#1e3a8a' }}>GHS {netBalance.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Balance Sheet Remarks</label>
+                  <textarea 
+                    value={balanceSheetNotes} 
+                    onChange={(e) => setBalanceSheetNotes(e.target.value)} 
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', minHeight: '5rem', boxSizing: 'border-box' }} 
+                  />
+                </div>
               </div>
             )}
           </div>
