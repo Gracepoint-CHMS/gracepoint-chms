@@ -1,6 +1,5 @@
 'use client';
 
-
 import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -13,6 +12,15 @@ export default function RootLayout({ children }) {
   const [role, setRole] = useState(null);
 
   useEffect(() => {
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.log('SW registration failed: ', err);
+        });
+      });
+    }
+
     async function checkUserSession() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -21,36 +29,20 @@ export default function RootLayout({ children }) {
           .select('role')
           .eq('id', session.user.id)
           .single();
-        setRole(data?.role || 'member');
-      } else {
-        setRole(null);
+        if (data) setRole(data.role);
       }
     }
     checkUserSession();
-
-    // Dynamically inject the PWA manifest
-    const link = document.createElement('link');
-    link.rel = 'manifest';
-    link.href = '/manifest.json';
-    document.head.appendChild(link);
-
-    const meta = document.createElement('meta');
-    meta.name = 'theme-color';
-    meta.content = '#2563eb';
-    document.head.appendChild(meta);
-
-    // Register the Service Worker for native PWA installation
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' })
-          .then((reg) => console.log('Service Worker scope:', reg.scope))
-          .catch((err) => console.log('Service Worker registration failed:', err));
-      });
-    }
   }, []);
 
   return (
     <html lang="en">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#1e3a8a" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Gracepoint CHMS - Member Portal</title>
+      </head>
       <body>
         {children}
       </body>
