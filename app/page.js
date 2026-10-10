@@ -8,6 +8,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Official Church Logo Data URL sourced from uploaded assets
+const CHURCH_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDyTPR..."; // Embedded logo reference
+
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('super_admin');
@@ -249,32 +252,89 @@ export default function Home() {
         <head>
           <title>${title} - Gracepoint Prophetic Church</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 2rem; color: #1e293b; }
-            .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-            .church-name { font-size: 1.2rem; font-weight: bold; color: #1e3a8a; margin: 0; }
-            .subtitle { font-size: 0.9rem; color: #64748b; font-style: italic; margin-bottom: 0.5rem; }
-            table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-            th, td { border: 1px solid #cbd5e1; padding: 0.75rem; text-align: left; font-size: 0.9rem; }
-            th { background-color: #f1f5f9; }
-            .summary { margin-top: 1.5rem; font-size: 1.1rem; font-weight: bold; }
+            body { 
+              font-family: Arial, sans-serif; 
+              padding: 2rem; 
+              color: #1e293b; 
+              max-width: 800px; 
+              margin: 0 auto; 
+            }
+            .header { 
+              text-align: center; 
+              border-bottom: 2px solid #2563eb; 
+              padding-bottom: 1rem; 
+              margin-bottom: 1.5rem; 
+            }
+            .logo { 
+              width: 85px; 
+              height: 85px; 
+              object-fit: contain; 
+              margin-bottom: 0.5rem; 
+            }
+            .church-name { 
+              font-size: 1.25rem; 
+              font-weight: bold; 
+              color: #1e3a8a; 
+              margin: 0 0 0.2rem 0; 
+            }
+            .subtitle { 
+              font-size: 0.95rem; 
+              color: #64748b; 
+              font-style: italic; 
+              margin-bottom: 0.5rem; 
+            }
+            .report-title {
+              font-size: 1.1rem;
+              font-weight: bold;
+              color: #0f172a;
+              margin: 0.5rem 0;
+            }
+            .row { 
+              display: flex; 
+              justify-content: space-between; 
+              padding: 0.6rem 0; 
+              border-bottom: 1px solid #e2e8f0; 
+              font-size: 0.95rem; 
+            }
+            .summary { 
+              margin-top: 1.5rem; 
+              font-size: 1.15rem; 
+              font-weight: bold; 
+              background-color: #f8fafc;
+              padding: 0.75rem;
+              border: 1px solid #cbd5e1;
+            }
+            .notes {
+              margin-top: 2rem;
+              font-size: 0.9rem;
+              color: #334155;
+            }
           </style>
         </head>
         <body>
           <div class="header">
+            <img src="${CHURCH_LOGO}" alt="Church Logo" class="logo" />
             <h2 class="church-name">GRACEPOINT PROPHETIC CHURCH</h2>
             <div class="subtitle">The Jesus Home Church</div>
-            <h3>${title}</h3>
-            <p>Generated on: ${new Date().toLocaleDateString()}</p>
+            <div class="report-title">${title}</div>
+            <div style="font-size: 0.85rem; color: #64748b;">Generated on: ${new Date().toLocaleDateString()}</div>
           </div>
           <div>
-            <p><strong>Opening Balance:</strong> GHS ${openingBalance.toFixed(2)}</p>
-            <p><strong>Total Income & Tithes:</strong> GHS ${(totalIncomeSum + totalTitheSum + totalContribSum).toFixed(2)}</p>
-            <p><strong>Total Welfare Contributions:</strong> GHS ${totalWelfareSum.toFixed(2)}</p>
-            <p><strong>Total Expenses & Approved Budgets:</strong> GHS ${(totalExpenseSum + approvedBudgetsSum).toFixed(2)}</p>
-            <p class="summary">Net Balance / Fund Balance: GHS ${netBalance.toFixed(2)}</p>
+            <div class="row"><span>Opening Balance:</span><strong>GHS ${openingBalance.toFixed(2)}</strong></div>
+            <div class="row"><span>Total General Incomes:</span><strong style="color: #16a34a;">+ GHS ${totalIncomeSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Tithes:</span><strong style="color: #16a34a;">+ GHS ${totalTitheSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Contributions:</span><strong style="color: #16a34a;">+ GHS ${totalContribSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Welfare Contributions:</span><strong style="color: #16a34a;">+ GHS ${totalWelfareSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Expenses:</span><strong style="color: #dc2626;">- GHS ${totalExpenseSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Approved Budgets (Allocated):</span><strong style="color: #dc2626;">- GHS ${approvedBudgetsSum.toFixed(2)}</strong></div>
+            
+            <div class="row summary">
+              <span>Net Balance / Fund Balance:</span>
+              <span style="color: #1e3a8a;">GHS ${netBalance.toFixed(2)}</span>
+            </div>
           </div>
-          <div style="margin-top: 2rem;">
-            <h4>Official Notes & Remarks:</h4>
+          <div class="notes">
+            <strong>Official Notes & Remarks:</strong>
             <p>${title.includes('Balance') ? balanceSheetNotes : accountReportNotes}</p>
           </div>
           <script>window.print();</script>
