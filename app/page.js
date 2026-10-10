@@ -65,9 +65,18 @@ export default function Home() {
   const [accountReportNotes, setAccountReportNotes] = useState('All financial activities are reconciled and audited weekly.');
   const [balanceSheetNotes, setBalanceSheetNotes] = useState('Assets match total equity and liabilities.');
 
+  // Updated Attendance Module State with Service Type & Demographics (Men, Women, Children)
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [showAttendanceForm, setShowAttendanceForm] = useState(false);
-  const [attendanceForm, setAttendanceForm] = useState({ service_date: '', department: 'General', status: 'Present' });
+  const [attendanceForm, setAttendanceForm] = useState({
+    service_date: '',
+    service_type: 'Sunday Service',
+    department: 'General',
+    men_count: '',
+    women_count: '',
+    children_count: '',
+    status: 'Present'
+  });
 
   const [eventsList, setEventsList] = useState([]);
   const [showEventForm, setShowEventForm] = useState(false);
@@ -107,7 +116,6 @@ export default function Home() {
     'Children Ministry'
   ];
 
-  // Available permission schema based on the requested model
   const permissionSchema = {
     'User & Membership': [
       { key: 'register_members', label: 'Register members' },
@@ -478,9 +486,12 @@ export default function Home() {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
-          <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem', textAlign: 'center' }}>
-            <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint Prophetic Church</h1>
-            <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>The Jesus Home Church - Portal</p>
+          <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '50px', height: '50px', objectFit: 'contain' }} />
+            <div>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint Prophetic Church</h1>
+              <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>The Jesus Home Church - Portal</p>
+            </div>
           </div>
           
           <div style={{ padding: '1.5rem' }}>
@@ -657,9 +668,12 @@ export default function Home() {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
         <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Gracepoint Prophetic Church</h1>
-            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+            <div>
+              <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Gracepoint Prophetic Church</h1>
+              <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
+            </div>
           </div>
           <button type="button" onClick={handleLogout} style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
             Logout
@@ -718,11 +732,14 @@ export default function Home() {
     <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
       
       <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
-            Gracepoint Prophetic Church
-          </h1>
-          <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>The Jesus Home Church</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <img src={CHURCH_LOGO} alt="Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+          <div>
+            <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
+              Gracepoint Prophetic Church
+            </h1>
+            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>The Jesus Home Church</span>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button 
@@ -803,7 +820,7 @@ export default function Home() {
         {activeTab === 'permissions' && role === 'super_admin' && (
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '0.5rem' }}>Admin Permissions</h3>
-            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Select an administrator account[span_0](start_span)[span_0](end_span) and configure their operational permissions[span_1](start_span)[span_1](end_span).</p>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Select an administrator account and configure their operational permissions.</p>
 
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Select Admin</label>
@@ -1111,7 +1128,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Record Income Module (Restricted Edit/Delete for Sub-Admin) */}
             {financeView === 'income' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingIncomeIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1166,7 +1182,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Record Expenses Module (Super Admin Only) */}
             {financeView === 'expenses' && role === 'super_admin' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingExpenseIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1218,7 +1233,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Tithes Module with Member ID Binding & Restricted Edit/Delete */}
             {financeView === 'tithes' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingTitheIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1286,7 +1300,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Record Budgets Module (Super Admin Only) */}
             {financeView === 'budgets' && role === 'super_admin' && (
               <div>
                 <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1318,7 +1331,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Approve Budgets Module (Super Admin Only) */}
             {financeView === 'approve_budgets' && role === 'super_admin' && (
               <div>
                 <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1368,7 +1380,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Welfare Contribution Matrix with Auto-Grand Total Column */}
             {financeView === 'welfare' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1461,7 +1472,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Account Report Module with Full Member Financial Listings & Welfare Dates */}
             {financeView === 'reports' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1473,10 +1483,13 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
-                  <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Account Report</h4>
+                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={CHURCH_LOGO} alt="Church Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+                  <div>
+                    <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
+                    <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Account Report</h4>
+                  </div>
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
@@ -1514,7 +1527,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Detailed Member Tracking on Report with Dates */}
                 <div style={{ marginBottom: '1.5rem' }}>
                   <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Member Financial Contributions, Tithes & Welfare Tracking</h4>
                   
@@ -1573,7 +1585,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Balance Sheet Module (Super Admin Only) */}
             {financeView === 'balancesheet' && role === 'super_admin' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1585,10 +1596,13 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
-                  <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Balance Sheet</h4>
+                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={CHURCH_LOGO} alt="Church Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+                  <div>
+                    <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
+                    <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Balance Sheet</h4>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
@@ -1621,40 +1635,61 @@ export default function Home() {
           </div>
         )}
 
-        {/* Attendance Tab */}
+        {/* Updated Attendance Tab with Service Type & Men/Women/Children Breakdown */}
         {activeTab === 'attendance' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Service Attendance Logs</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Service Attendance & Demographics</h3>
               <button type="button" onClick={() => setShowAttendanceForm(!showAttendanceForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
                 {showAttendanceForm ? 'Cancel' : '+ Log Attendance'}
               </button>
             </div>
 
             {showAttendanceForm && (
-              <form onSubmit={(e) => { e.preventDefault(); setAttendanceLogs([attendanceForm, ...attendanceLogs]); setAttendanceForm({ service_date: '', department: 'General', status: 'Present' }); setShowAttendanceForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>New Attendance Record</h4>
+              <form onSubmit={(e) => { 
+                e.preventDefault(); 
+                setAttendanceLogs([attendanceForm, ...attendanceLogs]); 
+                setAttendanceForm({ service_date: '', service_type: 'Sunday Service', department: 'General', men_count: '', women_count: '', children_count: '', status: 'Present' }); 
+                setShowAttendanceForm(false); 
+              }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Log Service Attendance</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Service Date</label>
-                    <input type="date" required value={attendanceForm.service_date} onChange={(e) => setAttendanceForm({...attendanceForm, service_date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Service Date *</label>
+                    <input type="date" required value={attendanceForm.service_date} onChange={(e) => setAttendanceForm({...attendanceForm, service_date: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Service Type *</label>
+                    <select value={attendanceForm.service_type} onChange={(e) => setAttendanceForm({...attendanceForm, service_type: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="Sunday Service">Sunday Service</option>
+                      <option value="Midweek Service">Midweek Service</option>
+                      <option value="Prayer Meeting">Prayer Meeting</option>
+                      <option value="All Night Service">All Night Service</option>
+                      <option value="Special Revival">Special Revival</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Men Count</label>
+                      <input type="number" min="0" value={attendanceForm.men_count} onChange={(e) => setAttendanceForm({...attendanceForm, men_count: e.target.value})} placeholder="0" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Women Count</label>
+                      <input type="number" min="0" value={attendanceForm.women_count} onChange={(e) => setAttendanceForm({...attendanceForm, women_count: e.target.value})} placeholder="0" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Children Count</label>
+                      <input type="number" min="0" value={attendanceForm.children_count} onChange={(e) => setAttendanceForm({...attendanceForm, children_count: e.target.value})} placeholder="0" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                    </div>
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Department</label>
-                    <select value={attendanceForm.department} onChange={(e) => setAttendanceForm({...attendanceForm, department: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                    <select value={attendanceForm.department} onChange={(e) => setAttendanceForm({...attendanceForm, department: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
                       <option value="General">General</option>
                       <option value="LOVE">LOVE</option>
                       <option value="UNITY">UNITY</option>
                       <option value="CARE">CARE</option>
                       <option value="RESPECT">RESPECT</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Status</label>
-                    <select value={attendanceForm.status} onChange={(e) => setAttendanceForm({...attendanceForm, status: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
-                      <option value="Present">Present</option>
-                      <option value="Absent">Absent</option>
-                      <option value="Excused">Excused</option>
                     </select>
                   </div>
                   <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
@@ -1664,21 +1699,27 @@ export default function Home() {
               </form>
             )}
 
-            <div style={{ backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontWeight: 'bold', color: '#0f172a', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
-              <span>Service Date</span>
-              <span>Department</span>
-              <span>Status</span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {attendanceLogs.length > 0 ? (
-                attendanceLogs.map((log, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontSize: '0.9rem', color: '#334155' }}>
-                    <span>{log.service_date}</span>
-                    <span>{log.department}</span>
-                    <span style={{ fontWeight: 'bold', color: log.status === 'Present' ? '#16a34a' : '#dc2626' }}>{log.status}</span>
-                  </div>
-                ))
+                attendanceLogs.map((log, i) => {
+                  const men = parseInt(log.men_count || 0);
+                  const women = parseInt(log.women_count || 0);
+                  const children = parseInt(log.children_count || 0);
+                  const total = men + women + children;
+                  return (
+                    <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontWeight: 'bold', color: '#1e3a8a' }}>
+                        <span>{log.service_type} ({log.service_date})</span>
+                        <span style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '0.2rem 0.6rem', borderRadius: '0.25rem', fontSize: '0.85rem' }}>Total Attendance: {total > 0 ? total : 'N/A'}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontSize: '0.85rem', color: '#475569', backgroundColor: '#f8fafc', padding: '0.5rem', borderRadius: '0.375rem' }}>
+                        <span>👨 Men: <strong>{men}</strong></span>
+                        <span>👩 Women: <strong>{women}</strong></span>
+                        <span>👶 Children: <strong>{children}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
                   <p style={{ margin: 0 }}>No attendance logs recorded yet.</p>
