@@ -109,12 +109,12 @@ export default function Home() {
         setUser(session.user);
         const { data: memberData } = await supabase
           .from('members')
-          .select('role')
+          .select('*')
           .eq('email', session.user.email)
           .single();
 
-        if (memberData && memberData.role) {
-          setRole(memberData.role);
+        if (memberData) {
+          if (memberData.role) setRole(memberData.role);
         }
       }
       fetchMembers();
@@ -264,14 +264,14 @@ export default function Home() {
   };
 
   const handleWelfareChange = (memberId, month, weekIndex, val) => {
-    const num = parseFloat(val) || 0;
+    const num = val === '' ? 0 : parseFloat(val);
     const memberRecord = welfareRecords[memberId] || {
       Jan: [0,0,0,0], Feb: [0,0,0,0], Mar: [0,0,0,0], Apr: [0,0,0,0],
       May: [0,0,0,0], Jun: [0,0,0,0], Jul: [0,0,0,0], Aug: [0,0,0,0],
       Sep: [0,0,0,0], Oct: [0,0,0,0], Nov: [0,0,0,0], Dec: [0,0,0,0]
     };
     const updatedMonthWeeks = [...memberRecord[month]];
-    updatedMonthWeeks[weekIndex] = num;
+    updatedMonthWeeks[weekIndex] = isNaN(num) ? 0 : num;
     setWelfareRecords({
       ...welfareRecords,
       [memberId]: { ...memberRecord, [month]: updatedMonthWeeks }
@@ -599,6 +599,74 @@ export default function Home() {
                 </form>
               </div>
             )}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Regular Member Dashboard View
+  if (role === 'member') {
+    const currentMemberRecord = members.find(m => m.email === user.email) || {};
+    const memberTithes = tithes.filter(t => t.member_name.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase()));
+    const memberContributions = contributions.filter(c => c.contributor.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase()));
+    const memberWelfareMonths = welfareRecords[currentMemberRecord.id || 'default'] || {};
+    const memberWelfareTotal = Object.values(memberWelfareMonths).reduce((mTotal, weeks) => mTotal + weeks.reduce((wSum, w) => wSum + w, 0), 0);
+
+    return (
+      <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
+        <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Gracepoint Prophetic Church</h1>
+            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
+          </div>
+          <button type="button" onClick={handleLogout} style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+            Logout
+          </button>
+        </div>
+
+        <div style={{ maxWidth: '40rem', margin: '1.5rem auto', padding: '0 1rem' }}>
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>
+              Welcome, {currentMemberRecord.first_name || user.email}
+            </h2>
+            <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Core Department: <strong>{currentMemberRecord.core_department || 'N/A'}</strong></p>
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Tithes History</h3>
+            {memberTithes.length > 0 ? (
+              memberTithes.map((t, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                  <span>{t.date}</span>
+                  <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong>
+                </div>
+              ))
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>No tithe records found.</p>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Contributions History</h3>
+            {memberContributions.length > 0 ? (
+              memberContributions.map((c, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                  <span>{c.type} ({c.date})</span>
+                  <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong>
+                </div>
+              ))
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>No contribution records found.</p>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Welfare Summary</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 'bold' }}>
+              <span>Total Welfare Paid:</span>
+              <span style={{ color: '#1e3a8a' }}>GHS {memberWelfareTotal.toFixed(2)}</span>
+            </div>
           </div>
         </div>
       </main>
@@ -1271,8 +1339,9 @@ export default function Home() {
                                     <input 
                                       type="number" 
                                       step="0.01" 
-                                      value={val} 
+                                      value={val === 0 ? '' : val} 
                                       onChange={(e) => handleWelfareChange(selectedMemberForWelfare.id || 'default', month, idx, e.target.value)} 
+                                      placeholder="0"
                                       style={{ width: '3rem', padding: '0.25rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '0.25rem' }} 
                                     />
                                   </td>
@@ -1295,7 +1364,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Account Report Module with Full Edit/Delete Listings */}
+            {/* Account Report Module with Full Member Financial Listings */}
             {financeView === 'reports' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1348,52 +1417,48 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Detailed Entries with Quick Edit/Delete Buttons */}
+                {/* Detailed Member Tracking on Report */}
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Detailed Entries & Correction Management</h4>
+                  <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Member Financial Contributions & Tithes Tracking</h4>
                   
-                  {incomes.length > 0 && (
-                    <div style={{ marginTop: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Incomes:</div>
-                      {incomes.map((inc, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                          <span>{inc.source} (+GHS {inc.amount})</span>
-                          <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); setFinanceView('income'); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
-                            <button type="button" onClick={() => setIncomes(incomes.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   {tithes.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Tithes:</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Tithes:</div>
                       {tithes.map((t, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                          <span>{t.member_name} (+GHS {t.amount})</span>
-                          <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); setFinanceView('tithes'); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
-                            <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
-                          </div>
+                          <span><strong>{t.member_name}</strong> ({t.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(t.amount || 0).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {expenses.length > 0 && (
+                  {contributions.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Expenses:</div>
-                      {expenses.map((exp, i) => (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Contributions:</div>
+                      {contributions.map((c, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                          <span>{exp.description} (-GHS {exp.amount})</span>
-                          <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <button type="button" onClick={() => { setExpenseForm(exp); setEditingExpenseIndex(i); setFinanceView('expenses'); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}>Edit</button>
-                            <button type="button" onClick={() => setExpenses(expenses.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontWeight: 'bold' }}>Delete</button>
-                          </div>
+                          <span><strong>{c.contributor}</strong> [{c.type}] ({c.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {Object.keys(welfareRecords).length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Welfare Tracking:</div>
+                      {Object.entries(welfareRecords).map(([mId, monthsData], i) => {
+                        const memObj = members.find(m => (m.id || 'default') === mId) || { first_name: 'Member', last_name: '' };
+                        const memName = `${memObj.first_name || ''} ${memObj.last_name || ''}`.trim() || 'Member';
+                        const memTotal = Object.values(monthsData).reduce((mSum, weeks) => mSum + weeks.reduce((wSum, w) => wSum + w, 0), 0);
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <span><strong>{memName}</strong> (Welfare Total)</span>
+                            <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {memTotal.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
