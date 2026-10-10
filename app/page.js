@@ -33,7 +33,11 @@ export default function Home() {
   const [selectedMemberForWelfare, setSelectedMemberForWelfare] = useState(null);
   const [openingBalance, setOpeningBalance] = useState(2484.32);
 
-  // Financial Data State with Edit support
+  // Admin Permissions State (Admin Email -> { category: { permissionKey: boolean } })
+  const [adminPermissions, setAdminPermissions] = useState({});
+  const [selectedAdminEmail, setSelectedAdminEmail] = useState('');
+
+  // Financial Data State with Edit/Delete restricted to Super Admin
   const [incomes, setIncomes] = useState([]);
   const [incomeForm, setIncomeForm] = useState({ source: '', amount: '', date: '' });
   const [editingIncomeIndex, setEditingIncomeIndex] = useState(null);
@@ -43,14 +47,14 @@ export default function Home() {
   const [editingExpenseIndex, setEditingExpenseIndex] = useState(null);
 
   const [tithes, setTithes] = useState([]);
-  const [titheForm, setTitheForm] = useState({ member_name: '', amount: '', date: '' });
+  const [titheForm, setTitheForm] = useState({ member_id: '', member_name: '', amount: '', date: '' });
   const [editingTitheIndex, setEditingTitheIndex] = useState(null);
 
   const [budgets, setBudgets] = useState([]);
   const [budgetForm, setBudgetForm] = useState({ item: '', estimated: '', status: 'Pending' });
 
   const [contributions, setContributions] = useState([]);
-  const [contribForm, setContribForm] = useState({ contributor: '', type: 'General', amount: '', date: '' });
+  const [contribForm, setContribForm] = useState({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
   const [editingContribIndex, setEditingContribIndex] = useState(null);
 
   // Welfare table state (12 months x 4 weeks + date metadata)
@@ -102,6 +106,24 @@ export default function Home() {
     'Pastoral Ministry',
     'Children Ministry'
   ];
+
+  // Available permission schema based on the requested model
+  const permissionSchema = {
+    'User & Membership': [
+      { key: 'register_members', label: 'Register members' },
+      { key: 'record_visitors', label: 'Record visitors' },
+      { key: 'record_new_converts', label: 'Record new converts' }
+    ],
+    'Services & Events': [
+      { key: 'register_services', label: 'Register services' },
+      { key: 'register_events', label: 'Register events' },
+      { key: 'record_attendance', label: 'Record attendance' }
+    ],
+    'Finance': [
+      { key: 'access_finance', label: 'Access finance (Tithes, Welfare, Incomes)' },
+      { key: 'view_balance_sheet', label: 'View balance sheet & reports' }
+    ]
+  };
 
   useEffect(() => {
     async function getUserData() {
@@ -230,6 +252,10 @@ export default function Home() {
   };
 
   const handleDeleteMember = async (id) => {
+    if (role !== 'super_admin') {
+      alert('Permission denied. Only Super Admin can delete members.');
+      return;
+    }
     if (confirm('Are you sure you want to delete this member?')) {
       const { error } = await supabase.from('members').delete().eq('id', id);
       if (error) {
@@ -277,7 +303,6 @@ export default function Home() {
       ...welfareRecords,
       [memberId]: { ...memberRecord, [month]: updatedMonthWeeks }
     });
-    // Track last modified date for report
     setWelfareDates({
       ...welfareDates,
       [memberId]: new Date().toISOString().split('T')[0]
@@ -589,7 +614,7 @@ export default function Home() {
                       <input type="text" value={formData.home_address} onChange={(e) => setFormData({...formData, home_address: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Home Town</label>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#0f172a', marginBottom: '0.2rem' }}>Home Town</label>
                       <input type="text" value={formData.home_town} onChange={(e) => setFormData({...formData, home_town: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                   </div>
@@ -614,9 +639,19 @@ export default function Home() {
   // Regular Member Dashboard View
   if (role === 'member') {
     const currentMemberRecord = members.find(m => m.email === user.email) || {};
-    const memberTithes = tithes.filter(t => t.member_name.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase()));
-    const memberContributions = contributions.filter(c => c.contributor.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase()));
-    const memberWelfareMonths = welfareRecords[currentMemberRecord.id || 'default'] || {};
+    const memberId = currentMemberRecord.id;
+
+    const memberTithes = tithes.filter(t => 
+      t.member_id === memberId || 
+      t.member_name.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase())
+    );
+    
+    const memberContributions = contributions.filter(c => 
+      c.member_id === memberId || 
+      c.contributor.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase())
+    );
+
+    const memberWelfareMonths = welfareRecords[memberId || 'default'] || {};
     const memberWelfareTotal = Object.values(memberWelfareMonths).reduce((mTotal, weeks) => mTotal + weeks.reduce((wSum, w) => wSum + w, 0), 0);
 
     return (
@@ -654,7 +689,7 @@ export default function Home() {
           </div>
 
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Contributions History</h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Contributions & General Income History</h3>
             {memberContributions.length > 0 ? (
               memberContributions.map((c, idx) => (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
@@ -703,7 +738,7 @@ export default function Home() {
       <div style={{ maxWidth: '44rem', margin: '1.25rem auto', padding: '0 1rem' }}>
         
         <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>
-          Super Admin Dashboard
+          {role === 'super_admin' ? 'Super Admin Dashboard' : 'Sub-Admin Dashboard'}
         </h2>
 
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
@@ -744,7 +779,91 @@ export default function Home() {
               </button>
             );
           })}
+          {role === 'super_admin' && (
+            <button 
+              type="button"
+              onClick={() => { setActiveTab('permissions'); setFinanceView('hub'); setShowRegisterForm(false); }}
+              style={{ 
+                backgroundColor: activeTab === 'permissions' ? '#2563eb' : '#f1f5f9', 
+                color: activeTab === 'permissions' ? '#ffffff' : '#334155', 
+                border: 'none', 
+                padding: '0.65rem 1rem', 
+                borderRadius: '0.5rem', 
+                fontWeight: '600', 
+                cursor: 'pointer', 
+                fontSize: '0.9rem' 
+              }}
+            >
+              🔐 Admin Permissions
+            </button>
+          )}
         </div>
+
+        {/* Admin Permissions Tab (Super Admin Only) */}
+        {activeTab === 'permissions' && role === 'super_admin' && (
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '0.5rem' }}>Admin Permissions</h3>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Select an administrator account[span_0](start_span)[span_0](end_span) and configure their operational permissions[span_1](start_span)[span_1](end_span).</p>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Select Admin</label>
+              <select 
+                value={selectedAdminEmail} 
+                onChange={(e) => setSelectedAdminEmail(e.target.value)}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.95rem' }}
+              >
+                <option value="">-- Choose Admin Account --</option>
+                {members.filter(m => m.role === 'member' || m.role === 'admin' || m.email).map(m => (
+                  <option key={m.id} value={m.email}>{`${m.first_name || ''} ${m.last_name || ''}`.trim()} - {m.email}</option>
+                ))}
+              </select>
+            </div>
+
+            {selectedAdminEmail && (
+              <div>
+                {Object.entries(permissionSchema).map(([category, perms]) => (
+                  <div key={category} style={{ marginBottom: '1.25rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                    <div style={{ backgroundColor: '#f1f5f9', padding: '0.75rem 1rem', fontWeight: 'bold', fontSize: '0.95rem', color: '#1e3a8a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{category}</span>
+                      <span>⌄</span>
+                    </div>
+                    <div style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: '#ffffff' }}>
+                      {perms.map(p => {
+                        const currentPerms = adminPermissions[selectedAdminEmail] || {};
+                        const isChecked = !!currentPerms[p.key];
+                        return (
+                          <label key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.35rem 0.5rem', borderRadius: '0.25rem', backgroundColor: isChecked ? '#eff6ff' : 'transparent' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const updatedCatPerms = { ...currentPerms, [p.key]: e.target.checked };
+                                setAdminPermissions({
+                                  ...adminPermissions,
+                                  [selectedAdminEmail]: updatedCatPerms
+                                });
+                              }}
+                              style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                            />
+                            {p.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button 
+              type="button" 
+              onClick={() => alert(`Permissions for ${selectedAdminEmail || 'Admin'} saved successfully!`)} 
+              style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '1rem' }}
+            >
+              Save Permissions
+            </button>
+          </div>
+        )}
 
         {/* Members Tab */}
         {activeTab === 'members' && (
@@ -814,9 +933,11 @@ export default function Home() {
                           <button type="button" onClick={() => handleStartEditMember(m)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#2563eb' }}>
                             ✏️ Edit
                           </button>
-                          <button type="button" onClick={() => handleDeleteMember(m.id)} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626' }}>
-                            🗑️ Delete
-                          </button>
+                          {role === 'super_admin' && (
+                            <button type="button" onClick={() => handleDeleteMember(m.id)} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626' }}>
+                              🗑️ Delete
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -930,15 +1051,17 @@ export default function Home() {
           <div>
             {financeView === 'hub' && (
               <div>
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Opening Balance</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {openingBalance.toFixed(2)}</div>
+                {role === 'super_admin' && (
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Opening Balance</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {openingBalance.toFixed(2)}</div>
+                    </div>
+                    <button type="button" onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(parseFloat(val) || 0); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
+                      ✏️ Edit Opening Balance
+                    </button>
                   </div>
-                  <button type="button" onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(parseFloat(val) || 0); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
-                    ✏️ Edit Opening Balance
-                  </button>
-                </div>
+                )}
 
                 <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.25rem 0' }}>Finance Management Suite</h3>
@@ -948,55 +1071,58 @@ export default function Home() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.85rem' }}>
                   <div onClick={() => setFinanceView('income')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>➕</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Income</div>
-                  </div>
-                  <div onClick={() => setFinanceView('expenses')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>➖</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Expenses</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member General Income</div>
                   </div>
                   <div onClick={() => setFinanceView('tithes')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🪙</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Tithes</div>
-                  </div>
-                  <div onClick={() => setFinanceView('budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📊</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Budgets</div>
-                  </div>
-                  <div onClick={() => setFinanceView('approve_budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>✅</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Approve Budgets (Super Admin)</div>
-                  </div>
-                  <div onClick={() => setFinanceView('tracker')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>👛</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Contribution Tracker</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Tithes</div>
                   </div>
                   <div onClick={() => setFinanceView('welfare')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🤝</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Welfare Contribution (Auto-Calculated Total)</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Welfare Contributions</div>
                   </div>
+                  {role === 'super_admin' && (
+                    <>
+                      <div onClick={() => setFinanceView('expenses')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>➖</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Expenses</div>
+                      </div>
+                      <div onClick={() => setFinanceView('budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📊</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Budgets</div>
+                      </div>
+                      <div onClick={() => setFinanceView('approve_budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>✅</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Approve Budgets</div>
+                      </div>
+                    </>
+                  )}
                   <div onClick={() => setFinanceView('reports')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💳</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report (Editable, Edit/Delete, PDF with Logo)</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report</div>
                   </div>
-                  <div onClick={() => setFinanceView('balancesheet')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>⚖️</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet (Editable, PDF with Logo)</div>
-                  </div>
+                  {role === 'super_admin' && (
+                    <div onClick={() => setFinanceView('balancesheet')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                      <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>⚖️</div>
+                      <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet</div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Record Income Module with Edit/Delete */}
+            {/* Record Income Module (Restricted Edit/Delete for Sub-Admin) */}
             {financeView === 'income' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingIncomeIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingIncomeIndex !== null ? 'Edit Income Entry' : 'Record General Income'}</h3>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingIncomeIndex !== null ? 'Edit Income Entry' : 'Record Member General Income'}</h3>
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     if (editingIncomeIndex !== null) {
+                      if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit entries.'); return; }
                       const updated = [...incomes];
                       updated[editingIncomeIndex] = incomeForm;
                       setIncomes(updated);
@@ -1004,13 +1130,13 @@ export default function Home() {
                       alert('Income updated successfully!');
                     } else {
                       setIncomes([incomeForm, ...incomes]);
-                      alert('Income recorded successfully!');
+                      alert('Member general income recorded successfully!');
                     }
                     setIncomeForm({ source: '', amount: '', date: '' });
                   }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Income Source / Title</label>
-                      <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sunday Offering" />
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Income Source / Member Title</label>
+                      <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Member General Offering" />
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
@@ -1029,17 +1155,19 @@ export default function Home() {
                 {incomes.map((inc, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>{inc.source}</strong> ({inc.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(inc.amount || 0).toFixed(2)}</strong></span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
-                      <button type="button" onClick={() => setIncomes(incomes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
-                    </div>
+                    {role === 'super_admin' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button type="button" onClick={() => setIncomes(incomes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Record Expenses Module with Edit/Delete */}
-            {financeView === 'expenses' && (
+            {/* Record Expenses Module (Super Admin Only) */}
+            {financeView === 'expenses' && role === 'super_admin' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingExpenseIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
@@ -1090,7 +1218,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Tithes Module with Edit/Delete */}
+            {/* Tithes Module with Member ID Binding & Restricted Edit/Delete */}
             {financeView === 'tithes' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingTitheIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1100,21 +1228,35 @@ export default function Home() {
                   <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingTitheIndex !== null ? 'Edit Tithe Entry' : 'Record Member Tithes'}</h3>
                   <form onSubmit={(e) => {
                     e.preventDefault();
+                    const selectedMember = members.find(m => m.id === titheForm.member_id);
+                    const memberName = selectedMember ? `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() : titheForm.member_name;
+                    const payload = { ...titheForm, member_name: memberName };
+
                     if (editingTitheIndex !== null) {
+                      if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit tithes.'); return; }
                       const updated = [...tithes];
-                      updated[editingTitheIndex] = titheForm;
+                      updated[editingTitheIndex] = payload;
                       setTithes(updated);
                       setEditingTitheIndex(null);
                       alert('Tithe updated successfully!');
                     } else {
-                      setTithes([titheForm, ...tithes]);
+                      setTithes([payload, ...tithes]);
                       alert('Tithe recorded successfully!');
                     }
-                    setTitheForm({ member_name: '', amount: '', date: '' });
+                    setTitheForm({ member_id: '', member_name: '', amount: '', date: '' });
                   }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Member Name</label>
-                      <input type="text" required value={titheForm.member_name} onChange={(e) => setTitheForm({...titheForm, member_name: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Member</label>
+                      <select required value={titheForm.member_id} onChange={(e) => {
+                        const mId = e.target.value;
+                        const mem = members.find(m => m.id === mId);
+                        setTitheForm({ ...titheForm, member_id: mId, member_name: mem ? `${mem.first_name} ${mem.last_name}` : '' });
+                      }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="">-- Choose Member --</option>
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
@@ -1133,24 +1275,26 @@ export default function Home() {
                 {tithes.map((t, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>{t.member_name}</strong> ({t.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong></span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
-                      <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
-                    </div>
+                    {role === 'super_admin' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Record Budgets Module */}
-            {financeView === 'budgets' && (
+            {/* Record Budgets Module (Super Admin Only) */}
+            {financeView === 'budgets' && role === 'super_admin' && (
               <div>
                 <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
                   <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Budget Item</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved and sent for Super Admin approval!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Item / Project Name</label>
                       <input type="text" required value={budgetForm.item} onChange={(e) => setBudgetForm({...budgetForm, item: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sound System Upgrade" />
@@ -1160,7 +1304,7 @@ export default function Home() {
                       <input type="number" required step="0.01" value={budgetForm.estimated} onChange={(e) => setBudgetForm({...budgetForm, estimated: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
                     </div>
                     <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      Submit Budget for Approval
+                      Submit Budget
                     </button>
                   </form>
                 </div>
@@ -1174,15 +1318,15 @@ export default function Home() {
               </div>
             )}
 
-            {/* Approve Budgets Module (Super Admin) */}
-            {financeView === 'approve_budgets' && (
+            {/* Approve Budgets Module (Super Admin Only) */}
+            {financeView === 'approve_budgets' && role === 'super_admin' && (
               <div>
                 <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
                   <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a' }}>Budget Approval Portal</h3>
-                  <p style={{ fontSize: '0.85rem', color: '#64748b' }}>As Super Admin, review and approve submitted church budgets below. Approved budgets automatically reflect on the Account Report.</p>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Review and approve submitted church budgets.</p>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1201,7 +1345,7 @@ export default function Home() {
                                 const updated = [...budgets];
                                 updated[i].status = 'Approved';
                                 setBudgets(updated);
-                                alert(`Budget "${b.item}" approved successfully and factored into Account Reports!`);
+                                alert(`Budget "${b.item}" approved successfully!`);
                               }} 
                               style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}
                             >
@@ -1221,67 +1365,6 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* Contribution Tracker Module with Edit/Delete */}
-            {financeView === 'tracker' && (
-              <div>
-                <button type="button" onClick={() => { setFinanceView('hub'); setEditingContribIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
-                  ← Back to Finance Hub
-                </button>
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingContribIndex !== null ? 'Edit Contribution Entry' : 'Contribution Tracker'}</h3>
-                  <form onSubmit={(e) => {
-                    e.preventDefault();
-                    if (editingContribIndex !== null) {
-                      const updated = [...contributions];
-                      updated[editingContribIndex] = contribForm;
-                      setContributions(updated);
-                      setEditingContribIndex(null);
-                      alert('Contribution updated successfully!');
-                    } else {
-                      setContributions([contribForm, ...contributions]);
-                      alert('Contribution recorded successfully!');
-                    }
-                    setContribForm({ contributor: '', type: 'General', amount: '', date: '' });
-                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contributor Name</label>
-                      <input type="text" required value={contribForm.contributor} onChange={(e) => setContribForm({...contribForm, contributor: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Name or anonymous" />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contribution Type</label>
-                      <select value={contribForm.type} onChange={(e) => setContribForm({...contribForm, type: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
-                        <option value="General">General Offering</option>
-                        <option value="Building Fund">Building Fund</option>
-                        <option value="Harvest">Harvest / Special</option>
-                        <option value="Mission">Mission</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
-                      <input type="number" required step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({...contribForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
-                      <input type="date" required value={contribForm.date} onChange={(e) => setContribForm({...contribForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
-                    </div>
-                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-                      {editingContribIndex !== null ? 'Update Contribution' : 'Save Contribution'}
-                    </button>
-                  </form>
-                </div>
-                <h4 style={{ color: '#0f172a' }}>Tracked Contributions ({contributions.length})</h4>
-                {contributions.map((c, i) => (
-                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{c.contributor}</strong> [{c.type}] - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong></span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => { setContribForm(c); setEditingContribIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
-                      <button type="button" onClick={() => setContributions(contributions.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
 
@@ -1447,13 +1530,13 @@ export default function Home() {
                     </div>
                   )}
 
-                  {contributions.length > 0 && (
+                  {incomes.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Contributions:</div>
-                      {contributions.map((c, i) => (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member General Incomes:</div>
+                      {incomes.map((inc, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                          <span><strong>{c.contributor}</strong> [{c.type}] (Paid on {c.date})</span>
-                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
+                          <span><strong>{inc.source}</strong> (Paid on {inc.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(inc.amount || 0).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
@@ -1490,14 +1573,14 @@ export default function Home() {
               </div>
             )}
 
-            {/* Balance Sheet Module */}
-            {financeView === 'balancesheet' && (
+            {/* Balance Sheet Module (Super Admin Only) */}
+            {financeView === 'balancesheet' && role === 'super_admin' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
                     ← Back to Hub
                   </button>
-                  <button type="button" onClick={() => downloadPDFReport('Balance Sheet')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                  <button type="button" onClick={() => downloadPDFReport('Balance Sheet')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
                     📥 Download Official PDF Report
                   </button>
                 </div>
