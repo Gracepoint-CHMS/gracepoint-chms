@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const CHURCH_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDyTPR...[Valid Base64]"; 
+const CHURCH_LOGO = "/icon-512.png"; 
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -432,7 +432,7 @@ export default function Home() {
         </head>
         <body>
           <div class="header">
-            <img src="${CHURCH_LOGO}" alt="Church Logo" class="logo" />
+                        <img src="${window.location.origin}${CHURCH_LOGO}" alt="Church Logo" class="logo" />
             <div class="header-text">
               <h2 class="church-name">GRACEPOINT PROPHETIC CHURCH</h2>
               <div class="subtitle">The Jesus Home Church</div>
@@ -460,7 +460,7 @@ export default function Home() {
             <strong>Official Notes & Remarks:</strong>
             <p style="margin: 0.5rem 0 0 0;">${title.includes('Balance') ? balanceSheetNotes : accountReportNotes}</p>
           </div>
-          <script>window.print();</script>
+                    <script>window.onload = function() { window.print(); };</script>
         </body>
       </html>
     `);
@@ -487,7 +487,7 @@ export default function Home() {
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
           <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '50px', height: '50px', objectFit: 'contain' }} />
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }}
             <div>
               <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint Prophetic Church</h1>
               <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>The Jesus Home Church - Portal</p>
@@ -669,7 +669,7 @@ export default function Home() {
       <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
         <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }}
             <div>
               <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Gracepoint Prophetic Church</h1>
               <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
@@ -733,7 +733,7 @@ export default function Home() {
       
       <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <img src={CHURCH_LOGO} alt="Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+          <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }}
           <div>
             <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
               Gracepoint Prophetic Church
