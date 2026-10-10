@@ -53,8 +53,9 @@ export default function Home() {
   const [contribForm, setContribForm] = useState({ contributor: '', type: 'General', amount: '', date: '' });
   const [editingContribIndex, setEditingContribIndex] = useState(null);
 
-  // Welfare table state (12 months x 4 weeks)
+  // Welfare table state (12 months x 4 weeks + date metadata)
   const [welfareRecords, setWelfareRecords] = useState({});
+  const [welfareDates, setWelfareDates] = useState({});
 
   // Editable Financial Reports State
   const [accountReportNotes, setAccountReportNotes] = useState('All financial activities are reconciled and audited weekly.');
@@ -275,6 +276,11 @@ export default function Home() {
     setWelfareRecords({
       ...welfareRecords,
       [memberId]: { ...memberRecord, [month]: updatedMonthWeeks }
+    });
+    // Track last modified date for report
+    setWelfareDates({
+      ...welfareDates,
+      [memberId]: new Date().toISOString().split('T')[0]
     });
   };
 
@@ -1279,7 +1285,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Welfare Contribution Matrix with Auto-Total Column */}
+            {/* Welfare Contribution Matrix with Auto-Grand Total Column */}
             {financeView === 'welfare' && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
@@ -1312,7 +1318,7 @@ export default function Home() {
                       </h3>
                       <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions with auto-calculated total column:</p>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions with auto-calculated month and year grand total column:</p>
                     
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
@@ -1323,7 +1329,7 @@ export default function Home() {
                             <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>2nd Wk</th>
                             <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>3rd Wk</th>
                             <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>4th Wk</th>
-                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#3730a3' }}>Total</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#3730a3' }}>Year Total</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1353,6 +1359,14 @@ export default function Home() {
                             );
                           })}
                         </tbody>
+                        <tfoot>
+                          <tr style={{ backgroundColor: '#1e3a8a', color: '#ffffff', fontWeight: 'bold' }}>
+                            <td colSpan="5" style={{ padding: '0.75rem', textAlign: 'right', border: '1px solid #cbd5e1' }}>Annual Grand Total:</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', border: '1px solid #cbd5e1' }}>
+                              {Object.values(welfareRecords[selectedMemberForWelfare.id || 'default'] || {}).reduce((gSum, weeks) => gSum + weeks.reduce((wSum, w) => wSum + w, 0), 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
 
@@ -1364,7 +1378,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Account Report Module with Full Member Financial Listings */}
+            {/* Account Report Module with Full Member Financial Listings & Welfare Dates */}
             {financeView === 'reports' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1417,16 +1431,16 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Detailed Member Tracking on Report */}
+                {/* Detailed Member Tracking on Report with Dates */}
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Member Financial Contributions & Tithes Tracking</h4>
+                  <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Member Financial Contributions, Tithes & Welfare Tracking</h4>
                   
                   {tithes.length > 0 && (
                     <div style={{ marginTop: '0.75rem' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Tithes:</div>
                       {tithes.map((t, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                          <span><strong>{t.member_name}</strong> ({t.date})</span>
+                          <span><strong>{t.member_name}</strong> (Paid on {t.date})</span>
                           <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(t.amount || 0).toFixed(2)}</span>
                         </div>
                       ))}
@@ -1438,7 +1452,7 @@ export default function Home() {
                       <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Contributions:</div>
                       {contributions.map((c, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                          <span><strong>{c.contributor}</strong> [{c.type}] ({c.date})</span>
+                          <span><strong>{c.contributor}</strong> [{c.type}] (Paid on {c.date})</span>
                           <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
                         </div>
                       ))}
@@ -1452,9 +1466,11 @@ export default function Home() {
                         const memObj = members.find(m => (m.id || 'default') === mId) || { first_name: 'Member', last_name: '' };
                         const memName = `${memObj.first_name || ''} ${memObj.last_name || ''}`.trim() || 'Member';
                         const memTotal = Object.values(monthsData).reduce((mSum, weeks) => mSum + weeks.reduce((wSum, w) => wSum + w, 0), 0);
+                        const paidDate = welfareDates[mId] || new Date().toISOString().split('T')[0];
+                        if (memTotal <= 0) return null;
                         return (
                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                            <span><strong>{memName}</strong> (Welfare Total)</span>
+                            <span><strong>{memName}</strong> (Welfare - Updated: {paidDate})</span>
                             <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {memTotal.toFixed(2)}</span>
                           </div>
                         );
