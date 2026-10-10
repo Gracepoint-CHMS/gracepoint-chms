@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -8,11 +8,26 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const CHURCH_LOGO = "/icon-512.png"; 
+const CHURCH_LOGO = "/icon-512.png";
+
+// Separate client used ONLY to create login accounts, so an admin adding a member is not signed out.
+const authOnlyClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+);
+
+const EMPTY_FORM = {
+  first_name: '', last_name: '', email: '', phone: '', password: '',
+  emergency_contact_name: '', emergency_contact_phone: '',
+  role: 'member', core_department: 'LOVE', sub_departments: [],
+  date_of_birth: '', date_of_baptism: '', date_joined: '',
+  home_address: '', home_town: '', photo_url: ''
+};
 
 export default function Home() {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState('super_admin');
+  const [role, setRole] = useState('member');
   const [loading, setLoading] = useState(true);
   
   // Auth Form State
@@ -37,9 +52,17 @@ export default function Home() {
   const [adminPermissions, setAdminPermissions] = useState({});
   const [selectedAdminEmail, setSelectedAdminEmail] = useState('');
 
+  // Saved-finance state
+  const [financeLoaded, setFinanceLoaded] = useState(false);
+  const [memberFinance, setMemberFinance] = useState(null);
+  const [saveError, setSaveError] = useState('');
+  const lastSnapRef = useRef('');
+  const lastRowsRef = useRef('');
+  const pendingSaveRef = useRef(false);
+
   // Financial Data State with Edit/Delete restricted to Super Admin
   const [incomes, setIncomes] = useState([]);
-  const [incomeForm, setIncomeForm] = useState({ source: '', amount: '', date: '' });
+  const [incomeForm, setIncomeForm] = useState({ source: '', amount: '', date: '', member_id: '', member_name: '' });
   const [editingIncomeIndex, setEditingIncomeIndex] = useState(null);
 
   const [expenses, setExpenses] = useState([]);
@@ -86,21 +109,7 @@ export default function Home() {
   const [showAnnounceForm, setShowAnnounceForm] = useState(false);
   const [announceForm, setAnnounceForm] = useState({ title: '', message: '' });
 
-  const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    role: 'member',
-    core_department: 'LOVE',
-    sub_departments: [],
-    date_of_birth: '',
-    date_of_baptism: '',
-    date_joined: '',
-    home_address: '',
-    home_town: '',
-    photo_url: ''
-  });
+  const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
@@ -147,12 +156,127 @@ export default function Home() {
         if (memberData) {
           if (memberData.role) setRole(memberData.role);
         }
+        const isAdminRole = !!(memberData && memberData.role && memberData.role !== 'member');
+        await loadFinance(isAdminRole, session.user.email);
       }
       fetchMembers();
       setLoading(false);
     }
     getUserData();
   }, []);
+
+
+  const DEFAULT_ACCOUNT_NOTES = 'All financial activities are reconciled and audited weekly.';
+  const DEFAULT_BALANCE_NOTES = 'Assets match total equity and liabilities.';
+
+  const makeSnapshot = () => ({
+    incomes, expenses, tithes, budgets, contributions,
+    welfareRecords, welfareDates, openingBalance,
+    accountReportNotes, balanceSheetNotes
+  });
+
+  const makeMemberRows = () => members
+    .filter(m => m.id && m.email)
+    .map(m => {
+      const id = String(m.id);
+      return {
+        member_id: id,
+        member_email: String(m.email).trim().toLowerCase(),
+        data: {
+          tithes: tithes.filter(t => String(t.member_id) === id),
+          contributions: contributions.filter(c => String(c.member_id) === id),
+          incomes: incomes.filter(i => i.member_id && String(i.member_id) === id),
+          welfare: welfareRecords[id] || {},
+          welfare_updated: welfareDates[id] || null
+        }
+      };
+    });
+
+  async function loadFinance(isAdmin, email) {
+    if (isAdmin) {
+      const { data, error } = await supabase
+        .from('finance_snapshot')
+        .select('data')
+        .eq('id', 1)
+        .maybeSingle();
+      if (error) {
+        setSaveError('Could not load saved finance records: ' + error.message);
+        return;
+      }
+      const d = (data && data.data) || {};
+      const snap = {
+        incomes: d.incomes || [],
+        expenses: d.expenses || [],
+        tithes: d.tithes || [],
+        budgets: d.budgets || [],
+        contributions: d.contributions || [],
+        welfareRecords: d.welfareRecords || {},
+        welfareDates: d.welfareDates || {},
+        openingBalance: typeof d.openingBalance === 'number' ? d.openingBalance : 2484.32,
+        accountReportNotes: d.accountReportNotes || DEFAULT_ACCOUNT_NOTES,
+        balanceSheetNotes: d.balanceSheetNotes || DEFAULT_BALANCE_NOTES
+      };
+      lastSnapRef.current = JSON.stringify(snap);
+      setIncomes(snap.incomes);
+      setExpenses(snap.expenses);
+      setTithes(snap.tithes);
+      setBudgets(snap.budgets);
+      setContributions(snap.contributions);
+      setWelfareRecords(snap.welfareRecords);
+      setWelfareDates(snap.welfareDates);
+      setOpeningBalance(snap.openingBalance);
+      setAccountReportNotes(snap.accountReportNotes);
+      setBalanceSheetNotes(snap.balanceSheetNotes);
+      setFinanceLoaded(true);
+    } else {
+      const { data, error } = await supabase
+        .from('member_finance')
+        .select('data')
+        .eq('member_email', String(email || '').trim().toLowerCase())
+        .maybeSingle();
+      if (error) {
+        setSaveError('Could not load your records: ' + error.message);
+      }
+      setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
+    }
+  }
+
+  // Auto-save finance records (admins only), a moment after any change
+  useEffect(() => {
+    if (!financeLoaded || !user || role === 'member') return;
+    const snapJSON = JSON.stringify(makeSnapshot());
+    const rows = makeMemberRows();
+    const rowsJSON = JSON.stringify(rows);
+    const snapChanged = snapJSON !== lastSnapRef.current;
+    const rowsChanged = rows.length > 0 && rowsJSON !== lastRowsRef.current;
+    if (!snapChanged && !rowsChanged) { pendingSaveRef.current = false; return; }
+    pendingSaveRef.current = true;
+    const timer = setTimeout(async () => {
+      let failed = '';
+      if (snapChanged) {
+        const { error } = await supabase
+          .from('finance_snapshot')
+          .upsert({ id: 1, data: JSON.parse(snapJSON), updated_at: new Date().toISOString() });
+        if (error) failed = error.message; else lastSnapRef.current = snapJSON;
+      }
+      if (!failed && rowsChanged) {
+        const { error } = await supabase
+          .from('member_finance')
+          .upsert(rows.map(r => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: 'member_id' });
+        if (error) failed = error.message; else lastRowsRef.current = rowsJSON;
+      }
+      pendingSaveRef.current = false;
+      setSaveError(failed ? 'Could not save finance records: ' + failed : '');
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes]);
+
+  // Refresh saved records when an admin opens the Contributions / Finance tab (picks up other admins' entries)
+  useEffect(() => {
+    if (activeTab === 'contributions' && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+      loadFinance(true, '');
+    }
+  }, [activeTab]);
 
   async function fetchMembers() {
     const { data: allMembers } = await supabase
@@ -212,8 +336,11 @@ export default function Home() {
       ? formData.sub_departments.join(', ') 
       : formData.sub_departments;
 
+    // The password is used only to create the login account. It is never saved in the members table.
+    const { password, ...memberFields } = formData;
     const payload = {
-      ...formData,
+      ...memberFields,
+      email: (memberFields.email || '').trim().toLowerCase(),
       sub_departments: subDeptsStr
     };
 
@@ -235,20 +362,31 @@ export default function Home() {
         }, 1500);
       }
     } else {
+      if (!password || password.length < 6) {
+        setFormError('Please enter a password of at least 6 characters.');
+        return;
+      }
+
+      // 1) Create the login account (uses a separate client so the admin stays signed in)
+      const { error: signUpError } = await authOnlyClient.auth.signUp({
+        email: payload.email,
+        password: password
+      });
+      if (signUpError) {
+        setFormError('Could not create the login account: ' + signUpError.message);
+        return;
+      }
+
+      // 2) Save the member details
       const { error } = await supabase
         .from('members')
         .insert([payload]);
 
       if (error) {
-        setFormError(error.message);
+        setFormError('Login account was created, but saving member details failed: ' + error.message);
       } else {
         setFormSuccess(isSelfRegistering ? 'Self-registration successful! You can now log in.' : 'Member successfully registered with all details!');
-        setFormData({
-          first_name: '', last_name: '', email: '', phone: '',
-          role: 'member', core_department: 'LOVE', sub_departments: [],
-          date_of_birth: '', date_of_baptism: '', date_joined: '',
-          home_address: '', home_town: '', photo_url: ''
-        });
+        setFormData({ ...EMPTY_FORM });
         fetchMembers();
         setTimeout(() => {
           setShowRegisterForm(false);
@@ -285,6 +423,9 @@ export default function Home() {
       last_name: m.last_name || '',
       email: m.email || '',
       phone: m.phone || '',
+      password: '',
+      emergency_contact_name: m.emergency_contact_name || '',
+      emergency_contact_phone: m.emergency_contact_phone || '',
       role: m.role || 'member',
       core_department: m.core_department || 'LOVE',
       sub_departments: subs,
@@ -432,7 +573,7 @@ export default function Home() {
         </head>
         <body>
           <div class="header">
-                        <img src="${window.location.origin}${CHURCH_LOGO}" alt="Church Logo" class="logo" />
+            <img src="${window.location.origin}${CHURCH_LOGO}" alt="Church Logo" class="logo" />
             <div class="header-text">
               <h2 class="church-name">GRACEPOINT PROPHETIC CHURCH</h2>
               <div class="subtitle">The Jesus Home Church</div>
@@ -460,7 +601,7 @@ export default function Home() {
             <strong>Official Notes & Remarks:</strong>
             <p style="margin: 0.5rem 0 0 0;">${title.includes('Balance') ? balanceSheetNotes : accountReportNotes}</p>
           </div>
-                    <script>window.onload = function() { window.print(); };</script>
+          <script>window.onload = function() { window.print(); };</script>
         </body>
       </html>
     `);
@@ -487,7 +628,7 @@ export default function Home() {
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
           <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                        <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
             <div>
               <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint Prophetic Church</h1>
               <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>The Jesus Home Church - Portal</p>
@@ -537,12 +678,7 @@ export default function Home() {
                   <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 0.5rem 0' }}>New member?</p>
                   <button 
                     type="button" 
-                    onClick={() => { setIsSelfRegistering(true); setEditingMemberId(null); setFormData({
-                      first_name: '', last_name: '', email: '', phone: '',
-                      role: 'member', core_department: 'LOVE', sub_departments: [],
-                      date_of_birth: '', date_of_baptism: '', date_joined: '',
-                      home_address: '', home_town: '', photo_url: ''
-                    }); }}
+                    onClick={() => { setIsSelfRegistering(true); setEditingMemberId(null); setFormData({ ...EMPTY_FORM }); }}
                     style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', width: '100%' }}
                   >
                     📝 Self-Register as New Member
@@ -579,6 +715,22 @@ export default function Home() {
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Phone</label>
                       <input type="text" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Password * (min. 6 characters)</label>
+                    <input type="password" required minLength={6} autoComplete="new-password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Create a password" />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Emergency Contact Person *</label>
+                      <input type="text" required value={formData.emergency_contact_name} onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Emergency Contact Number *</label>
+                      <input type="tel" required value={formData.emergency_contact_phone} onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Phone number" />
                     </div>
                   </div>
 
@@ -649,27 +801,26 @@ export default function Home() {
 
   // Regular Member Dashboard View
   if (role === 'member') {
-    const currentMemberRecord = members.find(m => m.email === user.email) || {};
-    const memberId = currentMemberRecord.id;
+    const currentMemberRecord = members.find(m => String(m.email || '').toLowerCase() === String(user.email || '').toLowerCase()) || {};
+    const mf = memberFinance || { tithes: [], contributions: [], incomes: [], welfare: {} };
+    const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
 
-    const memberTithes = tithes.filter(t => 
-      t.member_id === memberId || 
-      t.member_name.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase())
-    );
-    
-    const memberContributions = contributions.filter(c => 
-      c.member_id === memberId || 
-      c.contributor.toLowerCase().includes((currentMemberRecord.first_name || '').toLowerCase())
-    );
+    const memberTithes = [...(mf.tithes || [])].sort(byDateDesc);
+    const memberContributions = [
+      ...(mf.contributions || []).map(c => ({ type: c.type || 'Contribution', amount: c.amount, date: c.date })),
+      ...(mf.incomes || []).map(i => ({ type: i.source || 'General Income', amount: i.amount, date: i.date }))
+    ].sort(byDateDesc);
 
-    const memberWelfareMonths = welfareRecords[memberId || 'default'] || {};
+    const memberWelfareMonths = mf.welfare || {};
     const memberWelfareTotal = Object.values(memberWelfareMonths).reduce((mTotal, weeks) => mTotal + weeks.reduce((wSum, w) => wSum + w, 0), 0);
+    const memberTitheTotal = memberTithes.reduce((a, t) => a + (parseFloat(t.amount) || 0), 0);
+    const memberContribTotal = memberContributions.reduce((a, c) => a + (parseFloat(c.amount) || 0), 0);
 
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
         <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
             <div>
               <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Gracepoint Prophetic Church</h1>
               <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
@@ -686,6 +837,20 @@ export default function Home() {
               Welcome, {currentMemberRecord.first_name || user.email}
             </h2>
             <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Core Department: <strong>{currentMemberRecord.core_department || 'N/A'}</strong></p>
+          </div>
+
+          {saveError && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{saveError}</div>
+          )}
+          {memberFinance === null && (
+            <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Loading your records...</p>
+          )}
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', margin: '0 0 0.75rem 0' }}>My Financial Summary (read-only)</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Tithes</span><strong>GHS {memberTitheTotal.toFixed(2)}</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Contributions &amp; Income</span><strong>GHS {memberContribTotal.toFixed(2)}</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Welfare</span><strong>GHS {memberWelfareTotal.toFixed(2)}</strong></div>
           </div>
 
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
@@ -722,6 +887,12 @@ export default function Home() {
               <span>Total Welfare Paid:</span>
               <span style={{ color: '#1e3a8a' }}>GHS {memberWelfareTotal.toFixed(2)}</span>
             </div>
+            {Object.entries(memberWelfareMonths).filter(([, weeks]) => weeks.reduce((a, w) => a + w, 0) > 0).map(([month, weeks]) => (
+              <div key={month} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                <span>{month}</span>
+                <strong style={{ color: '#16a34a' }}>GHS {weeks.reduce((a, w) => a + w, 0).toFixed(2)}</strong>
+              </div>
+            ))}
           </div>
         </div>
       </main>
@@ -733,7 +904,7 @@ export default function Home() {
       
       <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
+          <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
           <div>
             <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
               Gracepoint Prophetic Church
@@ -772,6 +943,10 @@ export default function Home() {
         </div>
 
         <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', marginBottom: '1.25rem' }} />
+
+        {saveError && (
+          <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{saveError}</div>
+        )}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
           {['Members', 'Contributions', 'Attendance', 'Events', 'Announcements'].map((tab) => {
@@ -899,12 +1074,7 @@ export default function Home() {
                 <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.75rem' }}>
                   <button 
                     type="button" 
-                    onClick={() => { setEditingMemberId(null); setFormData({
-                      first_name: '', last_name: '', email: '', phone: '',
-                      role: 'member', core_department: 'LOVE', sub_departments: [],
-                      date_of_birth: '', date_of_baptism: '', date_joined: '',
-                      home_address: '', home_town: '', photo_url: ''
-                    }); setShowRegisterForm(true); }} 
+                    onClick={() => { setEditingMemberId(null); setFormData({ ...EMPTY_FORM }); setShowRegisterForm(true); }} 
                     style={{ flex: 1, backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
                   >
                     + Add New Member
@@ -993,6 +1163,24 @@ export default function Home() {
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Phone Number</label>
                       <input type="text" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Phone" />
+                    </div>
+                  </div>
+
+                  {!editingMemberId && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Password * (min. 6 characters)</label>
+                      <input type="password" required minLength={6} autoComplete="new-password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Create a password for this member" />
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Emergency Contact Person *</label>
+                      <input type="text" required value={formData.emergency_contact_name} onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Emergency Contact Number *</label>
+                      <input type="tel" required value={formData.emergency_contact_phone} onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Phone number" />
                     </div>
                   </div>
 
@@ -1094,6 +1282,10 @@ export default function Home() {
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🪙</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Tithes</div>
                   </div>
+                  <div onClick={() => setFinanceView('contributions')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📒</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Contributions Tracker</div>
+                  </div>
                   <div onClick={() => setFinanceView('welfare')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🤝</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Welfare Contributions</div>
@@ -1148,11 +1340,24 @@ export default function Home() {
                       setIncomes([incomeForm, ...incomes]);
                       alert('Member general income recorded successfully!');
                     }
-                    setIncomeForm({ source: '', amount: '', date: '' });
+                    setIncomeForm({ source: '', amount: '', date: '', member_id: '', member_name: '' });
                   }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Income Source / Member Title</label>
                       <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Member General Offering" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Member (optional - shows on that member's dashboard)</label>
+                      <select value={incomeForm.member_id || ''} onChange={(e) => {
+                        const mId = e.target.value;
+                        const mem = members.find(m => m.id === mId);
+                        setIncomeForm({ ...incomeForm, member_id: mId, member_name: mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : '' });
+                      }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="">-- Not linked to a member --</option>
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
@@ -1293,6 +1498,83 @@ export default function Home() {
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
                         <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {financeView === 'contributions' && (
+              <div>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingContribIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingContribIndex !== null ? 'Edit Contribution Entry' : 'Contributions Tracker - Record Contribution'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const selectedMember = members.find(m => m.id === contribForm.member_id);
+                    const contributorName = selectedMember ? `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() : contribForm.contributor;
+                    const payload = { ...contribForm, contributor: contributorName };
+                    if (editingContribIndex !== null) {
+                      if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit entries.'); return; }
+                      const updated = [...contributions];
+                      updated[editingContribIndex] = payload;
+                      setContributions(updated);
+                      setEditingContribIndex(null);
+                      alert('Contribution updated successfully!');
+                    } else {
+                      setContributions([payload, ...contributions]);
+                      alert('Contribution recorded successfully!');
+                    }
+                    setContribForm({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Member</label>
+                      <select required value={contribForm.member_id} onChange={(e) => {
+                        const mId = e.target.value;
+                        const mem = members.find(m => m.id === mId);
+                        setContribForm({ ...contribForm, member_id: mId, contributor: mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : '' });
+                      }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="">-- Choose Member --</option>
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contribution Type</label>
+                      <select value={contribForm.type} onChange={(e) => setContribForm({...contribForm, type: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="General">General</option>
+                        <option value="Building Fund">Building Fund</option>
+                        <option value="Thanksgiving">Thanksgiving</option>
+                        <option value="Pledge">Pledge</option>
+                        <option value="Missions">Missions</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({...contribForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={contribForm.date} onChange={(e) => setContribForm({...contribForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      {editingContribIndex !== null ? 'Update Contribution' : 'Save Contribution Entry'}
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Contributions ({contributions.length}) - Total: GHS {totalContribSum.toFixed(2)}</h4>
+                {contributions.map((c, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{c.contributor}</strong> - {c.type} ({c.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong></span>
+                    {role === 'super_admin' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { setContribForm(c); setEditingContribIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button type="button" onClick={() => setContributions(contributions.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
                       </div>
                     )}
                   </div>
@@ -1537,6 +1819,18 @@ export default function Home() {
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
                           <span><strong>{t.member_name}</strong> (Paid on {t.date})</span>
                           <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(t.amount || 0).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {contributions.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Contributions:</div>
+                      {contributions.map((c, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span><strong>{c.contributor}</strong> ({c.type} - Paid on {c.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
