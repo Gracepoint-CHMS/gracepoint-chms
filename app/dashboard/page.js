@@ -10,7 +10,7 @@ const supabase = createClient(
 );
 
 // Official Church Logo Data URI from your uploaded asset
-const EXACT_CHURCH_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAAsACwBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="; 
+ const EXACT_CHURCH_LOGO = "/icon-512.png";
 // Note: Replace the string above with your logo's full base64 string if needed, or use the direct public URL if hosted in Supabase storage.
 
 const CORE_DEPT_OPTIONS = ['LOVE', 'UNITY', 'CARE', 'RESPECT'];
