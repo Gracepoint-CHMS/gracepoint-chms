@@ -1,0 +1,2238 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+const CHURCH_LOGO = "/icon-512.png";
+
+// Separate client used ONLY to create login accounts, so an admin adding a member is not signed out.
+const authOnlyClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+);
+
+const EMPTY_FORM = {
+  first_name: '', last_name: '', email: '', phone: '', password: '',
+  emergency_contact_name: '', emergency_contact_phone: '',
+  role: 'member', core_department: 'LOVE', sub_departments: [],
+  date_of_birth: '', date_of_baptism: '', date_joined: '',
+  home_address: '', home_town: '', photo_url: ''
+};
+
+export default function Home() {
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState('member');
+  const [loading, setLoading] = useState(true);
+  
+  // Auth Form State
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isSelfRegistering, setIsSelfRegistering] = useState(false);
+
+  // Dashboard State
+  const [activeTab, setActiveTab] = useState('members');
+  const [financeView, setFinanceView] = useState('hub');
+  
+  const [members, setMembers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showRegisterForm, setShowRegisterForm] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState(null);
+  
+  const [selectedMemberForWelfare, setSelectedMemberForWelfare] = useState(null);
+  const [openingBalance, setOpeningBalance] = useState(2484.32);
+
+  // Admin Permissions State (Admin Email -> { category: { permissionKey: boolean } })
+  const [adminPermissions, setAdminPermissions] = useState({});
+  const [selectedAdminEmail, setSelectedAdminEmail] = useState('');
+
+  // Saved-finance state
+  const [financeLoaded, setFinanceLoaded] = useState(false);
+  const [memberFinance, setMemberFinance] = useState(null);
+  const [saveError, setSaveError] = useState('');
+  const lastSnapRef = useRef('');
+  const lastRowsRef = useRef('');
+  const pendingSaveRef = useRef(false);
+  const [myPermissions, setMyPermissions] = useState({});
+  const [permMessage, setPermMessage] = useState('');
+  const [welfareLocked, setWelfareLocked] = useState({});
+  const [viewAsMember, setViewAsMember] = useState(false);
+
+  // Financial Data State with Edit/Delete restricted to Super Admin
+  const [incomes, setIncomes] = useState([]);
+  const [incomeForm, setIncomeForm] = useState({ source: '', amount: '', date: '', member_id: '', member_name: '' });
+  const [editingIncomeIndex, setEditingIncomeIndex] = useState(null);
+
+  const [expenses, setExpenses] = useState([]);
+  const [expenseForm, setExpenseForm] = useState({ description: '', amount: '', date: '' });
+  const [editingExpenseIndex, setEditingExpenseIndex] = useState(null);
+
+  const [tithes, setTithes] = useState([]);
+  const [titheForm, setTitheForm] = useState({ member_id: '', member_name: '', amount: '', date: '' });
+  const [editingTitheIndex, setEditingTitheIndex] = useState(null);
+
+  const [budgets, setBudgets] = useState([]);
+  const [budgetForm, setBudgetForm] = useState({ item: '', estimated: '', status: 'Pending' });
+
+  const [contributions, setContributions] = useState([]);
+  const [contribForm, setContribForm] = useState({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
+  const [editingContribIndex, setEditingContribIndex] = useState(null);
+
+  // Welfare table state (12 months x 4 weeks + date metadata)
+  const [welfareRecords, setWelfareRecords] = useState({});
+  const [welfareDates, setWelfareDates] = useState({});
+
+  // Editable Financial Reports State
+  const [accountReportNotes, setAccountReportNotes] = useState('All financial activities are reconciled and audited weekly.');
+  const [balanceSheetNotes, setBalanceSheetNotes] = useState('Assets match total equity and liabilities.');
+
+  // Updated Attendance Module State with Service Type & Demographics (Men, Women, Children)
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [showAttendanceForm, setShowAttendanceForm] = useState(false);
+  const [attendanceForm, setAttendanceForm] = useState({
+    service_date: '',
+    service_type: 'Sunday Service',
+    department: 'General',
+    men_count: '',
+    women_count: '',
+    children_count: '',
+    status: 'Present'
+  });
+
+  const [eventsList, setEventsList] = useState([]);
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [eventForm, setEventForm] = useState({ title: '', date: '', description: '' });
+
+  const [announcementsList, setAnnouncementsList] = useState([]);
+  const [showAnnounceForm, setShowAnnounceForm] = useState(false);
+  const [announceForm, setAnnounceForm] = useState({ title: '', message: '' });
+
+  const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [formError, setFormError] = useState('');
+  const [formSuccess, setFormSuccess] = useState('');
+
+  const subDeptList = [
+    'Ushering Department',
+    'Choir/Music Department',
+    'Prayer Warriors',
+    'General Assembly',
+    'Men Ministry',
+    'Women Ministry',
+    'Ministry Evangelical department',
+    'Pastoral Ministry',
+    'Children Ministry'
+  ];
+
+  // 'soon: true' = the screen for this permission has not been built in the app yet
+  const permissionSchema = {
+    'User & Membership': [
+      { key: 'register_members', label: 'Register & edit members' },
+      { key: 'record_visitors', label: 'Record visitors', soon: true },
+      { key: 'record_new_converts', label: 'Record new converts', soon: true }
+    ],
+    'Services & Events': [
+      { key: 'register_services', label: 'Register services', soon: true },
+      { key: 'register_events', label: 'Register events' },
+      { key: 'record_attendance', label: 'Record attendance' }
+    ],
+    'Communication': [
+      { key: 'post_announcements', label: 'Post announcements' }
+    ],
+    'Finance': [
+      { key: 'access_finance', label: 'Access finance (record Tithes, Welfare, Incomes, Contributions)' },
+      { key: 'view_balance_sheet', label: 'View Account Report & Balance Sheet (read-only)' }
+    ]
+  };
+
+  // Super Admin can do everything. Sub-admins can only do what the Super Admin has switched on.
+  const can = (key) => role === 'super_admin' || !!myPermissions[key];
+
+  useEffect(() => {
+    async function getUserData() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user) {
+        setUser(session.user);
+        const { data: memberData } = await supabase
+          .from('members')
+          .select('*')
+          .eq('email', session.user.email)
+          .single();
+
+        if (memberData) {
+          if (memberData.role) setRole(memberData.role);
+        }
+        const isAdminRole = !!(memberData && memberData.role && memberData.role !== 'member');
+        await loadFinance(isAdminRole, session.user.email);
+        if (isAdminRole) await loadPermissions(memberData.role === 'super_admin', session.user.email);
+      }
+      fetchMembers();
+      setLoading(false);
+    }
+    getUserData();
+  }, []);
+
+
+  const DEFAULT_ACCOUNT_NOTES = 'All financial activities are reconciled and audited weekly.';
+  const DEFAULT_BALANCE_NOTES = 'Assets match total equity and liabilities.';
+
+  const makeSnapshot = () => ({
+    incomes, expenses, tithes, budgets, contributions,
+    welfareRecords, welfareDates, openingBalance,
+    accountReportNotes, balanceSheetNotes,
+    attendanceLogs, eventsList, announcementsList
+  });
+
+  const makeMemberRows = () => members
+    .filter(m => m.id && m.email)
+    .map(m => {
+      const id = String(m.id);
+      return {
+        member_id: id,
+        member_email: String(m.email).trim().toLowerCase(),
+        data: {
+          tithes: tithes.filter(t => String(t.member_id) === id),
+          contributions: contributions.filter(c => String(c.member_id) === id),
+          incomes: incomes.filter(i => i.member_id && String(i.member_id) === id),
+          welfare: welfareRecords[id] || {},
+          welfare_updated: welfareDates[id] || null
+        }
+      };
+    });
+
+  async function loadFinance(isAdmin, email) {
+    if (isAdmin) {
+      const { data, error } = await supabase
+        .from('finance_snapshot')
+        .select('data')
+        .eq('id', 1)
+        .maybeSingle();
+      if (error) {
+        setSaveError('Could not load saved finance records: ' + error.message);
+        return;
+      }
+      const d = (data && data.data) || {};
+      const snap = {
+        incomes: d.incomes || [],
+        expenses: d.expenses || [],
+        tithes: d.tithes || [],
+        budgets: d.budgets || [],
+        contributions: d.contributions || [],
+        welfareRecords: d.welfareRecords || {},
+        welfareDates: d.welfareDates || {},
+        openingBalance: typeof d.openingBalance === 'number' ? d.openingBalance : 2484.32,
+        accountReportNotes: d.accountReportNotes || DEFAULT_ACCOUNT_NOTES,
+        balanceSheetNotes: d.balanceSheetNotes || DEFAULT_BALANCE_NOTES,
+        attendanceLogs: d.attendanceLogs || [],
+        eventsList: d.eventsList || [],
+        announcementsList: d.announcementsList || []
+      };
+      lastSnapRef.current = JSON.stringify(snap);
+      setIncomes(snap.incomes);
+      setExpenses(snap.expenses);
+      setTithes(snap.tithes);
+      setBudgets(snap.budgets);
+      setContributions(snap.contributions);
+      setWelfareRecords(snap.welfareRecords);
+      setWelfareDates(snap.welfareDates);
+      setOpeningBalance(snap.openingBalance);
+      setAccountReportNotes(snap.accountReportNotes);
+      setBalanceSheetNotes(snap.balanceSheetNotes);
+      setAttendanceLogs(snap.attendanceLogs);
+      setEventsList(snap.eventsList);
+      setAnnouncementsList(snap.announcementsList);
+      setFinanceLoaded(true);
+    } else {
+      const { data, error } = await supabase
+        .from('member_finance')
+        .select('data')
+        .eq('member_email', String(email || '').trim().toLowerCase())
+        .maybeSingle();
+      if (error) {
+        setSaveError('Could not load your records: ' + error.message);
+      }
+      setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
+    }
+  }
+
+  // Auto-save finance records (admins only), a moment after any change
+  useEffect(() => {
+    if (!financeLoaded || !user || role === 'member') return;
+    const snapJSON = JSON.stringify(makeSnapshot());
+    const rows = makeMemberRows();
+    const rowsJSON = JSON.stringify(rows);
+    const snapChanged = snapJSON !== lastSnapRef.current;
+    const rowsChanged = rows.length > 0 && rowsJSON !== lastRowsRef.current;
+    if (!snapChanged && !rowsChanged) { pendingSaveRef.current = false; return; }
+    pendingSaveRef.current = true;
+    const timer = setTimeout(async () => {
+      let failed = '';
+      if (snapChanged) {
+        const { error } = await supabase
+          .from('finance_snapshot')
+          .upsert({ id: 1, data: JSON.parse(snapJSON), updated_at: new Date().toISOString() });
+        if (error) failed = error.message; else lastSnapRef.current = snapJSON;
+      }
+      if (!failed && rowsChanged) {
+        const { error } = await supabase
+          .from('member_finance')
+          .upsert(rows.map(r => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: 'member_id' });
+        if (error) failed = error.message; else lastRowsRef.current = rowsJSON;
+      }
+      pendingSaveRef.current = false;
+      setSaveError(failed ? 'Could not save finance records: ' + failed : '');
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList]);
+
+  // Refresh saved records when an admin opens the Contributions / Finance tab (picks up other admins' entries)
+  useEffect(() => {
+    if (['contributions', 'attendance', 'events', 'announcements'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+      loadFinance(true, '');
+    }
+  }, [activeTab]);
+
+
+  async function loadPermissions(isSuper, email) {
+    if (isSuper) {
+      const { data } = await supabase.from('admin_permissions').select('email, permissions');
+      const map = {};
+      (data || []).forEach(r => { map[String(r.email).toLowerCase()] = r.permissions || {}; });
+      setAdminPermissions(map);
+    } else {
+      const { data } = await supabase
+        .from('admin_permissions')
+        .select('permissions')
+        .eq('email', String(email || '').trim().toLowerCase())
+        .maybeSingle();
+      setMyPermissions((data && data.permissions) || {});
+    }
+  }
+
+  const savePermissions = async () => {
+    setPermMessage('');
+    const email = String(selectedAdminEmail || '').trim().toLowerCase();
+    if (!email) return;
+    const { error } = await supabase
+      .from('admin_permissions')
+      .upsert({ email, permissions: adminPermissions[email] || {}, updated_at: new Date().toISOString() }, { onConflict: 'email' });
+    setPermMessage(error ? 'Could not save permissions: ' + error.message : 'Permissions saved. They apply the next time that admin opens the app.');
+  };
+
+  const changeAccountRole = async (newRole) => {
+    setPermMessage('');
+    const email = String(selectedAdminEmail || '').trim().toLowerCase();
+    const target = members.find(m => String(m.email || '').toLowerCase() === email);
+    if (!target || target.role === 'super_admin') return;
+    const { error } = await supabase.from('members').update({ role: newRole }).eq('id', target.id);
+    if (error) setPermMessage('Could not change role: ' + error.message);
+    else { setPermMessage(newRole === 'admin' ? 'Now a Sub-Admin. Tick what they may do, then press Save Permissions.' : 'Now a regular member.'); fetchMembers(); }
+  };
+
+  // Opening  .../?register=1  shows the self-registration form on the login screen
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('register') === '1') {
+      setIsSelfRegistering(true);
+    }
+  }, []);
+
+  async function fetchMembers() {
+    const { data: allMembers } = await supabase
+      .from('members')
+      .select('*');
+
+    if (allMembers) {
+      setMembers(allMembers);
+    }
+  }
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailInput,
+      password: passwordInput,
+    });
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      window.location.reload();
+    }
+  };
+
+  const handleLogout = async () => {
+    setViewAsMember(false);
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
+
+  const handleSubDeptToggle = (dept) => {
+    const current = formData.sub_departments;
+    if (current.includes(dept)) {
+      setFormData({ ...formData, sub_departments: current.filter(d => d !== dept) });
+    } else {
+      setFormData({ ...formData, sub_departments: [...current, dept] });
+    }
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo_url: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveMember = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormSuccess('');
+
+    const subDeptsStr = Array.isArray(formData.sub_departments) 
+      ? formData.sub_departments.join(', ') 
+      : formData.sub_departments;
+
+    // The password is used only to create the login account. It is never saved in the members table.
+    const { password, ...memberFields } = formData;
+    const payload = {
+      ...memberFields,
+      email: (memberFields.email || '').trim().toLowerCase(),
+      sub_departments: subDeptsStr
+    };
+
+    if (editingMemberId) {
+      const { error } = await supabase
+        .from('members')
+        .update(payload)
+        .eq('id', editingMemberId);
+
+      if (error) {
+        setFormError(error.message);
+      } else {
+        setFormSuccess('Member details successfully updated!');
+        fetchMembers();
+        setTimeout(() => {
+          setShowRegisterForm(false);
+          setEditingMemberId(null);
+          setFormSuccess('');
+        }, 1500);
+      }
+    } else {
+      if (!password || password.length < 6) {
+        setFormError('Please enter a password of at least 6 characters.');
+        return;
+      }
+
+      // 1) Create the login account (uses a separate client so the admin stays signed in)
+      const { error: signUpError } = await authOnlyClient.auth.signUp({
+        email: payload.email,
+        password: password
+      });
+      if (signUpError) {
+        setFormError('Could not create the login account: ' + signUpError.message);
+        return;
+      }
+
+      // 2) Save the member details
+      const { error } = await supabase
+        .from('members')
+        .insert([payload]);
+
+      if (error) {
+        setFormError('Login account was created, but saving member details failed: ' + error.message);
+      } else {
+        setFormSuccess(isSelfRegistering ? 'Self-registration successful! You can now log in.' : 'Member successfully registered with all details!');
+        setFormData({ ...EMPTY_FORM });
+        fetchMembers();
+        setTimeout(() => {
+          setShowRegisterForm(false);
+          setIsSelfRegistering(false);
+          setFormSuccess('');
+        }, 1500);
+      }
+    }
+  };
+
+  const handleDeleteMember = async (id) => {
+    if (role !== 'super_admin') {
+      alert('Permission denied. Only Super Admin can delete members.');
+      return;
+    }
+    if (confirm('Are you sure you want to delete this member?')) {
+      const { error } = await supabase.from('members').delete().eq('id', id);
+      if (error) {
+        alert('Error deleting member: ' + error.message);
+      } else {
+        fetchMembers();
+      }
+    }
+  };
+
+  const handleStartEditMember = (m) => {
+    setEditingMemberId(m.id);
+    let subs = [];
+    if (m.sub_departments) {
+      subs = typeof m.sub_departments === 'string' ? m.sub_departments.split(', ').map(s => s.trim()) : m.sub_departments;
+    }
+    setFormData({
+      first_name: m.first_name || '',
+      last_name: m.last_name || '',
+      email: m.email || '',
+      phone: m.phone || '',
+      password: '',
+      emergency_contact_name: m.emergency_contact_name || '',
+      emergency_contact_phone: m.emergency_contact_phone || '',
+      role: m.role || 'member',
+      core_department: m.core_department || 'LOVE',
+      sub_departments: subs,
+      date_of_birth: m.date_of_birth || '',
+      date_of_baptism: m.date_of_baptism || '',
+      date_joined: m.date_joined || '',
+      home_address: m.home_address || '',
+      home_town: m.home_town || '',
+      photo_url: m.photo_url || ''
+    });
+    setShowRegisterForm(true);
+  };
+
+  const handleWelfareChange = (memberId, month, weekIndex, val) => {
+    const num = val === '' ? 0 : parseFloat(val);
+    const memberRecord = welfareRecords[memberId] || {
+      Jan: [0,0,0,0], Feb: [0,0,0,0], Mar: [0,0,0,0], Apr: [0,0,0,0],
+      May: [0,0,0,0], Jun: [0,0,0,0], Jul: [0,0,0,0], Aug: [0,0,0,0],
+      Sep: [0,0,0,0], Oct: [0,0,0,0], Nov: [0,0,0,0], Dec: [0,0,0,0]
+    };
+    const updatedMonthWeeks = [...memberRecord[month]];
+    updatedMonthWeeks[weekIndex] = isNaN(num) ? 0 : num;
+    setWelfareRecords({
+      ...welfareRecords,
+      [memberId]: { ...memberRecord, [month]: updatedMonthWeeks }
+    });
+    setWelfareDates({
+      ...welfareDates,
+      [memberId]: new Date().toISOString().split('T')[0]
+    });
+  };
+
+  const totalWelfareSum = Object.values(welfareRecords).reduce((grandTotal, memberMonths) => {
+    const memberSum = Object.values(memberMonths).reduce((mTotal, weeks) => {
+      return mTotal + weeks.reduce((wSum, w) => wSum + w, 0);
+    }, 0);
+    return grandTotal + memberSum;
+  }, 0);
+
+  const totalIncomeSum = incomes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  const totalTitheSum = tithes.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  const totalContribSum = contributions.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  const totalExpenseSum = expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+  
+  const approvedBudgetsSum = budgets
+    .filter(b => b.status === 'Approved')
+    .reduce((acc, curr) => acc + (parseFloat(curr.estimated) || 0), 0);
+
+  const grossInflow = openingBalance + totalIncomeSum + totalTitheSum + totalContribSum + totalWelfareSum;
+  const netBalance = grossInflow - (totalExpenseSum + approvedBudgetsSum);
+
+  const downloadPDFReport = (title) => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${title} - Gracepoint Prophetic Church</title>
+          <style>
+            body { 
+              font-family: 'Segoe UI', Arial, sans-serif; 
+              padding: 2.5rem; 
+              color: #1e293b; 
+              max-width: 800px; 
+              margin: 0 auto; 
+              background-color: #ffffff;
+            }
+            .header { 
+              border-bottom: 3px solid #1e3a8a; 
+              padding-bottom: 1.25rem; 
+              margin-bottom: 1.75rem; 
+              display: flex;
+              align-items: center;
+              gap: 1.5rem;
+              background: linear-gradient(to bottom, #f8fafc, #ffffff);
+              padding: 1.25rem;
+              border-radius: 0.5rem;
+              border-top: 4px solid #2563eb;
+            }
+            .logo { 
+              width: 75px; 
+              height: 75px; 
+              object-fit: contain; 
+            }
+            .header-text {
+              flex-grow: 1;
+            }
+            .church-name { 
+              font-size: 1.35rem; 
+              font-weight: 800; 
+              color: #1e3a8a; 
+              margin: 0 0 0.15rem 0; 
+              letter-spacing: 0.5px;
+            }
+            .subtitle { 
+              font-size: 0.95rem; 
+              color: #475569; 
+              font-weight: 600;
+              margin-bottom: 0.35rem; 
+            }
+            .report-title-badge {
+              display: inline-block;
+              background-color: #1e3a8a;
+              color: #ffffff;
+              padding: 0.25rem 0.75rem;
+              border-radius: 0.25rem;
+              font-size: 0.85rem;
+              font-weight: bold;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .meta-date {
+              font-size: 0.8rem;
+              color: #64748b;
+              text-align: right;
+            }
+            .row { 
+              display: flex; 
+              justify-content: space-between; 
+              padding: 0.65rem 0.5rem; 
+              border-bottom: 1px solid #e2e8f0; 
+              font-size: 0.95rem; 
+            }
+            .row:nth-child(even) {
+              background-color: #f8fafc;
+            }
+            .summary { 
+              margin-top: 1.5rem; 
+              font-size: 1.15rem; 
+              font-weight: bold; 
+              background-color: #eff6ff;
+              padding: 0.85rem;
+              border: 1px solid #bfdbfe;
+              border-radius: 0.375rem;
+            }
+            .notes {
+              margin-top: 2rem;
+              font-size: 0.9rem;
+              color: #334155;
+              background-color: #f8fafc;
+              padding: 1rem;
+              border-left: 4px solid #2563eb;
+              border-radius: 0.25rem;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <img src="${window.location.origin}${CHURCH_LOGO}" alt="Church Logo" class="logo" />
+            <div class="header-text">
+              <h2 class="church-name">GRACEPOINT PROPHETIC CHURCH</h2>
+              <div class="subtitle">The Jesus Home Church</div>
+              <span class="report-title-badge">${title}</span>
+            </div>
+            <div class="meta-date">
+              <strong>Date:</strong> ${new Date().toLocaleDateString()}
+            </div>
+          </div>
+          <div>
+            <div class="row"><span>Opening Balance:</span><strong>GHS ${openingBalance.toFixed(2)}</strong></div>
+            <div class="row"><span>Total General Incomes:</span><strong style="color: #16a34a;">+ GHS ${totalIncomeSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Tithes:</span><strong style="color: #16a34a;">+ GHS ${totalTitheSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Contributions:</span><strong style="color: #16a34a;">+ GHS ${totalContribSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Welfare Contributions:</span><strong style="color: #16a34a;">+ GHS ${totalWelfareSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Total Expenses:</span><strong style="color: #dc2626;">- GHS ${totalExpenseSum.toFixed(2)}</strong></div>
+            <div class="row"><span>Approved Budgets (Allocated):</span><strong style="color: #dc2626;">- GHS ${approvedBudgetsSum.toFixed(2)}</strong></div>
+            
+            <div class="row summary">
+              <span>Net Balance / Fund Balance:</span>
+              <span style="color: #1e3a8a;">GHS ${netBalance.toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="notes">
+            <strong>Official Notes & Remarks:</strong>
+            <p style="margin: 0.5rem 0 0 0;">${title.includes('Balance') ? balanceSheetNotes : accountReportNotes}</p>
+          </div>
+          <script>window.onload = function() { window.print(); };</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const filteredMembers = members.filter((m) => {
+    const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
+    const email = (m.email || '').toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return fullName.includes(query) || email.includes(query);
+  });
+
+  if (loading) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'system-ui, sans-serif', color: '#64748b' }}>
+        <p>Loading application...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
+            <div>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Gracepoint Prophetic Church</h1>
+              <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>The Jesus Home Church - Portal</p>
+            </div>
+          </div>
+          
+          <div style={{ padding: '1.5rem' }}>
+            {!isSelfRegistering ? (
+              <div>
+                {authError && (
+                  <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                    {authError}
+                  </div>
+                )}
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Email Address</label>
+                    <input 
+                      type="email" 
+                      value={emailInput} 
+                      onChange={(e) => setEmailInput(e.target.value)} 
+                      required 
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                      placeholder="Enter your email"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Password</label>
+                    <input 
+                      type="password" 
+                      value={passwordInput} 
+                      onChange={(e) => setPasswordInput(e.target.value)} 
+                      required 
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                      placeholder="Enter your password"
+                    />
+                  </div>
+                  <button 
+                    type="submit" 
+                    style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '1rem', cursor: 'pointer', marginTop: '0.5rem' }}
+                  >
+                    Login
+                  </button>
+                </form>
+
+                <div style={{ marginTop: '1.25rem', textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 0.5rem 0' }}>New member?</p>
+                  <button 
+                    type="button" 
+                    onClick={() => { setIsSelfRegistering(true); setEditingMemberId(null); setFormData({ ...EMPTY_FORM }); }}
+                    style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', width: '100%' }}
+                  >
+                    📝 Self-Register as New Member
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Member Self-Registration</h3>
+                  <button type="button" onClick={() => setIsSelfRegistering(false)} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85rem' }}>← Back to Login</button>
+                </div>
+
+                {formError && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formError}</div>}
+                {formSuccess && <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formSuccess}</div>}
+
+                <form onSubmit={handleSaveMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '25rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>First Name *</label>
+                      <input type="text" required value={formData.first_name} onChange={(e) => setFormData({...formData, first_name: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Last Name *</label>
+                      <input type="text" required value={formData.last_name} onChange={(e) => setFormData({...formData, last_name: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Email *</label>
+                      <input type="email" required value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Phone</label>
+                      <input type="text" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Password * (min. 6 characters)</label>
+                    <input type="password" required minLength={6} autoComplete="new-password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Create a password" />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Emergency Contact Person *</label>
+                      <input type="text" required value={formData.emergency_contact_name} onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Emergency Contact Number *</label>
+                      <input type="tel" required value={formData.emergency_contact_phone} onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Phone number" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Core Department *</label>
+                    <select value={formData.core_department} onChange={(e) => setFormData({...formData, core_department: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="LOVE">LOVE</option>
+                      <option value="UNITY">UNITY</option>
+                      <option value="CARE">CARE</option>
+                      <option value="RESPECT">RESPECT</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Sub-Departments</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.3rem', maxHeight: '7rem', overflowY: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', backgroundColor: '#f8fafc' }}>
+                      {subDeptList.map((dept) => (
+                        <label key={dept} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={formData.sub_departments.includes(dept)} onChange={() => handleSubDeptToggle(dept)} />
+                          {dept}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.3rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Birth Date</label>
+                      <input type="date" value={formData.date_of_birth} onChange={(e) => setFormData({...formData, date_of_birth: e.target.value})} style={{ width: '100%', padding: '0.4rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.75rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Baptism Date</label>
+                      <input type="date" value={formData.date_of_baptism} onChange={(e) => setFormData({...formData, date_of_baptism: e.target.value})} style={{ width: '100%', padding: '0.4rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.75rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Joined Date</label>
+                      <input type="date" value={formData.date_joined} onChange={(e) => setFormData({...formData, date_joined: e.target.value})} style={{ width: '100%', padding: '0.4rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.75rem', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Home Address</label>
+                      <input type="text" value={formData.home_address} onChange={(e) => setFormData({...formData, home_address: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#0f172a', marginBottom: '0.2rem' }}>Home Town</label>
+                      <input type="text" value={formData.home_town} onChange={(e) => setFormData({...formData, home_town: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Photo Upload</label>
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ width: '100%', padding: '0.4rem', fontSize: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', boxSizing: 'border-box' }} />
+                  </div>
+
+                  <button type="submit" style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Complete Self-Registration
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Regular Member Dashboard View
+  if (role === 'member' || viewAsMember) {
+    const currentMemberRecord = members.find(m => String(m.email || '').toLowerCase() === String(user.email || '').toLowerCase()) || {};
+    // Members read their saved records. Admins viewing their own portal use the records already loaded.
+    const myId = String(currentMemberRecord.id || '');
+    const mf = role === 'member'
+      ? (memberFinance || { tithes: [], contributions: [], incomes: [], welfare: {} })
+      : {
+          tithes: tithes.filter(t => myId && String(t.member_id) === myId),
+          contributions: contributions.filter(c => myId && String(c.member_id) === myId),
+          incomes: incomes.filter(i => myId && i.member_id && String(i.member_id) === myId),
+          welfare: (myId && welfareRecords[myId]) || {}
+        };
+    const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
+
+    const memberTithes = [...(mf.tithes || [])].sort(byDateDesc);
+    const memberContributions = [
+      ...(mf.contributions || []).map(c => ({ type: c.type || 'Contribution', amount: c.amount, date: c.date })),
+      ...(mf.incomes || []).map(i => ({ type: i.source || 'General Income', amount: i.amount, date: i.date }))
+    ].sort(byDateDesc);
+
+    const memberWelfareMonths = mf.welfare || {};
+    const memberWelfareTotal = Object.values(memberWelfareMonths).reduce((mTotal, weeks) => mTotal + weeks.reduce((wSum, w) => wSum + w, 0), 0);
+    const memberTitheTotal = memberTithes.reduce((a, t) => a + (parseFloat(t.amount) || 0), 0);
+    const memberContribTotal = memberContributions.reduce((a, c) => a + (parseFloat(c.amount) || 0), 0);
+
+    return (
+      <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
+        <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
+            <div>
+              <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Gracepoint Prophetic Church</h1>
+              <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {role !== 'member' && (
+              <button type="button" onClick={() => setViewAsMember(false)} style={{ backgroundColor: '#ffffff', color: '#1e3a8a', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+                Admin Dashboard
+              </button>
+            )}
+          <button type="button" onClick={handleLogout} style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+            Logout
+          </button>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: '40rem', margin: '1.5rem auto', padding: '0 1rem' }}>
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>
+              Welcome, {currentMemberRecord.first_name || user.email}
+            </h2>
+            <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Core Department: <strong>{currentMemberRecord.core_department || 'N/A'}</strong></p>
+          </div>
+
+          {saveError && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{saveError}</div>
+          )}
+          {role === 'member' && memberFinance === null && (
+            <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Loading your records...</p>
+          )}
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', margin: '0 0 0.75rem 0' }}>My Financial Summary (read-only)</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Tithes</span><strong>GHS {memberTitheTotal.toFixed(2)}</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Contributions &amp; Income</span><strong>GHS {memberContribTotal.toFixed(2)}</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Welfare</span><strong>GHS {memberWelfareTotal.toFixed(2)}</strong></div>
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Tithes History</h3>
+            {memberTithes.length > 0 ? (
+              memberTithes.map((t, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                  <span>{t.date}</span>
+                  <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong>
+                </div>
+              ))
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>No tithe records found.</p>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Contributions & General Income History</h3>
+            {memberContributions.length > 0 ? (
+              memberContributions.map((c, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                  <span>{c.type} ({c.date})</span>
+                  <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong>
+                </div>
+              ))
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>No contribution records found.</p>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Welfare Summary</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 'bold' }}>
+              <span>Total Welfare Paid:</span>
+              <span style={{ color: '#1e3a8a' }}>GHS {memberWelfareTotal.toFixed(2)}</span>
+            </div>
+            {Object.entries(memberWelfareMonths).filter(([, weeks]) => weeks.reduce((a, w) => a + w, 0) > 0).map(([month, weeks]) => (
+              <div key={month} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                <span>{month}</span>
+                <strong style={{ color: '#16a34a' }}>GHS {weeks.reduce((a, w) => a + w, 0).toFixed(2)}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
+      
+      <div style={{ backgroundColor: '#1e3a8a', color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <img src={CHURCH_LOGO} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
+          <div>
+            <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
+              Gracepoint Prophetic Church
+            </h1>
+            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>The Jesus Home Church</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button 
+            type="button"
+            onClick={handleLogout}
+            style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: '44rem', margin: '1.25rem auto', padding: '0 1rem' }}>
+        
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>
+          {role === 'super_admin' ? 'Super Admin Dashboard' : 'Sub-Admin Dashboard'}
+        </h2>
+
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <button type="button" onClick={() => setViewAsMember(true)} style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
+            My Portal
+          </button>
+          <button 
+            type="button" 
+            onClick={handleLogout} 
+            style={{ backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}
+          >
+            Logout
+          </button>
+        </div>
+
+        <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', marginBottom: '1.25rem' }} />
+
+        {saveError && (
+          <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{saveError}</div>
+        )}
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
+          {[['Members', true], ['Contributions', can('access_finance') || can('view_balance_sheet')], ['Attendance', can('record_attendance')], ['Events', can('register_events')], ['Announcements', can('post_announcements')]].filter(([, ok]) => ok).map(([tab]) => {
+            const isActive = activeTab === tab.toLowerCase();
+            return (
+              <button 
+                key={tab}
+                type="button"
+                onClick={() => { setActiveTab(tab.toLowerCase()); setFinanceView('hub'); setShowRegisterForm(false); }}
+                style={{ 
+                  backgroundColor: isActive ? '#2563eb' : '#f1f5f9', 
+                  color: isActive ? '#ffffff' : '#334155', 
+                  border: 'none', 
+                  padding: '0.65rem 1rem', 
+                  borderRadius: '0.5rem', 
+                  fontWeight: '600', 
+                  cursor: 'pointer', 
+                  fontSize: '0.9rem' 
+                }}
+              >
+                {tab}
+              </button>
+            );
+          })}
+          {role === 'super_admin' && (
+            <button 
+              type="button"
+              onClick={() => { setActiveTab('permissions'); setFinanceView('hub'); setShowRegisterForm(false); }}
+              style={{ 
+                backgroundColor: activeTab === 'permissions' ? '#2563eb' : '#f1f5f9', 
+                color: activeTab === 'permissions' ? '#ffffff' : '#334155', 
+                border: 'none', 
+                padding: '0.65rem 1rem', 
+                borderRadius: '0.5rem', 
+                fontWeight: '600', 
+                cursor: 'pointer', 
+                fontSize: '0.9rem' 
+              }}
+            >
+              🔐 Admin Permissions
+            </button>
+          )}
+        </div>
+
+        {/* Admin Permissions Tab (Super Admin Only) */}
+        {activeTab === 'permissions' && role === 'super_admin' && (() => {
+          const selKey = String(selectedAdminEmail || '').trim().toLowerCase();
+          const selMember = members.find(m => String(m.email || '').toLowerCase() === selKey);
+          const selPerms = adminPermissions[selKey] || {};
+          return (
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '0.5rem' }}>Admin Permissions</h3>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Choose a person, make them a Sub-Admin, then tick exactly what they are allowed to do. Sub-admins can record entries but never edit or delete them.</p>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Select person</label>
+              <select
+                value={selectedAdminEmail}
+                onChange={(e) => { setSelectedAdminEmail(e.target.value); setPermMessage(''); }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.95rem' }}
+              >
+                <option value="">-- Choose account --</option>
+                {members.filter(m => m.email && m.role !== 'super_admin').map(m => (
+                  <option key={m.id} value={m.email}>{`${m.first_name || ''} ${m.last_name || ''}`.trim()} - {m.email}{m.role && m.role !== 'member' ? ' (Sub-Admin)' : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            {selMember && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Account type</label>
+                <select
+                  value={selMember.role && selMember.role !== 'member' ? 'admin' : 'member'}
+                  onChange={(e) => changeAccountRole(e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.95rem' }}
+                >
+                  <option value="member">Member (no admin access)</option>
+                  <option value="admin">Sub-Admin</option>
+                </select>
+              </div>
+            )}
+
+            {selMember && selMember.role && selMember.role !== 'member' && (
+              <div>
+                {Object.entries(permissionSchema).map(([category, perms]) => (
+                  <div key={category} style={{ marginBottom: '1.25rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                    <div style={{ backgroundColor: '#f1f5f9', padding: '0.75rem 1rem', fontWeight: 'bold', fontSize: '0.95rem', color: '#1e3a8a' }}>{category}</div>
+                    <div style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: '#ffffff' }}>
+                      {perms.map(p => (
+                        <label key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.35rem 0.5rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!selPerms[p.key]}
+                            onChange={(e) => setAdminPermissions({ ...adminPermissions, [selKey]: { ...selPerms, [p.key]: e.target.checked } })}
+                            style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                          />
+                          <span>{p.label}{p.soon ? <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}> (screen not built yet)</span> : null}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={savePermissions}
+                  style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}
+                >
+                  Save Permissions
+                </button>
+              </div>
+            )}
+
+            {permMessage && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: permMessage.startsWith('Could not') ? '#fee2e2' : '#dcfce7', color: permMessage.startsWith('Could not') ? '#991b1b' : '#166534', fontSize: '0.85rem' }}>{permMessage}</div>
+            )}
+          </div>
+          );
+        })()}
+
+        {/* Members Tab */}
+        {activeTab === 'members' && (
+          <div>
+            {!showRegisterForm ? (
+              <div>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Search name or email..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', fontSize: '0.95rem', boxSizing: 'border-box', backgroundColor: '#ffffff' }}
+                  />
+                </div>
+                {can('register_members') && (
+                <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.75rem' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => { setEditingMemberId(null); setFormData({ ...EMPTY_FORM }); setShowRegisterForm(true); }} 
+                    style={{ flex: 1, backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
+                  >
+                    + Add New Member
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      const link = window.location.origin + '/?register=1';
+                      try { await navigator.clipboard.writeText(link); alert('Self-registration link copied. Share it with new members:\n' + link); }
+                      catch (err) { prompt('Copy this self-registration link:', link); }
+                    }} 
+                    style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
+                  >
+                    🔗 Copy Self-Register Link
+                  </button>
+                </div>
+                )}
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {filteredMembers.map((m, index) => {
+                    const nameStr = `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email;
+                    const initials = nameStr.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                    return (
+                      <div key={m.id || index} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
+                          {m.photo_url ? (
+                            <img src={m.photo_url} alt="Member" style={{ width: '3rem', height: '3rem', borderRadius: '50%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                              {initials}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#0f172a' }}>{nameStr}</div>
+                            <div style={{ fontSize: '0.85rem', color: '#475569' }}>Email: {m.email} | Phone: {m.phone || 'N/A'}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.2rem' }}>
+                              <strong>Core Dept:</strong> {m.core_department || 'N/A'} | <strong>Sub-Depts:</strong> {m.sub_departments || 'None'}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.1rem' }}>
+                              <strong>Address:</strong> {m.home_address || 'N/A'}, {m.home_town || 'N/A'}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.1rem' }}>
+                              DOB: {m.date_of_birth || 'N/A'} | Baptism: {m.date_of_baptism || 'N/A'} | Joined: {m.date_joined || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+{can('register_members') && (
+                          <button type="button" onClick={() => handleStartEditMember(m)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#2563eb' }}>
+                            ✏️ Edit
+                          </button>
+                          )}
+                          {role === 'super_admin' && (
+                            <button type="button" onClick={() => handleDeleteMember(m.id)} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626' }}>
+                              🗑️ Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+                    {editingMemberId ? 'Edit Member Details' : 'Register New Member'}
+                  </h3>
+                  <button type="button" onClick={() => { setShowRegisterForm(false); setEditingMemberId(null); }} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', color: '#64748b', fontWeight: 'bold' }}>✕ Close</button>
+                </div>
+
+                {formError && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formError}</div>}
+                {formSuccess && <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formSuccess}</div>}
+
+                <form onSubmit={handleSaveMember} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>First Name *</label>
+                      <input type="text" required value={formData.first_name} onChange={(e) => setFormData({...formData, first_name: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="First name" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Last Name *</label>
+                      <input type="text" required value={formData.last_name} onChange={(e) => setFormData({...formData, last_name: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Last name" />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Email Address *</label>
+                      <input type="email" required value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Email" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Phone Number</label>
+                      <input type="text" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Phone" />
+                    </div>
+                  </div>
+
+                  {!editingMemberId && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Password * (min. 6 characters)</label>
+                      <input type="password" required minLength={6} autoComplete="new-password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Create a password for this member" />
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Emergency Contact Person *</label>
+                      <input type="text" required value={formData.emergency_contact_name} onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Emergency Contact Number *</label>
+                      <input type="tel" required value={formData.emergency_contact_phone} onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Phone number" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Core Department (Compulsory - Select One) *</label>
+                    <select value={formData.core_department} onChange={(e) => setFormData({...formData, core_department: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="LOVE">LOVE</option>
+                      <option value="UNITY">UNITY</option>
+                      <option value="CARE">CARE</option>
+                      <option value="RESPECT">RESPECT</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Sub-Departments (Select multiple as applicable)</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', maxHeight: '10rem', overflowY: 'auto', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', backgroundColor: '#f8fafc' }}>
+                      {subDeptList.map((dept) => (
+                        <label key={dept} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={formData.sub_departments.includes(dept)} 
+                            onChange={() => handleSubDeptToggle(dept)} 
+                          />
+                          {dept}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date of Birth</label>
+                      <input type="date" value={formData.date_of_birth} onChange={(e) => setFormData({...formData, date_of_birth: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.8rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date of Baptism</label>
+                      <input type="date" value={formData.date_of_baptism} onChange={(e) => setFormData({...formData, date_of_baptism: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.8rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date Joined</label>
+                      <input type="date" value={formData.date_joined} onChange={(e) => setFormData({...formData, date_joined: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.8rem', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Home Address</label>
+                      <input type="text" value={formData.home_address} onChange={(e) => setFormData({...formData, home_address: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Home address" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Home Town</label>
+                      <input type="text" value={formData.home_town} onChange={(e) => setFormData({...formData, home_town: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Home town" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Upload Member Photo</label>
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', boxSizing: 'border-box' }} />
+                    {formData.photo_url && <p style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.25rem' }}>Photo attached successfully!</p>}
+                  </div>
+
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    {editingMemberId ? 'Update Member' : 'Save Member'}
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contributions & Finance Tab */}
+        {activeTab === 'contributions' && (
+          <div>
+            {financeView === 'hub' && (
+              <div>
+                {role === 'super_admin' && (
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Opening Balance</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1e3a8a' }}>GHS {openingBalance.toFixed(2)}</div>
+                    </div>
+                    <button type="button" onClick={() => { const val = prompt("Enter new opening balance:", openingBalance); if(val) setOpeningBalance(parseFloat(val) || 0); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', color: '#1e3a8a' }}>
+                      ✏️ Edit Opening Balance
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.25rem 0' }}>Finance Management Suite</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>Select a finance module below.</p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.85rem' }}>
+                  {can('access_finance') && (
+                  <div onClick={() => setFinanceView('income')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>➕</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member General Income</div>
+                  </div>
+                  )}
+                  {can('access_finance') && (
+                  <div onClick={() => setFinanceView('tithes')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🪙</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Tithes</div>
+                  </div>
+                  )}
+                  {can('access_finance') && (
+                  <div onClick={() => setFinanceView('contributions')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📒</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Contributions Tracker</div>
+                  </div>
+                  )}
+                  {can('access_finance') && (
+                  <div onClick={() => setFinanceView('welfare')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🤝</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Welfare Contributions</div>
+                  </div>
+                  )}
+                  {role === 'super_admin' && (
+                    <>
+                      <div onClick={() => setFinanceView('expenses')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>➖</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Expenses</div>
+                      </div>
+                      <div onClick={() => setFinanceView('budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📊</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Budgets</div>
+                      </div>
+                      <div onClick={() => setFinanceView('approve_budgets')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>✅</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Approve Budgets</div>
+                      </div>
+                    </>
+                  )}
+                  {can('view_balance_sheet') && (
+                  <div onClick={() => setFinanceView('reports')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💳</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report</div>
+                  </div>
+                  )}
+                  {can('view_balance_sheet') && (
+                    <div onClick={() => setFinanceView('balancesheet')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                      <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>⚖️</div>
+                      <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {financeView === 'income' && can('access_finance') && (
+              <div>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingIncomeIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingIncomeIndex !== null ? 'Edit Income Entry' : 'Record Member General Income'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editingIncomeIndex !== null) {
+                      if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit entries.'); return; }
+                      const updated = [...incomes];
+                      updated[editingIncomeIndex] = incomeForm;
+                      setIncomes(updated);
+                      setEditingIncomeIndex(null);
+                      alert('Income updated successfully!');
+                    } else {
+                      setIncomes([incomeForm, ...incomes]);
+                      alert('Member general income recorded successfully!');
+                    }
+                    setIncomeForm({ source: '', amount: '', date: '', member_id: '', member_name: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Income Source / Member Title</label>
+                      <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({...incomeForm, source: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Member General Offering" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Member (optional - shows on that member's dashboard)</label>
+                      <select value={incomeForm.member_id || ''} onChange={(e) => {
+                        const mId = e.target.value;
+                        const mem = members.find(m => m.id === mId);
+                        setIncomeForm({ ...incomeForm, member_id: mId, member_name: mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : '' });
+                      }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="">-- Not linked to a member --</option>
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={incomeForm.amount} onChange={(e) => setIncomeForm({...incomeForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={incomeForm.date} onChange={(e) => setIncomeForm({...incomeForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      {editingIncomeIndex !== null ? 'Update Income' : 'Save Income Entry'}
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Incomes ({incomes.length})</h4>
+                {incomes.map((inc, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{inc.source}</strong> ({inc.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(inc.amount || 0).toFixed(2)}</strong></span>
+                    {role === 'super_admin' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button type="button" onClick={() => setIncomes(incomes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {financeView === 'expenses' && role === 'super_admin' && (
+              <div>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingExpenseIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingExpenseIndex !== null ? 'Edit Expense Entry' : 'Record Expense'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editingExpenseIndex !== null) {
+                      const updated = [...expenses];
+                      updated[editingExpenseIndex] = expenseForm;
+                      setExpenses(updated);
+                      setEditingExpenseIndex(null);
+                      alert('Expense updated successfully!');
+                    } else {
+                      setExpenses([expenseForm, ...expenses]);
+                      alert('Expense recorded successfully!');
+                    }
+                    setExpenseForm({ description: '', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Expense Description</label>
+                      <input type="text" required value={expenseForm.description} onChange={(e) => setExpenseForm({...expenseForm, description: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Utility bills" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({...expenseForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={expenseForm.date} onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      {editingExpenseIndex !== null ? 'Update Expense' : 'Save Expense Entry'}
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Expenses ({expenses.length})</h4>
+                {expenses.map((exp, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{exp.description}</strong> ({exp.date}) - <strong style={{ color: '#dc2626' }}>GHS {parseFloat(exp.amount || 0).toFixed(2)}</strong></span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => { setExpenseForm(exp); setEditingExpenseIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                      <button type="button" onClick={() => setExpenses(expenses.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {financeView === 'tithes' && can('access_finance') && (
+              <div>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingTitheIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingTitheIndex !== null ? 'Edit Tithe Entry' : 'Record Member Tithes'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const selectedMember = members.find(m => m.id === titheForm.member_id);
+                    const memberName = selectedMember ? `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() : titheForm.member_name;
+                    const payload = { ...titheForm, member_name: memberName };
+
+                    if (editingTitheIndex !== null) {
+                      if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit tithes.'); return; }
+                      const updated = [...tithes];
+                      updated[editingTitheIndex] = payload;
+                      setTithes(updated);
+                      setEditingTitheIndex(null);
+                      alert('Tithe updated successfully!');
+                    } else {
+                      setTithes([payload, ...tithes]);
+                      alert('Tithe recorded successfully!');
+                    }
+                    setTitheForm({ member_id: '', member_name: '', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Member</label>
+                      <select required value={titheForm.member_id} onChange={(e) => {
+                        const mId = e.target.value;
+                        const mem = members.find(m => m.id === mId);
+                        setTitheForm({ ...titheForm, member_id: mId, member_name: mem ? `${mem.first_name} ${mem.last_name}` : '' });
+                      }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="">-- Choose Member --</option>
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={titheForm.amount} onChange={(e) => setTitheForm({...titheForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={titheForm.date} onChange={(e) => setTitheForm({...titheForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      {editingTitheIndex !== null ? 'Update Tithe' : 'Save Tithe Entry'}
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Tithes ({tithes.length})</h4>
+                {tithes.map((t, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{t.member_name}</strong> ({t.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong></span>
+                    {role === 'super_admin' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button type="button" onClick={() => setTithes(tithes.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {financeView === 'contributions' && can('access_finance') && (
+              <div>
+                <button type="button" onClick={() => { setFinanceView('hub'); setEditingContribIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingContribIndex !== null ? 'Edit Contribution Entry' : 'Contributions Tracker - Record Contribution'}</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const selectedMember = members.find(m => m.id === contribForm.member_id);
+                    const contributorName = selectedMember ? `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() : contribForm.contributor;
+                    const payload = { ...contribForm, contributor: contributorName };
+                    if (editingContribIndex !== null) {
+                      if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit entries.'); return; }
+                      const updated = [...contributions];
+                      updated[editingContribIndex] = payload;
+                      setContributions(updated);
+                      setEditingContribIndex(null);
+                      alert('Contribution updated successfully!');
+                    } else {
+                      setContributions([payload, ...contributions]);
+                      alert('Contribution recorded successfully!');
+                    }
+                    setContribForm({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Member</label>
+                      <select required value={contribForm.member_id} onChange={(e) => {
+                        const mId = e.target.value;
+                        const mem = members.find(m => m.id === mId);
+                        setContribForm({ ...contribForm, member_id: mId, contributor: mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : '' });
+                      }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="">-- Choose Member --</option>
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contribution Type</label>
+                      <select value={contribForm.type} onChange={(e) => setContribForm({...contribForm, type: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                        <option value="General">General</option>
+                        <option value="Building Fund">Building Fund</option>
+                        <option value="Thanksgiving">Thanksgiving</option>
+                        <option value="Pledge">Pledge</option>
+                        <option value="Missions">Missions</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
+                      <input type="number" required step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({...contribForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
+                      <input type="date" required value={contribForm.date} onChange={(e) => setContribForm({...contribForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      {editingContribIndex !== null ? 'Update Contribution' : 'Save Contribution Entry'}
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Recorded Contributions ({contributions.length}) - Total: GHS {totalContribSum.toFixed(2)}</h4>
+                {contributions.map((c, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{c.contributor}</strong> - {c.type} ({c.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong></span>
+                    {role === 'super_admin' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { setContribForm(c); setEditingContribIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button type="button" onClick={() => setContributions(contributions.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {financeView === 'budgets' && role === 'super_admin' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Budget Item</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Item / Project Name</label>
+                      <input type="text" required value={budgetForm.item} onChange={(e) => setBudgetForm({...budgetForm, item: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sound System Upgrade" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Estimated Cost (GHS)</label>
+                      <input type="number" required step="0.01" value={budgetForm.estimated} onChange={(e) => setBudgetForm({...budgetForm, estimated: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
+                    </div>
+                    <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                      Submit Budget
+                    </button>
+                  </form>
+                </div>
+                <h4 style={{ color: '#0f172a' }}>Budgets List ({budgets.length})</h4>
+                {budgets.map((b, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span><strong>{b.item}</strong> (GHS {parseFloat(b.estimated || 0).toFixed(2)})</span>
+                    <span style={{ fontWeight: 'bold', color: b.status === 'Approved' ? '#16a34a' : '#d97706' }}>{b.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {financeView === 'approve_budgets' && role === 'super_admin' && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a' }}>Budget Approval Portal</h3>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Review and approve submitted church budgets.</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {budgets.length > 0 ? (
+                    budgets.map((b, i) => (
+                      <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#0f172a' }}>{b.item}</div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Amount: GHS {parseFloat(b.estimated || 0).toFixed(2)}</div>
+                        </div>
+                        <div>
+                          {b.status === 'Pending' ? (
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const updated = [...budgets];
+                                updated[i].status = 'Approved';
+                                setBudgets(updated);
+                                alert(`Budget "${b.item}" approved successfully!`);
+                              }} 
+                              style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              Approve Budget
+                            </button>
+                          ) : (
+                            <span style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.4rem 0.8rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                              ✓ Approved
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                      <p style={{ margin: 0 }}>No budgets recorded yet.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {financeView === 'welfare' && can('access_finance') && (
+              <div>
+                <button type="button" onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+
+                {!selectedMemberForWelfare ? (
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>Welfare Contribution - Select Member</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      {members.map((m, index) => {
+                        const nameStr = `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email;
+                        const initials = nameStr.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        return (
+                          <div key={m.id || index} onClick={() => { const rec = welfareRecords[m.id || 'default'] || {}; const locked = {}; if (role !== 'super_admin') { Object.entries(rec).forEach(([mo, wks]) => wks.forEach((v, i) => { if (v) locked[mo + '-' + i] = true; })); } setWelfareLocked(locked); setSelectedMemberForWelfare(m); }} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
+                            <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', margin: '0 auto 0.5rem auto' }}>
+                              {initials}
+                            </div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#0f172a' }}>{nameStr}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+                        {`${selectedMemberForWelfare.first_name || ''} ${selectedMemberForWelfare.last_name || ''}`.trim() || selectedMemberForWelfare.email}
+                      </h3>
+                      <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions with auto-calculated month and year grand total column:{role !== 'super_admin' ? ' Amounts already recorded are locked. Only the Super Admin can change them.' : ''}</p>
+                    
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#4f46e5', color: '#ffffff' }}>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>Months</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>1st Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>2nd Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>3rd Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1' }}>4th Wk</th>
+                            <th style={{ padding: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#3730a3' }}>Year Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month) => {
+                            const memberRec = welfareRecords[selectedMemberForWelfare.id || 'default'] || {};
+                            const weeks = memberRec[month] || [0,0,0,0];
+                            const monthTotal = weeks.reduce((sum, w) => sum + w, 0);
+                            return (
+                              <tr key={month}>
+                                <td style={{ padding: '0.5rem', border: '1px solid #cbd5e1', fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>{month}</td>
+                                {weeks.map((val, idx) => (
+                                  <td key={idx} style={{ padding: '0.5rem', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+                                    <input 
+                                      type="number" 
+                                      step="0.01" 
+                                      value={val === 0 ? '' : val} 
+                                      disabled={!!welfareLocked[month + '-' + idx]} onChange={(e) => handleWelfareChange(selectedMemberForWelfare.id || 'default', month, idx, e.target.value)} 
+                                      placeholder="0"
+                                      style={{ width: '3rem', padding: '0.25rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '0.25rem' }} 
+                                    />
+                                  </td>
+                                ))}
+                                <td style={{ padding: '0.5rem', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#eef2ff', color: '#1e3a8a' }}>
+                                  {monthTotal.toFixed(2)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ backgroundColor: '#1e3a8a', color: '#ffffff', fontWeight: 'bold' }}>
+                            <td colSpan="5" style={{ padding: '0.75rem', textAlign: 'right', border: '1px solid #cbd5e1' }}>Annual Grand Total:</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', border: '1px solid #cbd5e1' }}>
+                              {Object.values(welfareRecords[selectedMemberForWelfare.id || 'default'] || {}).reduce((gSum, weeks) => gSum + weeks.reduce((wSum, w) => wSum + w, 0), 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    <button type="button" onClick={() => { alert('Welfare records saved successfully!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
+                      Save Welfare Records
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {financeView === 'reports' && can('view_balance_sheet') && (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ← Back to Hub
+                  </button>
+                  <button type="button" onClick={() => downloadPDFReport('Account Report')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    📥 Download Official PDF Report
+                  </button>
+                </div>
+
+                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={CHURCH_LOGO} alt="Church Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+                  <div>
+                    <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
+                    <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Account Report</h4>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Opening Balance:</span>
+                    <strong>GHS {openingBalance.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total General Incomes:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalIncomeSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Tithes:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalTitheSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Contributions:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalContribSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Welfare Contributions:</span>
+                    <strong style={{ color: '#16a34a' }}>+ GHS {totalWelfareSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Expenses:</span>
+                    <strong style={{ color: '#dc2626' }}>- GHS {totalExpenseSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Approved Budgets (Allocated):</span>
+                    <strong style={{ color: '#dc2626' }}>- GHS {approvedBudgetsSum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', fontSize: '1.1rem', backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                    <span>Net Balance:</span>
+                    <span style={{ color: '#1e3a8a' }}>GHS {netBalance.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h4 style={{ color: '#1e3a8a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>Member Financial Contributions, Tithes & Welfare Tracking</h4>
+                  
+                  {tithes.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Tithes:</div>
+                      {tithes.map((t, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span><strong>{t.member_name}</strong> (Paid on {t.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(t.amount || 0).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {contributions.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Contributions:</div>
+                      {contributions.map((c, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span><strong>{c.contributor}</strong> ({c.type} - Paid on {c.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(c.amount || 0).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {incomes.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member General Incomes:</div>
+                      {incomes.map((inc, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                          <span><strong>{inc.source}</strong> (Paid on {inc.date})</span>
+                          <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {parseFloat(inc.amount || 0).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {Object.keys(welfareRecords).length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Welfare Tracking:</div>
+                      {Object.entries(welfareRecords).map(([mId, monthsData], i) => {
+                        const memObj = members.find(m => (m.id || 'default') === mId) || { first_name: 'Member', last_name: '' };
+                        const memName = `${memObj.first_name || ''} ${memObj.last_name || ''}`.trim() || 'Member';
+                        const memTotal = Object.values(monthsData).reduce((mSum, weeks) => mSum + weeks.reduce((wSum, w) => wSum + w, 0), 0);
+                        const paidDate = welfareDates[mId] || new Date().toISOString().split('T')[0];
+                        if (memTotal <= 0) return null;
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <span><strong>{memName}</strong> (Welfare - Updated: {paidDate})</span>
+                            <span style={{ color: '#16a34a', fontWeight: 'bold' }}>+GHS {memTotal.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Notes / Audit Remarks</label>
+                  <textarea 
+                    readOnly={role !== 'super_admin'}
+                    value={accountReportNotes} 
+                    onChange={(e) => setAccountReportNotes(e.target.value)} 
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', minHeight: '5rem', boxSizing: 'border-box' }} 
+                  />
+                </div>
+              </div>
+            )}
+
+            {financeView === 'balancesheet' && can('view_balance_sheet') && (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ← Back to Hub
+                  </button>
+                  <button type="button" onClick={() => downloadPDFReport('Balance Sheet')} style={{ backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    📥 Download Official PDF Report
+                  </button>
+                </div>
+
+                <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={CHURCH_LOGO} alt="Church Logo" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+                  <div>
+                    <h3 style={{ margin: '0 0 0.25rem 0', color: '#1e3a8a' }}>GRACEPOINT PROPHETIC CHURCH</h3>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>The Jesus Home Church</div>
+                    <h4 style={{ margin: '0.5rem 0 0 0', color: '#0f172a' }}>Balance Sheet</h4>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '0.5rem', fontWeight: 'bold', color: '#1e3a8a' }}>ASSETS</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Cash & Bank (Net Fund Balance):</span>
+                    <strong>GHS {netBalance.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '0.5rem', fontWeight: 'bold', color: '#1e3a8a', marginTop: '0.5rem' }}>LIABILITIES & EQUITY</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <span>Total Liabilities:</span>
+                    <strong>GHS 0.00</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', fontSize: '1.1rem', backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                    <span>Total Equity / Fund:</span>
+                    <span style={{ color: '#1e3a8a' }}>GHS {netBalance.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Balance Sheet Remarks</label>
+                  <textarea 
+                    readOnly={role !== 'super_admin'}
+                    value={balanceSheetNotes} 
+                    onChange={(e) => setBalanceSheetNotes(e.target.value)} 
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', minHeight: '5rem', boxSizing: 'border-box' }} 
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Updated Attendance Tab with Service Type & Men/Women/Children Breakdown */}
+        {activeTab === 'attendance' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Service Attendance & Demographics</h3>
+              <button type="button" onClick={() => setShowAttendanceForm(!showAttendanceForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                {showAttendanceForm ? 'Cancel' : '+ Log Attendance'}
+              </button>
+            </div>
+
+            {showAttendanceForm && (
+              <form onSubmit={(e) => { 
+                e.preventDefault(); 
+                setAttendanceLogs([attendanceForm, ...attendanceLogs]); 
+                setAttendanceForm({ service_date: '', service_type: 'Sunday Service', department: 'General', men_count: '', women_count: '', children_count: '', status: 'Present' }); 
+                setShowAttendanceForm(false); 
+              }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Log Service Attendance</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Service Date *</label>
+                    <input type="date" required value={attendanceForm.service_date} onChange={(e) => setAttendanceForm({...attendanceForm, service_date: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Service Type *</label>
+                    <select value={attendanceForm.service_type} onChange={(e) => setAttendanceForm({...attendanceForm, service_type: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="Sunday Service">Sunday Service</option>
+                      <option value="Midweek Service">Midweek Service</option>
+                      <option value="Prayer Meeting">Prayer Meeting</option>
+                      <option value="All Night Service">All Night Service</option>
+                      <option value="Special Revival">Special Revival</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Men Count</label>
+                      <input type="number" min="0" value={attendanceForm.men_count} onChange={(e) => setAttendanceForm({...attendanceForm, men_count: e.target.value})} placeholder="0" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Women Count</label>
+                      <input type="number" min="0" value={attendanceForm.women_count} onChange={(e) => setAttendanceForm({...attendanceForm, women_count: e.target.value})} placeholder="0" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Children Count</label>
+                      <input type="number" min="0" value={attendanceForm.children_count} onChange={(e) => setAttendanceForm({...attendanceForm, children_count: e.target.value})} placeholder="0" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Department</label>
+                    <select value={attendanceForm.department} onChange={(e) => setAttendanceForm({...attendanceForm, department: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="General">General</option>
+                      <option value="LOVE">LOVE</option>
+                      <option value="UNITY">UNITY</option>
+                      <option value="CARE">CARE</option>
+                      <option value="RESPECT">RESPECT</option>
+                    </select>
+                  </div>
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Save Attendance Log
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {attendanceLogs.length > 0 ? (
+                attendanceLogs.map((log, i) => {
+                  const men = parseInt(log.men_count || 0);
+                  const women = parseInt(log.women_count || 0);
+                  const children = parseInt(log.children_count || 0);
+                  const total = men + women + children;
+                  return (
+                    <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontWeight: 'bold', color: '#1e3a8a' }}>
+                        <span>{log.service_type} ({log.service_date})</span>
+                        <span style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '0.2rem 0.6rem', borderRadius: '0.25rem', fontSize: '0.85rem' }}>Total Attendance: {total > 0 ? total : 'N/A'}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', fontSize: '0.85rem', color: '#475569', backgroundColor: '#f8fafc', padding: '0.5rem', borderRadius: '0.375rem' }}>
+                        <span>👨 Men: <strong>{men}</strong></span>
+                        <span>👩 Women: <strong>{women}</strong></span>
+                        <span>👶 Children: <strong>{children}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>No attendance logs recorded yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Events Tab */}
+        {activeTab === 'events' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Church Events</h3>
+              <button type="button" onClick={() => setShowEventForm(!showEventForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                {showEventForm ? 'Cancel' : '+ Add Event'}
+              </button>
+            </div>
+
+            {showEventForm && (
+              <form onSubmit={(e) => { e.preventDefault(); setEventsList([eventForm, ...eventsList]); setEventForm({ title: '', date: '', description: '' }); setShowEventForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Create New Event</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Event Title</label>
+                    <input type="text" required value={eventForm.title} onChange={(e) => setEventForm({...eventForm, title: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Event title" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Event Date</label>
+                    <input type="date" required value={eventForm.date} onChange={(e) => setEventForm({...eventForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Description</label>
+                    <textarea value={eventForm.description} onChange={(e) => setEventForm({...eventForm, description: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', height: '4rem' }} placeholder="Event details..." />
+                  </div>
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Publish Event
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {eventsList.length > 0 ? (
+                eventsList.map((ev, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <h4 style={{ margin: 0, color: '#1e3a8a', fontSize: '1rem' }}>{ev.title}</h4>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>{ev.date}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155' }}>{ev.description}</p>
+                  </div>
+                ))
+              ) : (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>No upcoming events scheduled yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Announcements Tab */}
+        {activeTab === 'announcements' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Church Announcements</h3>
+              <button type="button" onClick={() => setShowAnnounceForm(!showAnnounceForm)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                {showAnnounceForm ? 'Cancel' : '+ Post Announcement'}
+              </button>
+            </div>
+
+            {showAnnounceForm && (
+              <form onSubmit={(e) => { e.preventDefault(); setAnnouncementsList([announceForm, ...announcementsList]); setAnnounceForm({ title: '', message: '' }); setShowAnnounceForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>New Announcement</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Title</label>
+                    <input type="text" required value={announceForm.title} onChange={(e) => setAnnounceForm({...announceForm, title: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Announcement title" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Message</label>
+                    <textarea required value={announceForm.message} onChange={(e) => setAnnounceForm({...announceForm, message: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', height: '4rem' }} placeholder="Broadcast message..." />
+                  </div>
+                  <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    Broadcast Announcement
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {announcementsList.length > 0 ? (
+                announcementsList.map((ann, i) => (
+                  <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#1e3a8a', fontSize: '1rem' }}>{ann.title}</h4>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155' }}>{ann.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>No announcements broadcasted yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </main>
+  );
+}
