@@ -25,6 +25,71 @@ const EMPTY_FORM = {
   home_address: '', home_town: '', photo_url: ''
 };
 
+
+// A simple "add / list / delete" screen used for Services, Visitors and New Converts.
+function RecordTab({ title, addLabel, fields, titleKey, items, onAdd, onDelete, canDelete, emptyText }) {
+  const blank = () => fields.reduce((o, f) => ({ ...o, [f.key]: f.options ? f.options[0] : '' }), {});
+  const [show, setShow] = useState(false);
+  const [form, setForm] = useState(blank());
+  const box = { width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' };
+  const lab = { display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>{title}</h3>
+        <button type="button" onClick={() => setShow(!show)} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+          {show ? 'Cancel' : addLabel}
+        </button>
+      </div>
+
+      {show && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); onAdd({ ...form, recorded_on: new Date().toISOString().slice(0, 10) }); setForm(blank()); setShow(false); }}
+          style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {fields.map(f => (
+              <div key={f.key}>
+                <label style={lab}>{f.label}{f.required ? ' *' : ''}</label>
+                {f.options ? (
+                  <select value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} style={box}>
+                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : f.type === 'textarea' ? (
+                  <textarea value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} style={{ ...box, minHeight: '4rem' }} />
+                ) : (
+                  <input type={f.type || 'text'} required={!!f.required} value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} style={box} />
+                )}
+              </div>
+            ))}
+            <button type="submit" style={{ backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.7rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>Save</button>
+          </div>
+        </form>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {items.length > 0 ? items.map((item, i) => (
+          <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.1rem 1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+              <h4 style={{ margin: 0, color: '#1e3a8a', fontSize: '1rem' }}>{item[titleKey]}</h4>
+              {canDelete && (
+                <button type="button" onClick={() => { if (window.confirm('Delete this record?')) onDelete(i); }} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.6rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+              )}
+            </div>
+            {fields.filter(f => f.key !== titleKey && item[f.key]).map(f => (
+              <div key={f.key} style={{ fontSize: '0.88rem', color: '#334155', padding: '0.1rem 0' }}><strong style={{ color: '#64748b' }}>{f.label}:</strong> {item[f.key]}</div>
+            ))}
+          </div>
+        )) : (
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+            <p style={{ margin: 0 }}>{emptyText}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('member');
@@ -63,6 +128,11 @@ export default function Home() {
   const [permMessage, setPermMessage] = useState('');
   const [welfareLocked, setWelfareLocked] = useState({});
   const [viewAsMember, setViewAsMember] = useState(false);
+  const [servicesList, setServicesList] = useState([]);
+  const [visitorsList, setVisitorsList] = useState([]);
+  const [convertsList, setConvertsList] = useState([]);
+  const [board, setBoard] = useState({ events: [], announcements: [] });
+  const lastBoardRef = useRef('');
 
   // Financial Data State with Edit/Delete restricted to Super Admin
   const [incomes, setIncomes] = useState([]);
@@ -133,11 +203,11 @@ export default function Home() {
   const permissionSchema = {
     'User & Membership': [
       { key: 'register_members', label: 'Register & edit members' },
-      { key: 'record_visitors', label: 'Record visitors', soon: true },
-      { key: 'record_new_converts', label: 'Record new converts', soon: true }
+      { key: 'record_visitors', label: 'Record visitors' },
+      { key: 'record_new_converts', label: 'Record new converts' }
     ],
     'Services & Events': [
-      { key: 'register_services', label: 'Register services', soon: true },
+      { key: 'register_services', label: 'Register services' },
       { key: 'register_events', label: 'Register events' },
       { key: 'record_attendance', label: 'Record attendance' }
     ],
@@ -185,7 +255,8 @@ export default function Home() {
     incomes, expenses, tithes, budgets, contributions,
     welfareRecords, welfareDates, openingBalance,
     accountReportNotes, balanceSheetNotes,
-    attendanceLogs, eventsList, announcementsList
+    attendanceLogs, eventsList, announcementsList,
+    servicesList, visitorsList, convertsList
   });
 
   const makeMemberRows = () => members
@@ -230,7 +301,10 @@ export default function Home() {
         balanceSheetNotes: d.balanceSheetNotes || DEFAULT_BALANCE_NOTES,
         attendanceLogs: d.attendanceLogs || [],
         eventsList: d.eventsList || [],
-        announcementsList: d.announcementsList || []
+        announcementsList: d.announcementsList || [],
+        servicesList: d.servicesList || [],
+        visitorsList: d.visitorsList || [],
+        convertsList: d.convertsList || []
       };
       lastSnapRef.current = JSON.stringify(snap);
       setIncomes(snap.incomes);
@@ -246,6 +320,9 @@ export default function Home() {
       setAttendanceLogs(snap.attendanceLogs);
       setEventsList(snap.eventsList);
       setAnnouncementsList(snap.announcementsList);
+      setServicesList(snap.servicesList);
+      setVisitorsList(snap.visitorsList);
+      setConvertsList(snap.convertsList);
       setFinanceLoaded(true);
     } else {
       const { data, error } = await supabase
@@ -257,6 +334,9 @@ export default function Home() {
         setSaveError('Could not load your records: ' + error.message);
       }
       setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
+      const { data: b } = await supabase.from('public_board').select('data').eq('id', 1).maybeSingle();
+      const bd = (b && b.data) || {};
+      setBoard({ events: bd.events || [], announcements: bd.announcements || [] });
     }
   }
 
@@ -268,7 +348,9 @@ export default function Home() {
     const rowsJSON = JSON.stringify(rows);
     const snapChanged = snapJSON !== lastSnapRef.current;
     const rowsChanged = rows.length > 0 && rowsJSON !== lastRowsRef.current;
-    if (!snapChanged && !rowsChanged) { pendingSaveRef.current = false; return; }
+    const boardJSON = JSON.stringify({ events: eventsList, announcements: announcementsList });
+    const boardChanged = boardJSON !== lastBoardRef.current;
+    if (!snapChanged && !rowsChanged && !boardChanged) { pendingSaveRef.current = false; return; }
     pendingSaveRef.current = true;
     const timer = setTimeout(async () => {
       let failed = '';
@@ -284,15 +366,21 @@ export default function Home() {
           .upsert(rows.map(r => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: 'member_id' });
         if (error) failed = error.message; else lastRowsRef.current = rowsJSON;
       }
+      if (!failed && boardChanged) {
+        const { error } = await supabase
+          .from('public_board')
+          .upsert({ id: 1, data: JSON.parse(boardJSON), updated_at: new Date().toISOString() });
+        if (error) failed = error.message; else lastBoardRef.current = boardJSON;
+      }
       pendingSaveRef.current = false;
       setSaveError(failed ? 'Could not save finance records: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList]);
+  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList]);
 
   // Refresh saved records when an admin opens the Contributions / Finance tab (picks up other admins' entries)
   useEffect(() => {
-    if (['contributions', 'attendance', 'events', 'announcements'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
       loadFinance(true, '');
     }
   }, [activeTab]);
@@ -926,6 +1014,33 @@ export default function Home() {
             <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Loading your records...</p>
           )}
 
+          {(() => {
+            const evs = role === 'member' ? board.events : eventsList;
+            const anns = role === 'member' ? board.announcements : announcementsList;
+            return (
+              <div>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', margin: '0 0 0.75rem 0' }}>Announcements</h3>
+                  {anns.length > 0 ? anns.slice(0, 10).map((a, i) => (
+                    <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                      <div style={{ fontWeight: '600', color: '#0f172a' }}>{a.title}{a.posted ? <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>  ({a.posted})</span> : null}</div>
+                      <div style={{ fontSize: '0.9rem', color: '#334155' }}>{a.message}</div>
+                    </div>
+                  )) : <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>No announcements right now.</p>}
+                </div>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', margin: '0 0 0.75rem 0' }}>Church Events</h3>
+                  {evs.length > 0 ? evs.slice(0, 10).map((ev, i) => (
+                    <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: '#0f172a' }}><span>{ev.title}</span><span style={{ fontSize: '0.8rem', color: '#64748b' }}>{ev.date}</span></div>
+                      {ev.description ? <div style={{ fontSize: '0.9rem', color: '#334155' }}>{ev.description}</div> : null}
+                    </div>
+                  )) : <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>No upcoming events right now.</p>}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', margin: '0 0 0.75rem 0' }}>My Financial Summary (read-only)</h3>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Tithes</span><strong>GHS {memberTitheTotal.toFixed(2)}</strong></div>
@@ -1029,13 +1144,14 @@ export default function Home() {
         )}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
-          {[['Members', true], ['Contributions', can('access_finance') || can('view_balance_sheet')], ['Attendance', can('record_attendance')], ['Events', can('register_events')], ['Announcements', can('post_announcements')]].filter(([, ok]) => ok).map(([tab]) => {
-            const isActive = activeTab === tab.toLowerCase();
+          {[['Members', true], ['Contributions', can('access_finance') || can('view_balance_sheet')], ['Attendance', can('record_attendance')], ['Services', can('register_services')], ['Events', can('register_events')], ['Announcements', can('post_announcements')], ['Visitors', can('record_visitors')], ['New Converts', can('record_new_converts')]].filter(([, ok]) => ok).map(([tab]) => {
+            const tabId = tab.toLowerCase().replace(/ /g, '_');
+            const isActive = activeTab === tabId;
             return (
               <button 
                 key={tab}
                 type="button"
-                onClick={() => { setActiveTab(tab.toLowerCase()); setFinanceView('hub'); setShowRegisterForm(false); }}
+                onClick={() => { setActiveTab(tabId); setFinanceView('hub'); setShowRegisterForm(false); }}
                 style={{ 
                   backgroundColor: isActive ? '#2563eb' : '#f1f5f9', 
                   color: isActive ? '#ffffff' : '#334155', 
@@ -2133,6 +2249,72 @@ export default function Home() {
           </div>
         )}
 
+        {/* Services Tab */}
+        {activeTab === 'services' && can('register_services') && (
+          <RecordTab
+            title="Church Services"
+            addLabel="+ Register Service"
+            titleKey="service_name"
+            emptyText="No services registered yet."
+            canDelete={role === 'super_admin'}
+            items={servicesList}
+            onAdd={(item) => setServicesList([item, ...servicesList])}
+            onDelete={(i) => setServicesList(servicesList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'service_name', label: 'Service name', required: true },
+              { key: 'service_date', label: 'Date', type: 'date', required: true },
+              { key: 'service_type', label: 'Type', options: ['Sunday Service', 'Midweek Service', 'Prayer Meeting', 'Special Service', 'Other'] },
+              { key: 'preacher', label: 'Preacher / Minister' },
+              { key: 'theme', label: 'Theme / Topic' },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+
+        {/* Visitors Tab */}
+        {activeTab === 'visitors' && can('record_visitors') && (
+          <RecordTab
+            title="Visitors"
+            addLabel="+ Record Visitor"
+            titleKey="visitor_name"
+            emptyText="No visitors recorded yet."
+            canDelete={role === 'super_admin'}
+            items={visitorsList}
+            onAdd={(item) => setVisitorsList([item, ...visitorsList])}
+            onDelete={(i) => setVisitorsList(visitorsList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'visitor_name', label: 'Visitor name', required: true },
+              { key: 'phone', label: 'Phone number', type: 'tel' },
+              { key: 'date_visited', label: 'Date visited', type: 'date', required: true },
+              { key: 'invited_by', label: 'Invited by' },
+              { key: 'address', label: 'Address / Area' },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+
+        {/* New Converts Tab */}
+        {activeTab === 'new_converts' && can('record_new_converts') && (
+          <RecordTab
+            title="New Converts"
+            addLabel="+ Record New Convert"
+            titleKey="convert_name"
+            emptyText="No new converts recorded yet."
+            canDelete={role === 'super_admin'}
+            items={convertsList}
+            onAdd={(item) => setConvertsList([item, ...convertsList])}
+            onDelete={(i) => setConvertsList(convertsList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'convert_name', label: 'Full name', required: true },
+              { key: 'phone', label: 'Phone number', type: 'tel' },
+              { key: 'date_of_conversion', label: 'Date of conversion', type: 'date', required: true },
+              { key: 'follow_up', label: 'Follow-up status', options: ['New', 'Contacted', 'In discipleship', 'Joined as member'] },
+              { key: 'address', label: 'Address / Area' },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+
         {/* Events Tab */}
         {activeTab === 'events' && (
           <div>
@@ -2175,6 +2357,9 @@ export default function Home() {
                       <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>{ev.date}</span>
                     </div>
                     <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155' }}>{ev.description}</p>
+                    {role === 'super_admin' && (
+                      <button type="button" onClick={() => { if (window.confirm('Delete this event?')) setEventsList(eventsList.filter((_, idx) => idx !== i)); }} style={{ marginTop: '0.6rem', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.6rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -2197,7 +2382,7 @@ export default function Home() {
             </div>
 
             {showAnnounceForm && (
-              <form onSubmit={(e) => { e.preventDefault(); setAnnouncementsList([announceForm, ...announcementsList]); setAnnounceForm({ title: '', message: '' }); setShowAnnounceForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+              <form onSubmit={(e) => { e.preventDefault(); setAnnouncementsList([{ ...announceForm, posted: new Date().toISOString().slice(0, 10) }, ...announcementsList]); setAnnounceForm({ title: '', message: '' }); setShowAnnounceForm(false); }} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
                 <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>New Announcement</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div>
@@ -2219,8 +2404,11 @@ export default function Home() {
               {announcementsList.length > 0 ? (
                 announcementsList.map((ann, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
-                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#1e3a8a', fontSize: '1rem' }}>{ann.title}</h4>
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#1e3a8a', fontSize: '1rem' }}>{ann.title}{ann.posted ? <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>  ({ann.posted})</span> : null}</h4>
                     <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155' }}>{ann.message}</p>
+                    {role === 'super_admin' && (
+                      <button type="button" onClick={() => { if (window.confirm('Delete this announcement?')) setAnnouncementsList(announcementsList.filter((_, idx) => idx !== i)); }} style={{ marginTop: '0.6rem', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.6rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                    )}
                   </div>
                 ))
               ) : (
