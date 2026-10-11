@@ -59,6 +59,9 @@ export default function Home() {
   const lastSnapRef = useRef('');
   const lastRowsRef = useRef('');
   const pendingSaveRef = useRef(false);
+  const [myPermissions, setMyPermissions] = useState({});
+  const [permMessage, setPermMessage] = useState('');
+  const [welfareLocked, setWelfareLocked] = useState({});
 
   // Financial Data State with Edit/Delete restricted to Super Admin
   const [incomes, setIncomes] = useState([]);
@@ -125,22 +128,29 @@ export default function Home() {
     'Children Ministry'
   ];
 
+  // 'soon: true' = the screen for this permission has not been built in the app yet
   const permissionSchema = {
     'User & Membership': [
-      { key: 'register_members', label: 'Register members' },
-      { key: 'record_visitors', label: 'Record visitors' },
-      { key: 'record_new_converts', label: 'Record new converts' }
+      { key: 'register_members', label: 'Register & edit members' },
+      { key: 'record_visitors', label: 'Record visitors', soon: true },
+      { key: 'record_new_converts', label: 'Record new converts', soon: true }
     ],
     'Services & Events': [
-      { key: 'register_services', label: 'Register services' },
+      { key: 'register_services', label: 'Register services', soon: true },
       { key: 'register_events', label: 'Register events' },
       { key: 'record_attendance', label: 'Record attendance' }
     ],
+    'Communication': [
+      { key: 'post_announcements', label: 'Post announcements' }
+    ],
     'Finance': [
-      { key: 'access_finance', label: 'Access finance (Tithes, Welfare, Incomes)' },
-      { key: 'view_balance_sheet', label: 'View balance sheet & reports' }
+      { key: 'access_finance', label: 'Access finance (record Tithes, Welfare, Incomes, Contributions)' },
+      { key: 'view_balance_sheet', label: 'View Account Report & Balance Sheet (read-only)' }
     ]
   };
+
+  // Super Admin can do everything. Sub-admins can only do what the Super Admin has switched on.
+  const can = (key) => role === 'super_admin' || !!myPermissions[key];
 
   useEffect(() => {
     async function getUserData() {
@@ -158,6 +168,7 @@ export default function Home() {
         }
         const isAdminRole = !!(memberData && memberData.role && memberData.role !== 'member');
         await loadFinance(isAdminRole, session.user.email);
+        if (isAdminRole) await loadPermissions(memberData.role === 'super_admin', session.user.email);
       }
       fetchMembers();
       setLoading(false);
@@ -172,7 +183,8 @@ export default function Home() {
   const makeSnapshot = () => ({
     incomes, expenses, tithes, budgets, contributions,
     welfareRecords, welfareDates, openingBalance,
-    accountReportNotes, balanceSheetNotes
+    accountReportNotes, balanceSheetNotes,
+    attendanceLogs, eventsList, announcementsList
   });
 
   const makeMemberRows = () => members
@@ -214,7 +226,10 @@ export default function Home() {
         welfareDates: d.welfareDates || {},
         openingBalance: typeof d.openingBalance === 'number' ? d.openingBalance : 2484.32,
         accountReportNotes: d.accountReportNotes || DEFAULT_ACCOUNT_NOTES,
-        balanceSheetNotes: d.balanceSheetNotes || DEFAULT_BALANCE_NOTES
+        balanceSheetNotes: d.balanceSheetNotes || DEFAULT_BALANCE_NOTES,
+        attendanceLogs: d.attendanceLogs || [],
+        eventsList: d.eventsList || [],
+        announcementsList: d.announcementsList || []
       };
       lastSnapRef.current = JSON.stringify(snap);
       setIncomes(snap.incomes);
@@ -227,6 +242,9 @@ export default function Home() {
       setOpeningBalance(snap.openingBalance);
       setAccountReportNotes(snap.accountReportNotes);
       setBalanceSheetNotes(snap.balanceSheetNotes);
+      setAttendanceLogs(snap.attendanceLogs);
+      setEventsList(snap.eventsList);
+      setAnnouncementsList(snap.announcementsList);
       setFinanceLoaded(true);
     } else {
       const { data, error } = await supabase
@@ -269,14 +287,58 @@ export default function Home() {
       setSaveError(failed ? 'Could not save finance records: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes]);
+  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList]);
 
   // Refresh saved records when an admin opens the Contributions / Finance tab (picks up other admins' entries)
   useEffect(() => {
-    if (activeTab === 'contributions' && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+    if (['contributions', 'attendance', 'events', 'announcements'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
       loadFinance(true, '');
     }
   }, [activeTab]);
+
+
+  async function loadPermissions(isSuper, email) {
+    if (isSuper) {
+      const { data } = await supabase.from('admin_permissions').select('email, permissions');
+      const map = {};
+      (data || []).forEach(r => { map[String(r.email).toLowerCase()] = r.permissions || {}; });
+      setAdminPermissions(map);
+    } else {
+      const { data } = await supabase
+        .from('admin_permissions')
+        .select('permissions')
+        .eq('email', String(email || '').trim().toLowerCase())
+        .maybeSingle();
+      setMyPermissions((data && data.permissions) || {});
+    }
+  }
+
+  const savePermissions = async () => {
+    setPermMessage('');
+    const email = String(selectedAdminEmail || '').trim().toLowerCase();
+    if (!email) return;
+    const { error } = await supabase
+      .from('admin_permissions')
+      .upsert({ email, permissions: adminPermissions[email] || {}, updated_at: new Date().toISOString() }, { onConflict: 'email' });
+    setPermMessage(error ? 'Could not save permissions: ' + error.message : 'Permissions saved. They apply the next time that admin opens the app.');
+  };
+
+  const changeAccountRole = async (newRole) => {
+    setPermMessage('');
+    const email = String(selectedAdminEmail || '').trim().toLowerCase();
+    const target = members.find(m => String(m.email || '').toLowerCase() === email);
+    if (!target || target.role === 'super_admin') return;
+    const { error } = await supabase.from('members').update({ role: newRole }).eq('id', target.id);
+    if (error) setPermMessage('Could not change role: ' + error.message);
+    else { setPermMessage(newRole === 'admin' ? 'Now a Sub-Admin. Tick what they may do, then press Save Permissions.' : 'Now a regular member.'); fetchMembers(); }
+  };
+
+  // Opening  .../?register=1  shows the self-registration form on the login screen
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('register') === '1') {
+      setIsSelfRegistering(true);
+    }
+  }, []);
 
   async function fetchMembers() {
     const { data: allMembers } = await supabase
@@ -949,7 +1011,7 @@ export default function Home() {
         )}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
-          {['Members', 'Contributions', 'Attendance', 'Events', 'Announcements'].map((tab) => {
+          {[['Members', true], ['Contributions', can('access_finance') || can('view_balance_sheet')], ['Attendance', can('record_attendance')], ['Events', can('register_events')], ['Announcements', can('post_announcements')]].filter(([, ok]) => ok).map(([tab]) => {
             const isActive = activeTab === tab.toLowerCase();
             return (
               <button 
@@ -992,70 +1054,80 @@ export default function Home() {
         </div>
 
         {/* Admin Permissions Tab (Super Admin Only) */}
-        {activeTab === 'permissions' && role === 'super_admin' && (
+        {activeTab === 'permissions' && role === 'super_admin' && (() => {
+          const selKey = String(selectedAdminEmail || '').trim().toLowerCase();
+          const selMember = members.find(m => String(m.email || '').toLowerCase() === selKey);
+          const selPerms = adminPermissions[selKey] || {};
+          return (
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '0.5rem' }}>Admin Permissions</h3>
-            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Select an administrator account and configure their operational permissions.</p>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Choose a person, make them a Sub-Admin, then tick exactly what they are allowed to do. Sub-admins can record entries but never edit or delete them.</p>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Select Admin</label>
-              <select 
-                value={selectedAdminEmail} 
-                onChange={(e) => setSelectedAdminEmail(e.target.value)}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Select person</label>
+              <select
+                value={selectedAdminEmail}
+                onChange={(e) => { setSelectedAdminEmail(e.target.value); setPermMessage(''); }}
                 style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.95rem' }}
               >
-                <option value="">-- Choose Admin Account --</option>
-                {members.filter(m => m.role === 'member' || m.role === 'admin' || m.email).map(m => (
-                  <option key={m.id} value={m.email}>{`${m.first_name || ''} ${m.last_name || ''}`.trim()} - {m.email}</option>
+                <option value="">-- Choose account --</option>
+                {members.filter(m => m.email && m.role !== 'super_admin').map(m => (
+                  <option key={m.id} value={m.email}>{`${m.first_name || ''} ${m.last_name || ''}`.trim()} - {m.email}{m.role && m.role !== 'member' ? ' (Sub-Admin)' : ''}</option>
                 ))}
               </select>
             </div>
 
-            {selectedAdminEmail && (
-              <div>
-                {Object.entries(permissionSchema).map(([category, perms]) => (
-                  <div key={category} style={{ marginBottom: '1.25rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
-                    <div style={{ backgroundColor: '#f1f5f9', padding: '0.75rem 1rem', fontWeight: 'bold', fontSize: '0.95rem', color: '#1e3a8a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>{category}</span>
-                      <span>⌄</span>
-                    </div>
-                    <div style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: '#ffffff' }}>
-                      {perms.map(p => {
-                        const currentPerms = adminPermissions[selectedAdminEmail] || {};
-                        const isChecked = !!currentPerms[p.key];
-                        return (
-                          <label key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.35rem 0.5rem', borderRadius: '0.25rem', backgroundColor: isChecked ? '#eff6ff' : 'transparent' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={isChecked}
-                              onChange={(e) => {
-                                const updatedCatPerms = { ...currentPerms, [p.key]: e.target.checked };
-                                setAdminPermissions({
-                                  ...adminPermissions,
-                                  [selectedAdminEmail]: updatedCatPerms
-                                });
-                              }}
-                              style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
-                            />
-                            {p.label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+            {selMember && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Account type</label>
+                <select
+                  value={selMember.role && selMember.role !== 'member' ? 'admin' : 'member'}
+                  onChange={(e) => changeAccountRole(e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.95rem' }}
+                >
+                  <option value="member">Member (no admin access)</option>
+                  <option value="admin">Sub-Admin</option>
+                </select>
               </div>
             )}
 
-            <button 
-              type="button" 
-              onClick={() => alert(`Permissions for ${selectedAdminEmail || 'Admin'} saved successfully!`)} 
-              style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '1rem' }}
-            >
-              Save Permissions
-            </button>
+            {selMember && selMember.role && selMember.role !== 'member' && (
+              <div>
+                {Object.entries(permissionSchema).map(([category, perms]) => (
+                  <div key={category} style={{ marginBottom: '1.25rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                    <div style={{ backgroundColor: '#f1f5f9', padding: '0.75rem 1rem', fontWeight: 'bold', fontSize: '0.95rem', color: '#1e3a8a' }}>{category}</div>
+                    <div style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: '#ffffff' }}>
+                      {perms.map(p => (
+                        <label key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem', cursor: 'pointer', padding: '0.35rem 0.5rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!selPerms[p.key]}
+                            onChange={(e) => setAdminPermissions({ ...adminPermissions, [selKey]: { ...selPerms, [p.key]: e.target.checked } })}
+                            style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                          />
+                          <span>{p.label}{p.soon ? <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}> (screen not built yet)</span> : null}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={savePermissions}
+                  style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}
+                >
+                  Save Permissions
+                </button>
+              </div>
+            )}
+
+            {permMessage && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: permMessage.startsWith('Could not') ? '#fee2e2' : '#dcfce7', color: permMessage.startsWith('Could not') ? '#991b1b' : '#166534', fontSize: '0.85rem' }}>{permMessage}</div>
+            )}
           </div>
-        )}
+          );
+        })()}
 
         {/* Members Tab */}
         {activeTab === 'members' && (
@@ -1071,6 +1143,7 @@ export default function Home() {
                     style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', fontSize: '0.95rem', boxSizing: 'border-box', backgroundColor: '#ffffff' }}
                   />
                 </div>
+                {can('register_members') && (
                 <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.75rem' }}>
                   <button 
                     type="button" 
@@ -1081,12 +1154,17 @@ export default function Home() {
                   </button>
                   <button 
                     type="button" 
-                    onClick={() => setIsSelfRegistering(true)} 
+                    onClick={async () => {
+                      const link = window.location.origin + '/?register=1';
+                      try { await navigator.clipboard.writeText(link); alert('Self-registration link copied. Share it with new members:\n' + link); }
+                      catch (err) { prompt('Copy this self-registration link:', link); }
+                    }} 
                     style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
                   >
-                    🔗 Self-Register Link
+                    🔗 Copy Self-Register Link
                   </button>
                 </div>
+                )}
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {filteredMembers.map((m, index) => {
@@ -1117,9 +1195,11 @@ export default function Home() {
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+{can('register_members') && (
                           <button type="button" onClick={() => handleStartEditMember(m)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#2563eb' }}>
                             ✏️ Edit
                           </button>
+                          )}
                           {role === 'super_admin' && (
                             <button type="button" onClick={() => handleDeleteMember(m.id)} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626' }}>
                               🗑️ Delete
@@ -1274,22 +1354,30 @@ export default function Home() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.85rem' }}>
+                  {can('access_finance') && (
                   <div onClick={() => setFinanceView('income')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>➕</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member General Income</div>
                   </div>
+                  )}
+                  {can('access_finance') && (
                   <div onClick={() => setFinanceView('tithes')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🪙</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Tithes</div>
                   </div>
+                  )}
+                  {can('access_finance') && (
                   <div onClick={() => setFinanceView('contributions')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📒</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Contributions Tracker</div>
                   </div>
+                  )}
+                  {can('access_finance') && (
                   <div onClick={() => setFinanceView('welfare')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🤝</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Record Member Welfare Contributions</div>
                   </div>
+                  )}
                   {role === 'super_admin' && (
                     <>
                       <div onClick={() => setFinanceView('expenses')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
@@ -1306,11 +1394,13 @@ export default function Home() {
                       </div>
                     </>
                   )}
+                  {can('view_balance_sheet') && (
                   <div onClick={() => setFinanceView('reports')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💳</div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Account Report</div>
                   </div>
-                  {role === 'super_admin' && (
+                  )}
+                  {can('view_balance_sheet') && (
                     <div onClick={() => setFinanceView('balancesheet')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                       <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>⚖️</div>
                       <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e3a8a' }}>Balance Sheet</div>
@@ -1320,7 +1410,7 @@ export default function Home() {
               </div>
             )}
 
-            {financeView === 'income' && (
+            {financeView === 'income' && can('access_finance') && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingIncomeIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
@@ -1438,7 +1528,7 @@ export default function Home() {
               </div>
             )}
 
-            {financeView === 'tithes' && (
+            {financeView === 'tithes' && can('access_finance') && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingTitheIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
@@ -1505,7 +1595,7 @@ export default function Home() {
               </div>
             )}
 
-            {financeView === 'contributions' && (
+            {financeView === 'contributions' && can('access_finance') && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingContribIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
@@ -1662,7 +1752,7 @@ export default function Home() {
               </div>
             )}
 
-            {financeView === 'welfare' && (
+            {financeView === 'welfare' && can('access_finance') && (
               <div>
                 <button type="button" onClick={() => { setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
@@ -1676,7 +1766,7 @@ export default function Home() {
                         const nameStr = `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email;
                         const initials = nameStr.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
                         return (
-                          <div key={m.id || index} onClick={() => setSelectedMemberForWelfare(m)} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
+                          <div key={m.id || index} onClick={() => { const rec = welfareRecords[m.id || 'default'] || {}; const locked = {}; if (role !== 'super_admin') { Object.entries(rec).forEach(([mo, wks]) => wks.forEach((v, i) => { if (v) locked[mo + '-' + i] = true; })); } setWelfareLocked(locked); setSelectedMemberForWelfare(m); }} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
                             <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', margin: '0 auto 0.5rem auto' }}>
                               {initials}
                             </div>
@@ -1694,7 +1784,7 @@ export default function Home() {
                       </h3>
                       <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions with auto-calculated month and year grand total column:</p>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Compulsory weekly welfare contributions with auto-calculated month and year grand total column:{role !== 'super_admin' ? ' Amounts already recorded are locked. Only the Super Admin can change them.' : ''}</p>
                     
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
@@ -1722,7 +1812,7 @@ export default function Home() {
                                       type="number" 
                                       step="0.01" 
                                       value={val === 0 ? '' : val} 
-                                      onChange={(e) => handleWelfareChange(selectedMemberForWelfare.id || 'default', month, idx, e.target.value)} 
+                                      disabled={!!welfareLocked[month + '-' + idx]} onChange={(e) => handleWelfareChange(selectedMemberForWelfare.id || 'default', month, idx, e.target.value)} 
                                       placeholder="0"
                                       style={{ width: '3rem', padding: '0.25rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '0.25rem' }} 
                                     />
@@ -1754,7 +1844,7 @@ export default function Home() {
               </div>
             )}
 
-            {financeView === 'reports' && (
+            {financeView === 'reports' && can('view_balance_sheet') && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -1871,6 +1961,7 @@ export default function Home() {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Notes / Audit Remarks</label>
                   <textarea 
+                    readOnly={role !== 'super_admin'}
                     value={accountReportNotes} 
                     onChange={(e) => setAccountReportNotes(e.target.value)} 
                     style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', minHeight: '5rem', boxSizing: 'border-box' }} 
@@ -1879,7 +1970,7 @@ export default function Home() {
               </div>
             )}
 
-            {financeView === 'balancesheet' && role === 'super_admin' && (
+            {financeView === 'balancesheet' && can('view_balance_sheet') && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -1919,6 +2010,7 @@ export default function Home() {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Super Admin Editable Balance Sheet Remarks</label>
                   <textarea 
+                    readOnly={role !== 'super_admin'}
                     value={balanceSheetNotes} 
                     onChange={(e) => setBalanceSheetNotes(e.target.value)} 
                     style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', minHeight: '5rem', boxSizing: 'border-box' }} 
