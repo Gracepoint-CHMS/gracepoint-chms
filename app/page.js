@@ -62,6 +62,7 @@ export default function Home() {
   const [myPermissions, setMyPermissions] = useState({});
   const [permMessage, setPermMessage] = useState('');
   const [welfareLocked, setWelfareLocked] = useState({});
+  const [viewAsMember, setViewAsMember] = useState(false);
 
   // Financial Data State with Edit/Delete restricted to Super Admin
   const [incomes, setIncomes] = useState([]);
@@ -365,6 +366,7 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    setViewAsMember(false);
     await supabase.auth.signOut();
     window.location.reload();
   };
@@ -862,9 +864,18 @@ export default function Home() {
   }
 
   // Regular Member Dashboard View
-  if (role === 'member') {
+  if (role === 'member' || viewAsMember) {
     const currentMemberRecord = members.find(m => String(m.email || '').toLowerCase() === String(user.email || '').toLowerCase()) || {};
-    const mf = memberFinance || { tithes: [], contributions: [], incomes: [], welfare: {} };
+    // Members read their saved records. Admins viewing their own portal use the records already loaded.
+    const myId = String(currentMemberRecord.id || '');
+    const mf = role === 'member'
+      ? (memberFinance || { tithes: [], contributions: [], incomes: [], welfare: {} })
+      : {
+          tithes: tithes.filter(t => myId && String(t.member_id) === myId),
+          contributions: contributions.filter(c => myId && String(c.member_id) === myId),
+          incomes: incomes.filter(i => myId && i.member_id && String(i.member_id) === myId),
+          welfare: (myId && welfareRecords[myId]) || {}
+        };
     const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
 
     const memberTithes = [...(mf.tithes || [])].sort(byDateDesc);
@@ -888,9 +899,16 @@ export default function Home() {
               <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
             </div>
           </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {role !== 'member' && (
+              <button type="button" onClick={() => setViewAsMember(false)} style={{ backgroundColor: '#ffffff', color: '#1e3a8a', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+                Admin Dashboard
+              </button>
+            )}
           <button type="button" onClick={handleLogout} style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid #ffffff', padding: '0.35rem 0.85rem', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
             Logout
           </button>
+          </div>
         </div>
 
         <div style={{ maxWidth: '40rem', margin: '1.5rem auto', padding: '0 1rem' }}>
@@ -904,7 +922,7 @@ export default function Home() {
           {saveError && (
             <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{saveError}</div>
           )}
-          {memberFinance === null && (
+          {role === 'member' && memberFinance === null && (
             <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Loading your records...</p>
           )}
 
@@ -992,7 +1010,7 @@ export default function Home() {
         </h2>
 
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <button type="button" style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
+          <button type="button" onClick={() => setViewAsMember(true)} style={{ backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.375rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
             My Portal
           </button>
           <button 
