@@ -77,7 +77,7 @@ function RecordTab({ title, addLabel, fields, titleKey, items, onAdd, onDelete, 
               )}
             </div>
             {fields.filter(f => f.key !== titleKey && item[f.key]).map(f => (
-              <div key={f.key} style={{ fontSize: '0.88rem', color: '#334155', padding: '0.1rem 0' }}><strong style={{ color: '#64748b' }}>{f.label}:</strong> {item[f.key]}</div>
+              <div key={f.key} style={{ fontSize: '0.88rem', color: '#334155', padding: '0.1rem 0', wordBreak: 'break-word' }}><strong style={{ color: '#64748b' }}>{f.label}:</strong> {f.type === 'url' ? <a href={item[f.key]} target="_blank" rel="noopener noreferrer" style={{ color: (theme || '#1e3a8a') }}>Open link</a> : item[f.key]}</div>
             ))}
           </div>
         )) : (
@@ -97,6 +97,10 @@ const DEFAULT_SETTINGS = {
   phone: '',
   address: '',
   whatsapp: '',
+  facebook: '',
+  youtube: '',
+  website: '',
+  email: '',
   logo_url: '',
   theme_color: '#1e3a8a',
   services: [],
@@ -125,6 +129,7 @@ function SettingsPanel({ settings, onSave, onUploadLogo, message, theme }) {
   const [phone, setPhone] = useState(settings.phone);
   const [address, setAddress] = useState(settings.address);
   const [whatsapp, setWhatsapp] = useState(settings.whatsapp);
+  const [links, setLinks] = useState({ facebook: settings.facebook || '', youtube: settings.youtube || '', website: settings.website || '', email: settings.email || '' });
   const [bank, setBank] = useState(settings.bank);
   const [svc, setSvc] = useState({ activity: '', days: '', time: '' });
   const [file, setFile] = useState(null);
@@ -133,6 +138,7 @@ function SettingsPanel({ settings, onSave, onUploadLogo, message, theme }) {
   useEffect(() => {
     setName(settings.name); setTagline(settings.tagline); setPhone(settings.phone);
     setAddress(settings.address); setWhatsapp(settings.whatsapp); setBank(settings.bank);
+    setLinks({ facebook: settings.facebook || '', youtube: settings.youtube || '', website: settings.website || '', email: settings.email || '' });
   }, [settings]);
 
   const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' };
@@ -207,6 +213,20 @@ function SettingsPanel({ settings, onSave, onUploadLogo, message, theme }) {
           <input style={sBox} placeholder="e.g. 8:00am - 10:30am" value={svc.time} onChange={(e) => setSvc({ ...svc, time: e.target.value })} />
           <button type="button" style={{ ...btn, marginBottom: 0 }} onClick={() => { if (!svc.activity.trim()) return; onSave({ services: [...(settings.services || []), { activity: svc.activity.trim(), days: svc.days.trim(), time: svc.time.trim() }] }, 'Service added.'); setSvc({ activity: '', days: '', time: '' }); }}>Add Service</button>
         </div>
+      </div>
+
+      <div style={card}>
+        <h4 style={h}>Social &amp; Contact Links</h4>
+        <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Shown to members on their dashboard so they can find your pages and videos.</p>
+        <label style={sLab}>Church email</label>
+        <input style={{ ...sBox, marginBottom: '0.75rem' }} type="email" value={links.email} onChange={(e) => setLinks({ ...links, email: e.target.value })} />
+        <label style={sLab}>Website</label>
+        <input style={{ ...sBox, marginBottom: '0.75rem' }} value={links.website} onChange={(e) => setLinks({ ...links, website: e.target.value })} placeholder="https://" />
+        <label style={sLab}>Facebook page</label>
+        <input style={{ ...sBox, marginBottom: '0.75rem' }} value={links.facebook} onChange={(e) => setLinks({ ...links, facebook: e.target.value })} placeholder="https://facebook.com/..." />
+        <label style={sLab}>YouTube channel</label>
+        <input style={sBox} value={links.youtube} onChange={(e) => setLinks({ ...links, youtube: e.target.value })} placeholder="https://youtube.com/..." />
+        <button type="button" style={{ ...btn, marginBottom: 0 }} onClick={() => onSave({ facebook: links.facebook.trim(), youtube: links.youtube.trim(), website: links.website.trim(), email: links.email.trim() }, 'Links saved.')}>Save Links</button>
       </div>
 
       <div style={card}>
@@ -406,19 +426,23 @@ const SECTION_DEFS = {
   services: ['servicesList'],
   visitors: ['visitorsList'],
   converts: ['convertsList'],
-  assets: ['assetsList']
+  assets: ['assetsList'],
+  leaders: ['leadersList'],
+  rotas: ['rotasList'],
+  videos: ['videosList']
 };
 const SECTION_WRITE_PERM = {
   finance: 'access_finance', attendance: 'record_attendance', events: 'register_events',
   announcements: 'post_announcements', services: 'register_services', visitors: 'record_visitors',
-  converts: 'record_new_converts', assets: 'manage_facilities'
+  converts: 'record_new_converts', assets: 'manage_facilities',
+  leaders: 'manage_leaders', rotas: 'manage_rotas', videos: 'manage_videos'
 };
 const FIELD_DEFAULTS = {
   incomes: [], expenses: [], tithes: [], budgets: [], contributions: [],
   welfareRecords: {}, welfareDates: {}, openingBalance: 2484.32,
   accountReportNotes: DEFAULT_ACCOUNT_NOTES, balanceSheetNotes: DEFAULT_BALANCE_NOTES,
   attendanceLogs: [], eventsList: [], announcementsList: [], servicesList: [],
-  visitorsList: [], convertsList: [], assetsList: []
+  visitorsList: [], convertsList: [], assetsList: [], leadersList: [], rotasList: [], videosList: []
 };
 
 const pickSection = (vals, key) => {
@@ -428,7 +452,7 @@ const pickSection = (vals, key) => {
 };
 const canWriteSectionFn = (key, isSuper, perms) => !!isSuper || !!(perms && perms[SECTION_WRITE_PERM[key]]);
 const canReadSectionFn = (key, isSuper, perms) =>
-  !!isSuper || key === 'events' || key === 'announcements' ||
+  !!isSuper || ['events', 'announcements', 'leaders', 'rotas', 'videos'].includes(key) ||
   (key === 'finance' ? !!(perms && (perms.access_finance || perms.view_balance_sheet)) : !!(perms && perms[SECTION_WRITE_PERM[key]]));
 
 // When two admins change the same section, keep BOTH people's additions and removals.
@@ -456,6 +480,156 @@ function mergeSection(base, local, server) {
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const currentLoan = (it) => (it.loans || []).find(l => !l.returned_on);
 const daysSince = (d) => (d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : 0);
+
+
+// ---------- Reports (Reports & Communication) ----------
+function ReportsTab({ members, fin, attendance, assets, visitors, converts, theme, openPrint, churchName }) {
+  const num = (v) => parseFloat(v) || 0;
+  const sum = (arr, f) => (arr || []).reduce((a, x) => a + num(x[f]), 0);
+  const thisYear = String(new Date().getFullYear());
+  const thisMonth = new Date().getMonth() + 1;
+  const byDept = {};
+  members.forEach(m => { const d = m.core_department || 'Not set'; byDept[d] = (byDept[d] || 0) + 1; });
+  const admins = members.filter(m => m.role && m.role !== 'member').length;
+  const joinedYear = members.filter(m => String(m.date_joined || '').startsWith(thisYear)).length;
+  const bdays = members.filter(m => m.date_of_birth && parseInt(String(m.date_of_birth).slice(5, 7), 10) === thisMonth).length;
+  const att = attendance ? attendance.map(a => num(a.men_count) + num(a.women_count) + num(a.children_count)) : [];
+  const attTotal = att.reduce((a, b) => a + b, 0);
+  const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.1rem 1.25rem', marginBottom: '1rem' };
+  const h = { margin: '0 0 0.6rem 0', fontSize: '1.05rem', fontWeight: 'bold', color: theme };
+  const row = (k, v) => (<div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem', padding: '0.25rem 0', borderBottom: '1px dashed #e2e8f0' }}><span>{k}</span><strong>{v}</strong></div>);
+
+  const printMembers = () => {
+    const rows = members.map(m => `<tr><td>${esc(((m.first_name || '') + ' ' + (m.last_name || '')).trim())}</td><td>${esc(m.phone)}</td><td>${esc(m.email)}</td><td>${esc(m.core_department)}</td><td>${esc(m.sub_departments)}</td><td>${esc(m.date_joined)}</td></tr>`).join('');
+    openPrint('Membership List', `<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Core dept</th><th>Sub-departments</th><th>Joined</th></tr></thead><tbody>${rows}</tbody></table><div class="tot">Total members: ${members.length}</div>`);
+  };
+  const printSummary = () => {
+    let html = `<h3>Membership</h3><table><tbody><tr><td>Total members</td><td>${members.length}</td></tr><tr><td>Admins / Sub-admins</td><td>${admins}</td></tr><tr><td>Joined this year</td><td>${joinedYear}</td></tr><tr><td>Birthdays this month</td><td>${bdays}</td></tr>${Object.entries(byDept).map(([d, c]) => `<tr><td>${esc(d)}</td><td>${c}</td></tr>`).join('')}</tbody></table>`;
+    if (attendance) html += `<h3>Attendance</h3><table><tbody><tr><td>Services recorded</td><td>${att.length}</td></tr><tr><td>Total attendance</td><td>${attTotal}</td></tr><tr><td>Average per service</td><td>${att.length ? (attTotal / att.length).toFixed(1) : 0}</td></tr></tbody></table>`;
+    if (fin) html += `<h3>Finance</h3><table><tbody><tr><td>Total tithes</td><td>GHS ${sum(fin.tithes, 'amount').toFixed(2)}</td></tr><tr><td>Member contributions</td><td>GHS ${sum(fin.contributions, 'amount').toFixed(2)}</td></tr><tr><td>General incomes</td><td>GHS ${sum(fin.incomes, 'amount').toFixed(2)}</td></tr><tr><td>Expenses</td><td>GHS ${sum(fin.expenses, 'amount').toFixed(2)}</td></tr></tbody></table>`;
+    if (visitors || converts) html += `<h3>Evangelism</h3><table><tbody><tr><td>Visitors recorded</td><td>${(visitors || []).length}</td></tr><tr><td>New converts recorded</td><td>${(converts || []).length}</td></tr></tbody></table>`;
+    if (assets) html += `<h3>Facilities</h3><table><tbody><tr><td>Asset records</td><td>${assets.length}</td></tr><tr><td>Total quantity</td><td>${sum(assets, 'quantity')}</td></tr></tbody></table>`;
+    openPrint('Church Summary Report', html);
+  };
+
+  return (
+    <div>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 1rem 0' }}>Reports</h3>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <button type="button" onClick={printSummary} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.7rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>🖨 Summary Report (PDF)</button>
+        <button type="button" onClick={printMembers} style={{ backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '0.7rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>🖨 Membership List (PDF)</button>
+      </div>
+
+      <div style={card}>
+        <h4 style={h}>Membership</h4>
+        {row('Total members', members.length)}
+        {row('Admins / Sub-admins', admins)}
+        {row('Joined this year', joinedYear)}
+        {row('Birthdays this month', bdays)}
+        {Object.entries(byDept).map(([d, c]) => row(d, c))}
+      </div>
+
+      {attendance && (
+        <div style={card}>
+          <h4 style={h}>Attendance</h4>
+          {row('Services recorded', att.length)}
+          {row('Total attendance', attTotal)}
+          {row('Average per service', att.length ? (attTotal / att.length).toFixed(1) : 0)}
+        </div>
+      )}
+
+      {fin && (
+        <div style={card}>
+          <h4 style={h}>Finance (see the Account Report for the net balance)</h4>
+          {row('Total tithes', 'GHS ' + sum(fin.tithes, 'amount').toFixed(2))}
+          {row('Member contributions', 'GHS ' + sum(fin.contributions, 'amount').toFixed(2))}
+          {row('General incomes', 'GHS ' + sum(fin.incomes, 'amount').toFixed(2))}
+          {row('Expenses', 'GHS ' + sum(fin.expenses, 'amount').toFixed(2))}
+        </div>
+      )}
+
+      {(visitors || converts) && (
+        <div style={card}>
+          <h4 style={h}>Evangelism</h4>
+          {row('Visitors recorded', (visitors || []).length)}
+          {row('New converts recorded', (converts || []).length)}
+        </div>
+      )}
+
+      {assets && (
+        <div style={card}>
+          <h4 style={h}>Facilities</h4>
+          {row('Asset records', assets.length)}
+          {row('Total quantity', sum(assets, 'quantity'))}
+          {row('Needing repair / out of service', assets.filter(i => i.condition === 'Needs repair' || i.condition === 'Out of service').length)}
+        </div>
+      )}
+      <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Reports show only the sections you have permission to see.</p>
+    </div>
+  );
+}
+
+// ---------- Messages (opens the phone's own SMS / email / WhatsApp apps) ----------
+function MessagesTab({ members, theme, churchName }) {
+  const [audience, setAudience] = useState('all');
+  const [subject, setSubject] = useState('');
+  const [msg, setMsg] = useState('');
+  const [copied, setCopied] = useState('');
+  const depts = Array.from(new Set(members.map(m => m.core_department).filter(Boolean)));
+  const pick = members.filter(m => audience === 'all' ? true : audience === 'admins' ? (m.role && m.role !== 'member') : m.core_department === audience);
+  const phones = pick.map(m => String(m.phone || '').replace(/\s+/g, '')).filter(Boolean);
+  const emails = pick.map(m => String(m.email || '').trim()).filter(Boolean);
+  const month = new Date().getMonth() + 1;
+  const bdays = members.filter(m => m.date_of_birth && parseInt(String(m.date_of_birth).slice(5, 7), 10) === month)
+    .sort((a, b) => parseInt(String(a.date_of_birth).slice(8, 10), 10) - parseInt(String(b.date_of_birth).slice(8, 10), 10));
+  const box = { width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff', fontSize: '0.95rem' };
+  const lab = { display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' };
+  const btn = (bg) => ({ display: 'inline-block', backgroundColor: bg, color: '#ffffff', textDecoration: 'none', border: 'none', padding: '0.65rem 0.9rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.88rem', cursor: 'pointer' });
+  const copy = async (text, what) => { try { await navigator.clipboard.writeText(text); setCopied(what + ' copied'); } catch (e) { prompt('Copy:', text); } };
+  const body = msg || '';
+  return (
+    <div>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Messages</h3>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Write one message, pick who gets it, then send it with your phone's SMS, email or WhatsApp. (The church's phone credit or data is used. For bulk SMS from the app itself, a paid SMS service would be needed.)</p>
+
+      <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+        <label style={lab}>Send to</label>
+        <select style={{ ...box, marginBottom: '0.75rem' }} value={audience} onChange={(e) => setAudience(e.target.value)}>
+          <option value="all">All members</option>
+          <option value="admins">Admins and Sub-admins</option>
+          {depts.map(d => <option key={d} value={d}>{'Department: ' + d}</option>)}
+        </select>
+        <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '0.75rem' }}>{pick.length} people selected - {phones.length} with phone numbers, {emails.length} with emails</div>
+        <label style={lab}>Subject (for email)</label>
+        <input style={{ ...box, marginBottom: '0.75rem' }} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={churchName} />
+        <label style={lab}>Message</label>
+        <textarea style={{ ...box, minHeight: '7rem' }} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Type your message here..." />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.9rem' }}>
+          <a href={phones.length && body ? 'sms:' + phones.join(',') + '?body=' + encodeURIComponent(body) : undefined} style={btn(phones.length && body ? '#2563eb' : '#94a3b8')}>💬 SMS</a>
+          <a href={emails.length && body ? 'mailto:?bcc=' + encodeURIComponent(emails.join(',')) + '&subject=' + encodeURIComponent(subject || churchName) + '&body=' + encodeURIComponent(body) : undefined} style={btn(emails.length && body ? '#7c3aed' : '#94a3b8')}>✉️ Email</a>
+          <a href={body ? 'https://wa.me/?text=' + encodeURIComponent(body) : undefined} target="_blank" rel="noopener noreferrer" style={btn(body ? '#16a34a' : '#94a3b8')}>🟢 WhatsApp</a>
+          <button type="button" onClick={() => copy(phones.join(', '), 'Phone numbers')} style={btn('#475569')}>Copy numbers</button>
+        </div>
+        {copied && <div style={{ marginTop: '0.6rem', fontSize: '0.85rem', color: '#166534' }}>{copied}</div>}
+      </div>
+
+      <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+        <h4 style={{ margin: '0 0 0.75rem 0', color: theme }}>🎂 Birthdays this month ({bdays.length})</h4>
+        {bdays.length > 0 ? bdays.map(m => {
+          const nm = ((m.first_name || '') + ' ' + (m.last_name || '')).trim();
+          const wish = 'Happy birthday ' + (m.first_name || '') + '! God bless you. - ' + churchName;
+          return (
+            <div key={m.id || m.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+              <span>{nm} ({String(m.date_of_birth).slice(8, 10)}/{String(m.date_of_birth).slice(5, 7)})</span>
+              {m.phone ? <a href={'sms:' + String(m.phone).replace(/\s+/g, '') + '?body=' + encodeURIComponent(wish)} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', textDecoration: 'none', padding: '0.25rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem' }}>Send wishes</a> : null}
+            </div>
+          );
+        }) : <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>No birthdays this month.</p>}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -498,10 +672,13 @@ export default function Home() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [settingsMsg, setSettingsMsg] = useState('');
   const [assetsList, setAssetsList] = useState([]);
+  const [leadersList, setLeadersList] = useState([]);
+  const [rotasList, setRotasList] = useState([]);
+  const [videosList, setVideosList] = useState([]);
   const [servicesList, setServicesList] = useState([]);
   const [visitorsList, setVisitorsList] = useState([]);
   const [convertsList, setConvertsList] = useState([]);
-  const [board, setBoard] = useState({ events: [], announcements: [] });
+  const [board, setBoard] = useState({ events: [], announcements: [], leaders: [], rotas: [], videos: [] });
   const baseRef = useRef({});
 
   // Financial Data State with Edit/Delete restricted to Super Admin
@@ -518,7 +695,7 @@ export default function Home() {
   const [editingTitheIndex, setEditingTitheIndex] = useState(null);
 
   const [budgets, setBudgets] = useState([]);
-  const [budgetForm, setBudgetForm] = useState({ item: '', estimated: '', status: 'Pending' });
+  const [budgetForm, setBudgetForm] = useState({ item: '', estimated: '', status: 'Pending', date: todayStr() });
 
   const [contributions, setContributions] = useState([]);
   const [contribForm, setContribForm] = useState({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
@@ -576,9 +753,20 @@ export default function Home() {
       { key: 'record_visitors', label: 'Record visitors' },
       { key: 'record_new_converts', label: 'Record new converts' }
     ],
+    'Administration & Leadership': [
+      { key: 'manage_leaders', label: 'Manage church leaders directory' }
+    ],
+    'Reports & Communication': [
+      { key: 'view_reports', label: 'View reports' },
+      { key: 'send_messages', label: 'Send messages to members' }
+    ],
+    'Videos & Integrations': [
+      { key: 'manage_videos', label: 'Manage sermon videos & links' }
+    ],
     'Services & Events': [
       { key: 'register_services', label: 'Register services' },
       { key: 'register_events', label: 'Register events' },
+      { key: 'manage_rotas', label: 'Manage duty rotas' },
       { key: 'record_attendance', label: 'Record attendance' }
     ],
     'Communication': [
@@ -638,7 +826,8 @@ export default function Home() {
     welfareRecords: setWelfareRecords, welfareDates: setWelfareDates, openingBalance: setOpeningBalance,
     accountReportNotes: setAccountReportNotes, balanceSheetNotes: setBalanceSheetNotes,
     attendanceLogs: setAttendanceLogs, eventsList: setEventsList, announcementsList: setAnnouncementsList,
-    servicesList: setServicesList, visitorsList: setVisitorsList, convertsList: setConvertsList, assetsList: setAssetsList
+    servicesList: setServicesList, visitorsList: setVisitorsList, convertsList: setConvertsList, assetsList: setAssetsList,
+    leadersList: setLeadersList, rotasList: setRotasList, videosList: setVideosList
   };
 
   const makeMemberRows = () => members
@@ -672,7 +861,7 @@ export default function Home() {
       const r = rows[key];
       const dataObj = pickSection({ ...((r && r.data) || {}) }, key);
       SECTION_DEFS[key].forEach(f => fieldSetters[f](dataObj[f]));
-      baseRef.current[key] = { data: dataObj, version: r ? r.version : 0 };
+      baseRef.current[key] = { data: JSON.parse(JSON.stringify(dataObj)), version: r ? r.version : 0 };
     });
     setSaveError('');
     setFinanceLoaded(true);
@@ -688,9 +877,9 @@ export default function Home() {
       .maybeSingle();
     if (error) setSaveError('Could not load your records: ' + error.message);
     setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
-    const { data: rows } = await supabase.from('app_data').select('key, data').in('key', ['events', 'announcements']);
+    const { data: rows } = await supabase.from('app_data').select('key, data').in('key', ['events', 'announcements', 'leaders', 'rotas', 'videos']);
     const get = (k, f) => { const r = (rows || []).find(x => x.key === k); return (r && r.data && r.data[f]) || []; };
-    setBoard({ events: get('events', 'eventsList'), announcements: get('announcements', 'announcementsList') });
+    setBoard({ events: get('events', 'eventsList'), announcements: get('announcements', 'announcementsList'), leaders: get('leaders', 'leadersList'), rotas: get('rotas', 'rotasList'), videos: get('videos', 'videosList') });
   }
 
   // Save one section. If another admin saved first, merge both people's changes and try again.
@@ -715,12 +904,12 @@ export default function Home() {
         if (error) errMsg = error.message; else if (data && data.length) ok = true; else conflict = true;
       }
       if (errMsg) return errMsg;
-      if (ok) { baseRef.current[key] = { data: local, version: base.version === 0 ? 1 : base.version + 1 }; return ''; }
+      if (ok) { baseRef.current[key] = { data: JSON.parse(JSON.stringify(local)), version: base.version === 0 ? 1 : base.version + 1 }; return ''; }
       const { data: srv, error: e2 } = await supabase.from('app_data').select('data, version').eq('key', key).maybeSingle();
       if (e2 || !srv) return e2 ? e2.message : 'You do not have permission to save this section.';
       const serverData = pickSection({ ...(srv.data || {}) }, key);
       const merged = mergeSection(base.data, local, serverData);
-      baseRef.current[key] = { data: serverData, version: srv.version };
+      baseRef.current[key] = { data: JSON.parse(JSON.stringify(serverData)), version: srv.version };
       SECTION_DEFS[key].forEach(f => fieldSetters[f](merged[f]));
       vals = { ...vals, ...merged };
     }
@@ -734,7 +923,7 @@ export default function Home() {
     const vals = {
       incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance,
       accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList,
-      servicesList, visitorsList, convertsList, assetsList
+      servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList
     };
     const dirty = Object.keys(SECTION_DEFS).filter(key => {
       if (!canWriteSectionFn(key, isSuper, myPermissions)) return false;
@@ -764,11 +953,11 @@ export default function Home() {
       setSaveError(failed ? 'Could not save: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList]);
+  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList]);
 
   // Pick up other admins' latest entries when a records screen is opened
   useEffect(() => {
-    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
       loadSections(role === 'super_admin', myPermissions);
     }
   }, [activeTab]);
@@ -847,6 +1036,27 @@ export default function Home() {
     if (error) { setSettingsMsg('Could not upload logo: ' + error.message); return; }
     const { data } = supabase.storage.from('church-assets').getPublicUrl(path);
     await saveSettings({ logo_url: data.publicUrl }, 'Logo updated. It now shows in the headers and reports.');
+  };
+
+
+  // Opens a branded print window (used by the Reports screens)
+  const openPrintWindow = (title, bodyHtml) => {
+    const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow pop-ups for this site to print.'); return; }
+    w.document.write(`<html><head><title>${esc(title)} - ${esc(churchName)}</title><style>
+      body{font-family:'Segoe UI',Arial,sans-serif;padding:24px;color:#0f172a}
+      .head{display:flex;align-items:center;gap:16px;border-bottom:3px solid ${themeColor};padding-bottom:12px;margin-bottom:16px}
+      .head img{width:70px;height:70px;object-fit:contain} h2{margin:0;color:${themeColor}} h3{color:${themeColor};margin:18px 0 6px}
+      .sub{color:#64748b;font-size:13px} table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{border:1px solid #cbd5e1;padding:6px;text-align:left} th{background:#f1f5f9} .tot{margin-top:12px;font-weight:bold}
+    </style></head><body>
+      <div class="head"><img src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>${esc(title.toUpperCase())}</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+      ${bodyHtml}
+      <script>window.onload = function() { window.print(); };</script>
+    </body></html>`);
+    w.document.close();
   };
 
   const printAssetRegister = (list) => {
@@ -1457,7 +1667,59 @@ export default function Home() {
             <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Loading your records...</p>
           )}
 
-          {(settings.phone || settings.address || settings.whatsapp || (settings.services || []).length > 0) && (
+          {(() => {
+            const L = role === 'member' ? board.leaders : leadersList;
+            const R = role === 'member' ? board.rotas : rotasList;
+            const V = role === 'member' ? board.videos : videosList;
+            const first = String(currentMemberRecord.first_name || '').trim().toLowerCase();
+            const today = todayStr();
+            const upcoming = [...R].filter(r => !r.rota_date || r.rota_date >= today).sort((a, b) => String(a.rota_date || '').localeCompare(String(b.rota_date || ''))).slice(0, 8);
+            const card = { backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' };
+            const h3s = { fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' };
+            return (
+              <div>
+                {upcoming.length > 0 && (
+                  <div style={card}>
+                    <h3 style={h3s}>Duty Roster</h3>
+                    {upcoming.map((r, i) => {
+                      const mine = first && String(r.assigned || '').toLowerCase().includes(first);
+                      return (
+                        <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', backgroundColor: mine ? '#fefce8' : 'transparent' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: '#0f172a' }}><span>{r.rota_name}{mine ? ' (you may be on duty)' : ''}</span><span style={{ fontSize: '0.8rem', color: '#64748b' }}>{r.rota_date}</span></div>
+                          <div style={{ fontSize: '0.88rem', color: '#334155' }}>{r.service ? r.service + ' - ' : ''}{r.assigned}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {L.length > 0 && (
+                  <div style={card}>
+                    <h3 style={h3s}>Church Leaders</h3>
+                    {L.map((l, i) => (
+                      <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                        <div style={{ fontWeight: '600', color: '#0f172a' }}>{l.leader_name} <span style={{ fontWeight: 'normal', color: '#64748b' }}>- {l.position}{l.department ? ' (' + l.department + ')' : ''}</span></div>
+                        {l.phone ? <div style={{ fontSize: '0.88rem' }}>📞 <a href={'tel:' + l.phone} style={{ color: themeColor }}>{l.phone}</a></div> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {V.length > 0 && (
+                  <div style={card}>
+                    <h3 style={h3s}>Sermons &amp; Videos</h3>
+                    {V.slice(0, 8).map((v, i) => (
+                      <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+                        <div style={{ fontWeight: '600', color: '#0f172a' }}>{v.title}{v.video_date ? <span style={{ fontWeight: 'normal', fontSize: '0.8rem', color: '#64748b' }}>  ({v.video_date})</span> : null}</div>
+                        {v.speaker ? <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{v.speaker}</div> : null}
+                        <a href={v.video_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '0.3rem', backgroundColor: themeColor, color: '#ffffff', textDecoration: 'none', padding: '0.35rem 0.8rem', borderRadius: '0.35rem', fontSize: '0.85rem', fontWeight: '600' }}>▶ Watch</a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {(settings.phone || settings.address || settings.whatsapp || settings.email || settings.website || settings.facebook || settings.youtube || (settings.services || []).length > 0) && (
             <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>Church Information</h3>
               {settings.address ? <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#334155' }}>📍 {settings.address}</p> : null}
@@ -1465,6 +1727,12 @@ export default function Home() {
               {settings.whatsapp ? (
                 <a href={settings.whatsapp} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', backgroundColor: '#16a34a', color: '#ffffff', textDecoration: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.88rem', marginBottom: '0.5rem' }}>Join our WhatsApp group</a>
               ) : null}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem' }}>
+                {settings.email ? <a href={'mailto:' + settings.email} style={{ color: themeColor, fontSize: '0.88rem' }}>✉️ {settings.email}</a> : null}
+                {settings.website ? <a href={settings.website} target="_blank" rel="noopener noreferrer" style={{ color: themeColor, fontSize: '0.88rem' }}>🌐 Website</a> : null}
+                {settings.facebook ? <a href={settings.facebook} target="_blank" rel="noopener noreferrer" style={{ color: themeColor, fontSize: '0.88rem' }}>Facebook</a> : null}
+                {settings.youtube ? <a href={settings.youtube} target="_blank" rel="noopener noreferrer" style={{ color: themeColor, fontSize: '0.88rem' }}>YouTube</a> : null}
+              </div>
               {(settings.services || []).length > 0 && (
                 <div style={{ marginTop: '0.5rem' }}>
                   <div style={{ fontWeight: '600', color: '#0f172a', marginBottom: '0.25rem' }}>Service times</div>
@@ -1622,10 +1890,12 @@ export default function Home() {
         {(() => {
           const groups = [
             { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')]] },
-            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')]] },
+            { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')]] },
+            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')]] },
             { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')]] },
             { id: 'facilities', label: '🏢 Facilities', tabs: [['facilities', 'Facilities', can('manage_facilities')]] },
-            { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')]] },
+            { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')], ['messages', 'Messages', can('send_messages')], ['reports', 'Reports', can('view_reports')]] },
+            { id: 'media', label: '🎬 Videos', tabs: [['videos', 'Sermons & Videos', can('manage_videos')]] },
             { id: 'admin', label: '⚙️ Admin', tabs: [['permissions', '🔐 Admin Permissions', role === 'super_admin'], ['settings', '⚙️ Settings', role === 'super_admin']] }
           ].map(g => ({ ...g, tabs: g.tabs.filter(t => t[2]) })).filter(g => g.tabs.length > 0);
           const activeGroup = groups.find(g => g.tabs.some(t => t[0] === activeTab)) || groups[0];
@@ -2275,10 +2545,14 @@ export default function Home() {
                 </button>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
                   <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Record Budget Item</h3>
-                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending' }); alert('Budget saved successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <form onSubmit={(e) => { e.preventDefault(); setBudgets([budgetForm, ...budgets]); setBudgetForm({ item: '', estimated: '', status: 'Pending', date: todayStr() }); alert('Budget saved successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Item / Project Name</label>
                       <input type="text" required value={budgetForm.item} onChange={(e) => setBudgetForm({...budgetForm, item: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Sound System Upgrade" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Budget Date</label>
+                      <input type="date" required value={budgetForm.date || ''} onChange={(e) => setBudgetForm({...budgetForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Estimated Cost (GHS)</label>
@@ -2292,7 +2566,7 @@ export default function Home() {
                 <h4 style={{ color: '#0f172a' }}>Budgets List ({budgets.length})</h4>
                 {budgets.map((b, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{b.item}</strong> (GHS {parseFloat(b.estimated || 0).toFixed(2)})</span>
+                    <span><strong>{b.item}</strong> (GHS {parseFloat(b.estimated || 0).toFixed(2)}){b.date ? <span style={{ color: '#64748b', fontSize: '0.8rem' }}> - {b.date}</span> : null}{b.approved_on ? <span style={{ color: '#16a34a', fontSize: '0.8rem' }}> - approved {b.approved_on}</span> : null}</span>
                     <span style={{ fontWeight: 'bold', color: b.status === 'Approved' ? '#16a34a' : '#d97706' }}>{b.status}</span>
                   </div>
                 ))}
@@ -2315,16 +2589,14 @@ export default function Home() {
                       <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#0f172a' }}>{b.item}</div>
-                          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Amount: GHS {parseFloat(b.estimated || 0).toFixed(2)}</div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Amount: GHS {parseFloat(b.estimated || 0).toFixed(2)}{b.date ? ' - Date: ' + b.date : ''}{b.approved_on ? ' - Approved: ' + b.approved_on : ''}</div>
                         </div>
                         <div>
                           {b.status === 'Pending' ? (
                             <button 
                               type="button" 
                               onClick={() => {
-                                const updated = [...budgets];
-                                updated[i].status = 'Approved';
-                                setBudgets(updated);
+                                setBudgets(budgets.map((x, idx) => (idx === i ? { ...x, status: 'Approved', approved_on: todayStr() } : x)));
                                 alert(`Budget "${b.item}" approved successfully!`);
                               }} 
                               style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}
@@ -2363,9 +2635,13 @@ export default function Home() {
                         const initials = nameStr.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
                         return (
                           <div key={m.id || index} onClick={() => { const rec = welfareRecords[m.id || 'default'] || {}; const locked = {}; if (role !== 'super_admin') { Object.entries(rec).forEach(([mo, wks]) => wks.forEach((v, i) => { if (v) locked[mo + '-' + i] = true; })); } setWelfareLocked(locked); setSelectedMemberForWelfare(m); }} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
-                            <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', margin: '0 auto 0.5rem auto' }}>
-                              {initials}
-                            </div>
+                            {m.photo_url ? (
+                              <img src={m.photo_url} alt={nameStr} style={{ width: '3rem', height: '3rem', borderRadius: '50%', objectFit: 'cover', display: 'block', margin: '0 auto 0.5rem auto' }} />
+                            ) : (
+                              <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', margin: '0 auto 0.5rem auto' }}>
+                                {initials}
+                              </div>
+                            )}
                             <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#0f172a' }}>{nameStr}</div>
                           </div>
                         );
@@ -2375,7 +2651,8 @@ export default function Home() {
                 ) : (
                   <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        {selectedMemberForWelfare.photo_url ? <img src={selectedMemberForWelfare.photo_url} alt="Member" style={{ width: '2.4rem', height: '2.4rem', borderRadius: '50%', objectFit: 'cover' }} /> : null}
                         {`${selectedMemberForWelfare.first_name || ''} ${selectedMemberForWelfare.last_name || ''}`.trim() || selectedMemberForWelfare.email}
                       </h3>
                       <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
@@ -2709,6 +2986,94 @@ export default function Home() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Leaders Tab */}
+        {activeTab === 'leaders' && can('manage_leaders') && (
+          <RecordTab
+            title="Church Leaders"
+            addLabel="+ Add Leader"
+            titleKey="leader_name"
+            emptyText="No leaders recorded yet."
+            canDelete={role === 'super_admin'}
+            theme={themeColor}
+            items={leadersList}
+            onAdd={(item) => setLeadersList([item, ...leadersList])}
+            onDelete={(i) => setLeadersList(leadersList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'leader_name', label: 'Name', required: true },
+              { key: 'position', label: 'Position / Title', required: true },
+              { key: 'department', label: 'Department / Ministry' },
+              { key: 'phone', label: 'Phone', type: 'tel' },
+              { key: 'email', label: 'Email', type: 'email' },
+              { key: 'since', label: 'Serving since', type: 'date' },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+
+        {/* Duty Rotas Tab */}
+        {activeTab === 'rotas' && can('manage_rotas') && (
+          <RecordTab
+            title="Duty Rotas"
+            addLabel="+ Add Duty"
+            titleKey="rota_name"
+            emptyText="No duties scheduled yet."
+            canDelete={role === 'super_admin'}
+            theme={themeColor}
+            items={rotasList}
+            onAdd={(item) => setRotasList([item, ...rotasList])}
+            onDelete={(i) => setRotasList(rotasList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'rota_name', label: 'Duty (e.g. Ushering, Choir, Cleaning)', required: true },
+              { key: 'rota_date', label: 'Date', type: 'date', required: true },
+              { key: 'service', label: 'Service / Meeting' },
+              { key: 'assigned', label: 'Assigned people (names)', type: 'textarea', required: true },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+
+        {/* Videos Tab */}
+        {activeTab === 'videos' && can('manage_videos') && (
+          <RecordTab
+            title="Sermons & Videos"
+            addLabel="+ Add Video"
+            titleKey="title"
+            emptyText="No videos added yet."
+            canDelete={role === 'super_admin'}
+            theme={themeColor}
+            items={videosList}
+            onAdd={(item) => setVideosList([item, ...videosList])}
+            onDelete={(i) => setVideosList(videosList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'title', label: 'Title', required: true },
+              { key: 'video_url', label: 'Video link (YouTube, Facebook...)', type: 'url', required: true },
+              { key: 'video_date', label: 'Date', type: 'date' },
+              { key: 'speaker', label: 'Speaker / Minister' },
+              { key: 'description', label: 'Description', type: 'textarea' }
+            ]}
+          />
+        )}
+
+        {/* Reports Tab */}
+        {activeTab === 'reports' && can('view_reports') && (
+          <ReportsTab
+            members={members}
+            fin={(can('access_finance') || can('view_balance_sheet')) ? { tithes, contributions, incomes, expenses } : null}
+            attendance={can('record_attendance') ? attendanceLogs : null}
+            assets={can('manage_facilities') ? assetsList : null}
+            visitors={can('record_visitors') ? visitorsList : null}
+            converts={can('record_new_converts') ? convertsList : null}
+            theme={themeColor}
+            openPrint={openPrintWindow}
+            churchName={churchName}
+          />
+        )}
+
+        {/* Messages Tab */}
+        {activeTab === 'messages' && can('send_messages') && (
+          <MessagesTab members={members} theme={themeColor} churchName={churchName} />
         )}
 
         {/* Settings Tab (Super Admin only) */}
