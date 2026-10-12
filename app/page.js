@@ -489,6 +489,7 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, them
   const thisYear = String(new Date().getFullYear());
   const thisMonth = new Date().getMonth() + 1;
   const byDept = {};
+  CORE_DEPARTMENTS.forEach(d => { byDept[d] = 0; });
   members.forEach(m => { const d = m.core_department || 'Not set'; byDept[d] = (byDept[d] || 0) + 1; });
   const admins = members.filter(m => m.role && m.role !== 'member').length;
   const joinedYear = members.filter(m => String(m.date_joined || '').startsWith(thisYear)).length;
@@ -576,8 +577,16 @@ function MessagesTab({ members, theme, churchName }) {
   const [subject, setSubject] = useState('');
   const [msg, setMsg] = useState('');
   const [copied, setCopied] = useState('');
-  const depts = Array.from(new Set(members.map(m => m.core_department).filter(Boolean)));
-  const pick = members.filter(m => audience === 'all' ? true : audience === 'admins' ? (m.role && m.role !== 'member') : m.core_department === audience);
+  const inGroup = (m) => {
+    if (audience === 'all') return true;
+    if (audience === 'admins') return !!(m.role && m.role !== 'member');
+    if (audience.startsWith('core:')) return m.core_department === audience.slice(5);
+    if (audience.startsWith('sub:')) return String(m.sub_departments || '').includes(audience.slice(4));
+    return false;
+  };
+  const countCore = (d) => members.filter(m => m.core_department === d).length;
+  const countSub = (d) => members.filter(m => String(m.sub_departments || '').includes(d)).length;
+  const pick = members.filter(inGroup);
   const phones = pick.map(m => String(m.phone || '').replace(/\s+/g, '')).filter(Boolean);
   const emails = pick.map(m => String(m.email || '').trim()).filter(Boolean);
   const month = new Date().getMonth() + 1;
@@ -598,7 +607,12 @@ function MessagesTab({ members, theme, churchName }) {
         <select style={{ ...box, marginBottom: '0.75rem' }} value={audience} onChange={(e) => setAudience(e.target.value)}>
           <option value="all">All members</option>
           <option value="admins">Admins and Sub-admins</option>
-          {depts.map(d => <option key={d} value={d}>{'Department: ' + d}</option>)}
+          <optgroup label="Core Departments">
+            {CORE_DEPARTMENTS.map(d => <option key={d} value={'core:' + d}>{d + ' (' + countCore(d) + ')'}</option>)}
+          </optgroup>
+          <optgroup label="Sub-Departments / Ministries">
+            {SUB_DEPARTMENTS.map(d => <option key={d} value={'sub:' + d}>{d + ' (' + countSub(d) + ')'}</option>)}
+          </optgroup>
         </select>
         <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '0.75rem' }}>{pick.length} people selected - {phones.length} with phone numbers, {emails.length} with emails</div>
         <label style={lab}>Subject (for email)</label>
@@ -626,6 +640,127 @@ function MessagesTab({ members, theme, churchName }) {
             </div>
           );
         }) : <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>No birthdays this month.</p>}
+      </div>
+    </div>
+  );
+}
+
+
+const CORE_DEPARTMENTS = ['LOVE', 'UNITY', 'CARE', 'RESPECT'];
+const SUB_DEPARTMENTS = [
+  'Ushering Department',
+  'Choir/Music Department',
+  'Prayer Warriors',
+  'General Assembly',
+  'Men Ministry',
+  'Women Ministry',
+  'Ministry Evangelical department',
+  'Pastoral Ministry',
+  'Children Ministry'
+];
+
+// ---------- Church Leaders: pick the member, department fills in from the lists ----------
+function LeadersTab({ items, onAdd, onDelete, canDelete, members, theme }) {
+  const blank = { member_id: '', leader_name: '', position: '', department: '', phone: '', email: '', since: '', notes: '', photo_url: '' };
+  const [show, setShow] = useState(false);
+  const [form, setForm] = useState(blank);
+  const [manual, setManual] = useState(false);
+  const box = { width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' };
+  const lab = { display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' };
+  const sorted = [...members].sort((a, b) => String((a.first_name || '') + (a.last_name || '')).localeCompare(String((b.first_name || '') + (b.last_name || ''))));
+  const fullName = (m) => ((m.first_name || '') + ' ' + (m.last_name || '')).trim();
+
+  const pickMember = (id) => {
+    if (id === '__other') { setManual(true); setForm({ ...blank, position: form.position }); return; }
+    setManual(false);
+    const m = members.find(x => String(x.id) === id);
+    if (!m) { setForm({ ...blank, position: form.position }); return; }
+    setForm({ ...form, member_id: id, leader_name: fullName(m), phone: m.phone || '', email: m.email || '', department: m.core_department || form.department, photo_url: m.photo_url || '' });
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Church Leaders</h3>
+        <button type="button" onClick={() => { setShow(!show); setForm(blank); setManual(false); }} style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>{show ? 'Cancel' : '+ Add Leader'}</button>
+      </div>
+
+      {show && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); onAdd({ ...form, recorded_on: new Date().toISOString().slice(0, 10) }); setForm(blank); setManual(false); setShow(false); }}
+          style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div>
+              <label style={lab}>Select member *</label>
+              <select style={box} required value={manual ? '__other' : form.member_id} onChange={(e) => pickMember(e.target.value)}>
+                <option value="">-- Choose a member --</option>
+                {sorted.map(m => <option key={m.id} value={String(m.id)}>{fullName(m) || m.email}</option>)}
+                <option value="__other">Not in the member list (type the name)</option>
+              </select>
+            </div>
+            {manual && (
+              <div><label style={lab}>Name *</label><input style={box} required value={form.leader_name} onChange={(e) => setForm({ ...form, leader_name: e.target.value })} /></div>
+            )}
+            <div>
+              <label style={lab}>Position / Title *</label>
+              <input style={box} required list="leader-positions" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} placeholder="e.g. Elder, Secretary" />
+              <datalist id="leader-positions">
+                {['Pastor', 'Assistant Pastor', 'Elder', 'Deacon', 'Deaconess', 'Secretary', 'Treasurer', 'Choir Master', 'Head Usher', 'Department Head', 'Youth Leader', "Women's Leader", "Men's Leader"].map(p => <option key={p} value={p} />)}
+              </datalist>
+            </div>
+            <div>
+              <label style={lab}>Department / Ministry</label>
+              <select style={box} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
+                <option value="">-- Choose department --</option>
+                <optgroup label="Core Departments">
+                  {CORE_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </optgroup>
+                <optgroup label="Sub-Departments / Ministries">
+                  {SUB_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </optgroup>
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div><label style={lab}>Phone</label><input style={box} type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <div><label style={lab}>Email</label><input style={box} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            </div>
+            <div><label style={lab}>Serving since</label><input style={box} type="date" value={form.since} onChange={(e) => setForm({ ...form, since: e.target.value })} /></div>
+            <div><label style={lab}>Notes</label><textarea style={{ ...box, minHeight: '4rem' }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <button type="submit" style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>Save</button>
+          </div>
+        </form>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {items.length > 0 ? items.map((l, i) => (
+          <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem 1.25rem', display: 'flex', gap: '0.9rem', alignItems: 'flex-start' }}>
+            {l.photo_url ? (
+              <img src={l.photo_url} alt={l.leader_name} style={{ width: '3.2rem', height: '3.2rem', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: '3.2rem', height: '3.2rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>{String(l.leader_name || '?').trim().charAt(0).toUpperCase()}</div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                <h4 style={{ margin: 0, color: theme, fontSize: '1rem' }}>{l.leader_name}</h4>
+                {canDelete && (
+                  <button type="button" onClick={() => { if (window.confirm('Remove this leader?')) onDelete(i); }} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.6rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
+                )}
+              </div>
+              <div style={{ fontSize: '0.88rem', color: '#334155', lineHeight: 1.6 }}>
+                <div><strong>{l.position}</strong>{l.department ? ' - ' + l.department : ''}</div>
+                {l.phone ? <div>📞 {l.phone}</div> : null}
+                {l.email ? <div style={{ wordBreak: 'break-word' }}>✉️ {l.email}</div> : null}
+                {l.since ? <div>Serving since: {l.since}</div> : null}
+                {l.notes ? <div style={{ color: '#64748b' }}>{l.notes}</div> : null}
+              </div>
+            </div>
+          </div>
+        )) : (
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+            <p style={{ margin: 0 }}>No leaders recorded yet.</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -734,17 +869,7 @@ export default function Home() {
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
-  const subDeptList = [
-    'Ushering Department',
-    'Choir/Music Department',
-    'Prayer Warriors',
-    'General Assembly',
-    'Men Ministry',
-    'Women Ministry',
-    'Ministry Evangelical department',
-    'Pastoral Ministry',
-    'Children Ministry'
-  ];
+  const subDeptList = SUB_DEPARTMENTS;
 
   // 'soon: true' = the screen for this permission has not been built in the app yet
   const permissionSchema = {
@@ -1696,9 +1821,16 @@ export default function Home() {
                   <div style={card}>
                     <h3 style={h3s}>Church Leaders</h3>
                     {L.map((l, i) => (
-                      <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                        <div style={{ fontWeight: '600', color: '#0f172a' }}>{l.leader_name} <span style={{ fontWeight: 'normal', color: '#64748b' }}>- {l.position}{l.department ? ' (' + l.department + ')' : ''}</span></div>
-                        {l.phone ? <div style={{ fontSize: '0.88rem' }}>📞 <a href={'tel:' + l.phone} style={{ color: themeColor }}>{l.phone}</a></div> : null}
+                      <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        {l.photo_url ? (
+                          <img src={l.photo_url} alt={l.leader_name} style={{ width: '2.8rem', height: '2.8rem', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: '2.8rem', height: '2.8rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>{String(l.leader_name || '?').trim().charAt(0).toUpperCase()}</div>
+                        )}
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#0f172a' }}>{l.leader_name} <span style={{ fontWeight: 'normal', color: '#64748b' }}>- {l.position}{l.department ? ' (' + l.department + ')' : ''}</span></div>
+                          {l.phone ? <div style={{ fontSize: '0.88rem' }}>📞 <a href={'tel:' + l.phone} style={{ color: themeColor }}>{l.phone}</a></div> : null}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2990,25 +3122,13 @@ export default function Home() {
 
         {/* Leaders Tab */}
         {activeTab === 'leaders' && can('manage_leaders') && (
-          <RecordTab
-            title="Church Leaders"
-            addLabel="+ Add Leader"
-            titleKey="leader_name"
-            emptyText="No leaders recorded yet."
+          <LeadersTab
+            items={leadersList}
+            members={members}
             canDelete={role === 'super_admin'}
             theme={themeColor}
-            items={leadersList}
             onAdd={(item) => setLeadersList([item, ...leadersList])}
             onDelete={(i) => setLeadersList(leadersList.filter((_, idx) => idx !== i))}
-            fields={[
-              { key: 'leader_name', label: 'Name', required: true },
-              { key: 'position', label: 'Position / Title', required: true },
-              { key: 'department', label: 'Department / Ministry' },
-              { key: 'phone', label: 'Phone', type: 'tel' },
-              { key: 'email', label: 'Email', type: 'email' },
-              { key: 'since', label: 'Serving since', type: 'date' },
-              { key: 'notes', label: 'Notes', type: 'textarea' }
-            ]}
           />
         )}
 
