@@ -237,11 +237,15 @@ function AssetsTab({ items, onAdd, onUpdate, onDelete, isSuper, theme, onPrint }
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');
   const [cond, setCond] = useState('All');
+  const [lendIndex, setLendIndex] = useState(null);
+  const [loan, setLoan] = useState({ borrower: '', expected_return: '', note: '' });
 
   const num = (v) => parseFloat(v) || 0;
   const totalQty = items.reduce((a, i) => a + num(i.quantity), 0);
   const totalValue = items.reduce((a, i) => a + num(i.quantity) * num(i.unit_value), 0);
   const attention = items.filter(i => i.condition === 'Needs repair' || i.condition === 'Out of service').length;
+  const longRepairs = items.filter(i => (i.condition === 'Needs repair' || i.condition === 'Out of service') && daysSince(i.condition_since || i.recorded_on) > 30);
+  const overdueLoans = items.filter(i => { const l = currentLoan(i); return l && l.expected_return && l.expected_return < todayStr(); });
   const nextTag = () => 'FAC-' + String(Math.max(0, ...items.map(i => parseInt(String(i.tag || '').replace(/\D/g, ''), 10) || 0)) + 1).padStart(4, '0');
 
   const shown = items.map((it, index) => ({ it, index })).filter(({ it }) =>
@@ -267,19 +271,29 @@ function AssetsTab({ items, onAdd, onUpdate, onDelete, isSuper, theme, onPrint }
         </div>
       </div>
 
+      {(longRepairs.length > 0 || overdueLoans.length > 0) && (
+        <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', color: '#9a3412', borderRadius: '0.6rem', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.88rem', lineHeight: 1.6 }}>
+          {longRepairs.length > 0 && <div>⚠ Waiting for repair for over 30 days: <strong>{longRepairs.map(i => i.name).join(', ')}</strong></div>}
+          {overdueLoans.length > 0 && <div>⏰ Overdue to be returned: <strong>{overdueLoans.map(i => i.name + ' (' + currentLoan(i).borrower + ')').join(', ')}</strong></div>}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginBottom: '1rem' }}>
         {stat('Records', items.length)}
         {stat('Total quantity', totalQty)}
         {stat('Estimated value', 'GHS ' + totalValue.toFixed(2))}
         {stat('Needs attention', attention)}
+        {stat('Out on loan', items.filter(i => currentLoan(i)).length)}
       </div>
 
       {show && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (editIndex !== null) { onUpdate(editIndex, { ...form, tag: items[editIndex].tag }); }
-            else { onAdd({ ...form, tag: nextTag(), recorded_on: new Date().toISOString().slice(0, 10) }); }
+            if (editIndex !== null) {
+              const old = items[editIndex];
+              onUpdate(editIndex, { ...form, tag: old.tag, loans: old.loans || [], condition_since: form.condition !== old.condition ? todayStr() : (old.condition_since || todayStr()) });
+            } else { onAdd({ ...form, tag: nextTag(), recorded_on: todayStr(), condition_since: todayStr(), loans: [] }); }
             setForm(blank); setEditIndex(null); setShow(false);
           }}
           style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}
@@ -333,6 +347,35 @@ function AssetsTab({ items, onAdd, onUpdate, onDelete, isSuper, theme, onPrint }
               {it.serial ? <div>Serial: {it.serial}</div> : null}
               {it.notes ? <div style={{ color: '#64748b' }}>{it.notes}</div> : null}
             </div>
+            {(() => {
+              const cl = currentLoan(it);
+              const late = cl && cl.expected_return && cl.expected_return < todayStr();
+              return (
+                <div style={{ marginTop: '0.5rem' }}>
+                  {cl ? (
+                    <div style={{ fontSize: '0.86rem', color: late ? '#b91c1c' : '#334155' }}>
+                      📤 Lent to <strong>{cl.borrower}</strong> on {cl.date_out}{cl.expected_return ? ' (due ' + cl.expected_return + ')' : ''}{late ? ' - OVERDUE' : ''}
+                      <button type="button" onClick={() => onUpdate(index, { ...it, loans: (it.loans || []).map(l => (l === cl ? { ...l, returned_on: todayStr() } : l)) })} style={{ marginLeft: '0.6rem', backgroundColor: '#dcfce7', color: '#166534', border: 'none', padding: '0.2rem 0.6rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Mark returned</button>
+                    </div>
+                  ) : lendIndex === index ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                      <input style={sBox} placeholder="Borrower's name" value={loan.borrower} onChange={(e) => setLoan({ ...loan, borrower: e.target.value })} />
+                      <input style={sBox} type="date" value={loan.expected_return} onChange={(e) => setLoan({ ...loan, expected_return: e.target.value })} />
+                      <input style={sBox} placeholder="Note (optional)" value={loan.note} onChange={(e) => setLoan({ ...loan, note: e.target.value })} />
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => { if (!loan.borrower.trim()) return; onUpdate(index, { ...it, loans: [...(it.loans || []), { ...loan, borrower: loan.borrower.trim(), date_out: todayStr() }] }); setLendIndex(null); setLoan({ borrower: '', expected_return: '', note: '' }); }} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.3rem', cursor: 'pointer', fontSize: '0.85rem' }}>Save loan</button>
+                        <button type="button" onClick={() => setLendIndex(null)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: '0.3rem', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => { setLendIndex(index); setLoan({ borrower: '', expected_return: '', note: '' }); }} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.25rem 0.7rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Lend out</button>
+                  )}
+                  {(it.loans || []).filter(l => l.returned_on).length > 0 && (
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>Past loans: {(it.loans || []).filter(l => l.returned_on).map(l => l.borrower + ' (' + l.date_out + ' to ' + l.returned_on + ')').join('; ')}</div>
+                  )}
+                </div>
+              );
+            })()}
             {isSuper && (
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
                 <button type="button" onClick={() => { setForm({ ...blank, ...it }); setEditIndex(index); setShow(true); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.7rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
@@ -349,6 +392,70 @@ function AssetsTab({ items, onAdd, onUpdate, onDelete, isSuper, theme, onPrint }
     </div>
   );
 }
+
+
+const DEFAULT_ACCOUNT_NOTES = 'All financial activities are reconciled and audited weekly.';
+const DEFAULT_BALANCE_NOTES = 'Assets match total equity and liabilities.';
+
+// Records are saved in sections. Each section is one row in the app_data table.
+const SECTION_DEFS = {
+  finance: ['incomes', 'expenses', 'tithes', 'budgets', 'contributions', 'welfareRecords', 'welfareDates', 'openingBalance', 'accountReportNotes', 'balanceSheetNotes'],
+  attendance: ['attendanceLogs'],
+  events: ['eventsList'],
+  announcements: ['announcementsList'],
+  services: ['servicesList'],
+  visitors: ['visitorsList'],
+  converts: ['convertsList'],
+  assets: ['assetsList']
+};
+const SECTION_WRITE_PERM = {
+  finance: 'access_finance', attendance: 'record_attendance', events: 'register_events',
+  announcements: 'post_announcements', services: 'register_services', visitors: 'record_visitors',
+  converts: 'record_new_converts', assets: 'manage_facilities'
+};
+const FIELD_DEFAULTS = {
+  incomes: [], expenses: [], tithes: [], budgets: [], contributions: [],
+  welfareRecords: {}, welfareDates: {}, openingBalance: 2484.32,
+  accountReportNotes: DEFAULT_ACCOUNT_NOTES, balanceSheetNotes: DEFAULT_BALANCE_NOTES,
+  attendanceLogs: [], eventsList: [], announcementsList: [], servicesList: [],
+  visitorsList: [], convertsList: [], assetsList: []
+};
+
+const pickSection = (vals, key) => {
+  const o = {};
+  SECTION_DEFS[key].forEach(f => { o[f] = vals[f] === undefined ? FIELD_DEFAULTS[f] : vals[f]; });
+  return o;
+};
+const canWriteSectionFn = (key, isSuper, perms) => !!isSuper || !!(perms && perms[SECTION_WRITE_PERM[key]]);
+const canReadSectionFn = (key, isSuper, perms) =>
+  !!isSuper || key === 'events' || key === 'announcements' ||
+  (key === 'finance' ? !!(perms && (perms.access_finance || perms.view_balance_sheet)) : !!(perms && perms[SECTION_WRITE_PERM[key]]));
+
+// When two admins change the same section, keep BOTH people's additions and removals.
+function mergeSection(base, local, server) {
+  const out = { ...server };
+  Object.keys(local).forEach(f => {
+    const b = base[f];
+    const l = local[f];
+    const sv = server[f];
+    if (Array.isArray(l)) {
+      const baseJ = (b || []).map(x => JSON.stringify(x));
+      const localJ = l.map(x => JSON.stringify(x));
+      const added = l.filter((x, i) => !baseJ.includes(localJ[i]));
+      const removed = baseJ.filter(x => !localJ.includes(x));
+      const kept = (sv || []).filter(x => !removed.includes(JSON.stringify(x)));
+      const keptJ = kept.map(x => JSON.stringify(x));
+      out[f] = [...added.filter(x => !keptJ.includes(JSON.stringify(x))), ...kept];
+    } else {
+      out[f] = JSON.stringify(l) !== JSON.stringify(b) ? l : sv;
+    }
+  });
+  return out;
+}
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const currentLoan = (it) => (it.loans || []).find(l => !l.returned_on);
+const daysSince = (d) => (d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : 0);
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -395,7 +502,7 @@ export default function Home() {
   const [visitorsList, setVisitorsList] = useState([]);
   const [convertsList, setConvertsList] = useState([]);
   const [board, setBoard] = useState({ events: [], announcements: [] });
-  const lastBoardRef = useRef('');
+  const baseRef = useRef({});
 
   // Financial Data State with Edit/Delete restricted to Super Admin
   const [incomes, setIncomes] = useState([]);
@@ -510,9 +617,14 @@ export default function Home() {
           if (memberData.role) setRole(memberData.role);
         }
         const isAdminRole = !!(memberData && memberData.role && memberData.role !== 'member');
-        await loadFinance(isAdminRole, session.user.email);
         await loadSettings();
-        if (isAdminRole) await loadPermissions(memberData.role === 'super_admin', session.user.email);
+        if (isAdminRole) {
+          const isSuperRole = memberData.role === 'super_admin';
+          const perms = await loadPermissions(isSuperRole, session.user.email);
+          await loadSections(isSuperRole, perms);
+        } else {
+          await loadMemberData(session.user.email);
+        }
       }
       fetchMembers();
       setLoading(false);
@@ -521,16 +633,13 @@ export default function Home() {
   }, []);
 
 
-  const DEFAULT_ACCOUNT_NOTES = 'All financial activities are reconciled and audited weekly.';
-  const DEFAULT_BALANCE_NOTES = 'Assets match total equity and liabilities.';
-
-  const makeSnapshot = () => ({
-    incomes, expenses, tithes, budgets, contributions,
-    welfareRecords, welfareDates, openingBalance,
-    accountReportNotes, balanceSheetNotes,
-    attendanceLogs, eventsList, announcementsList,
-    servicesList, visitorsList, convertsList, assetsList
-  });
+  const fieldSetters = {
+    incomes: setIncomes, expenses: setExpenses, tithes: setTithes, budgets: setBudgets, contributions: setContributions,
+    welfareRecords: setWelfareRecords, welfareDates: setWelfareDates, openingBalance: setOpeningBalance,
+    accountReportNotes: setAccountReportNotes, balanceSheetNotes: setBalanceSheetNotes,
+    attendanceLogs: setAttendanceLogs, eventsList: setEventsList, announcementsList: setAnnouncementsList,
+    servicesList: setServicesList, visitorsList: setVisitorsList, convertsList: setConvertsList, assetsList: setAssetsList
+  };
 
   const makeMemberRows = () => members
     .filter(m => m.id && m.email)
@@ -549,91 +658,101 @@ export default function Home() {
       };
     });
 
-  async function loadFinance(isAdmin, email) {
-    if (isAdmin) {
-      const { data, error } = await supabase
-        .from('finance_snapshot')
-        .select('data')
-        .eq('id', 1)
-        .maybeSingle();
-      if (error) {
-        setSaveError('Could not load saved finance records: ' + error.message);
-        return;
-      }
-      const d = (data && data.data) || {};
-      const snap = {
-        incomes: d.incomes || [],
-        expenses: d.expenses || [],
-        tithes: d.tithes || [],
-        budgets: d.budgets || [],
-        contributions: d.contributions || [],
-        welfareRecords: d.welfareRecords || {},
-        welfareDates: d.welfareDates || {},
-        openingBalance: typeof d.openingBalance === 'number' ? d.openingBalance : 2484.32,
-        accountReportNotes: d.accountReportNotes || DEFAULT_ACCOUNT_NOTES,
-        balanceSheetNotes: d.balanceSheetNotes || DEFAULT_BALANCE_NOTES,
-        attendanceLogs: d.attendanceLogs || [],
-        eventsList: d.eventsList || [],
-        announcementsList: d.announcementsList || [],
-        servicesList: d.servicesList || [],
-        visitorsList: d.visitorsList || [],
-        convertsList: d.convertsList || [],
-        assetsList: d.assetsList || []
-      };
-      lastSnapRef.current = JSON.stringify(snap);
-      setIncomes(snap.incomes);
-      setExpenses(snap.expenses);
-      setTithes(snap.tithes);
-      setBudgets(snap.budgets);
-      setContributions(snap.contributions);
-      setWelfareRecords(snap.welfareRecords);
-      setWelfareDates(snap.welfareDates);
-      setOpeningBalance(snap.openingBalance);
-      setAccountReportNotes(snap.accountReportNotes);
-      setBalanceSheetNotes(snap.balanceSheetNotes);
-      setAttendanceLogs(snap.attendanceLogs);
-      setEventsList(snap.eventsList);
-      setAnnouncementsList(snap.announcementsList);
-      setServicesList(snap.servicesList);
-      setVisitorsList(snap.visitorsList);
-      setConvertsList(snap.convertsList);
-      setAssetsList(snap.assetsList);
-      setFinanceLoaded(true);
-    } else {
-      const { data, error } = await supabase
-        .from('member_finance')
-        .select('data')
-        .eq('member_email', String(email || '').trim().toLowerCase())
-        .maybeSingle();
-      if (error) {
-        setSaveError('Could not load your records: ' + error.message);
-      }
-      setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
-      const { data: b } = await supabase.from('public_board').select('data').eq('id', 1).maybeSingle();
-      const bd = (b && b.data) || {};
-      setBoard({ events: bd.events || [], announcements: bd.announcements || [] });
+  // Load every section this person is allowed to see
+  async function loadSections(isSuper, perms) {
+    const { data, error } = await supabase.from('app_data').select('key, data, version');
+    if (error) {
+      setSaveError('Could not load saved records: ' + error.message + ' (Has supabase-security.sql been run in Supabase?)');
+      return false;
     }
+    const rows = {};
+    (data || []).forEach(r => { rows[r.key] = r; });
+    Object.keys(SECTION_DEFS).forEach(key => {
+      if (!canReadSectionFn(key, isSuper, perms)) return;
+      const r = rows[key];
+      const dataObj = pickSection({ ...((r && r.data) || {}) }, key);
+      SECTION_DEFS[key].forEach(f => fieldSetters[f](dataObj[f]));
+      baseRef.current[key] = { data: dataObj, version: r ? r.version : 0 };
+    });
+    setSaveError('');
+    setFinanceLoaded(true);
+    return true;
   }
 
-  // Auto-save finance records (admins only), a moment after any change
+  // Members read their own record plus the shared events and announcements
+  async function loadMemberData(email) {
+    const { data, error } = await supabase
+      .from('member_finance')
+      .select('data')
+      .eq('member_email', String(email || '').trim().toLowerCase())
+      .maybeSingle();
+    if (error) setSaveError('Could not load your records: ' + error.message);
+    setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
+    const { data: rows } = await supabase.from('app_data').select('key, data').in('key', ['events', 'announcements']);
+    const get = (k, f) => { const r = (rows || []).find(x => x.key === k); return (r && r.data && r.data[f]) || []; };
+    setBoard({ events: get('events', 'eventsList'), announcements: get('announcements', 'announcementsList') });
+  }
+
+  // Save one section. If another admin saved first, merge both people's changes and try again.
+  async function saveSection(key, valsIn) {
+    let vals = valsIn;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const local = pickSection(vals, key);
+      const base = baseRef.current[key];
+      let ok = false;
+      let conflict = false;
+      let errMsg = '';
+      if (base.version === 0) {
+        const { error } = await supabase.from('app_data').insert({ key, data: local, version: 1 });
+        if (!error) ok = true; else if (error.code === '23505') conflict = true; else errMsg = error.message;
+      } else {
+        const { data, error } = await supabase
+          .from('app_data')
+          .update({ data: local, version: base.version + 1, updated_at: new Date().toISOString() })
+          .eq('key', key)
+          .eq('version', base.version)
+          .select('version');
+        if (error) errMsg = error.message; else if (data && data.length) ok = true; else conflict = true;
+      }
+      if (errMsg) return errMsg;
+      if (ok) { baseRef.current[key] = { data: local, version: base.version === 0 ? 1 : base.version + 1 }; return ''; }
+      const { data: srv, error: e2 } = await supabase.from('app_data').select('data, version').eq('key', key).maybeSingle();
+      if (e2 || !srv) return e2 ? e2.message : 'You do not have permission to save this section.';
+      const serverData = pickSection({ ...(srv.data || {}) }, key);
+      const merged = mergeSection(base.data, local, serverData);
+      baseRef.current[key] = { data: serverData, version: srv.version };
+      SECTION_DEFS[key].forEach(f => fieldSetters[f](merged[f]));
+      vals = { ...vals, ...merged };
+    }
+    return 'Another admin keeps changing the same records. Please try again in a moment.';
+  }
+
+  // Auto-save (admins only), a moment after any change
   useEffect(() => {
     if (!financeLoaded || !user || role === 'member') return;
-    const snapJSON = JSON.stringify(makeSnapshot());
-    const rows = makeMemberRows();
+    const isSuper = role === 'super_admin';
+    const vals = {
+      incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance,
+      accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList,
+      servicesList, visitorsList, convertsList, assetsList
+    };
+    const dirty = Object.keys(SECTION_DEFS).filter(key => {
+      if (!canWriteSectionFn(key, isSuper, myPermissions)) return false;
+      const b = baseRef.current[key];
+      if (!b) return false;
+      return JSON.stringify(pickSection(vals, key)) !== JSON.stringify(b.data);
+    });
+    const mayWriteMembers = canWriteSectionFn('finance', isSuper, myPermissions) && !!baseRef.current.finance;
+    const rows = mayWriteMembers ? makeMemberRows() : [];
     const rowsJSON = JSON.stringify(rows);
-    const snapChanged = snapJSON !== lastSnapRef.current;
     const rowsChanged = rows.length > 0 && rowsJSON !== lastRowsRef.current;
-    const boardJSON = JSON.stringify({ events: eventsList, announcements: announcementsList });
-    const boardChanged = boardJSON !== lastBoardRef.current;
-    if (!snapChanged && !rowsChanged && !boardChanged) { pendingSaveRef.current = false; return; }
+    if (dirty.length === 0 && !rowsChanged) { pendingSaveRef.current = false; return; }
     pendingSaveRef.current = true;
     const timer = setTimeout(async () => {
       let failed = '';
-      if (snapChanged) {
-        const { error } = await supabase
-          .from('finance_snapshot')
-          .upsert({ id: 1, data: JSON.parse(snapJSON), updated_at: new Date().toISOString() });
-        if (error) failed = error.message; else lastSnapRef.current = snapJSON;
+      for (const key of dirty) {
+        const err = await saveSection(key, vals);
+        if (err) { failed = err; break; }
       }
       if (!failed && rowsChanged) {
         const { error } = await supabase
@@ -641,22 +760,16 @@ export default function Home() {
           .upsert(rows.map(r => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: 'member_id' });
         if (error) failed = error.message; else lastRowsRef.current = rowsJSON;
       }
-      if (!failed && boardChanged) {
-        const { error } = await supabase
-          .from('public_board')
-          .upsert({ id: 1, data: JSON.parse(boardJSON), updated_at: new Date().toISOString() });
-        if (error) failed = error.message; else lastBoardRef.current = boardJSON;
-      }
       pendingSaveRef.current = false;
-      setSaveError(failed ? 'Could not save finance records: ' + failed : '');
+      setSaveError(failed ? 'Could not save: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList]);
+  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList]);
 
-  // Refresh saved records when an admin opens the Contributions / Finance tab (picks up other admins' entries)
+  // Pick up other admins' latest entries when a records screen is opened
   useEffect(() => {
     if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
-      loadFinance(true, '');
+      loadSections(role === 'super_admin', myPermissions);
     }
   }, [activeTab]);
 
@@ -667,13 +780,16 @@ export default function Home() {
       const map = {};
       (data || []).forEach(r => { map[String(r.email).toLowerCase()] = r.permissions || {}; });
       setAdminPermissions(map);
+      return {};
     } else {
       const { data } = await supabase
         .from('admin_permissions')
         .select('permissions')
         .eq('email', String(email || '').trim().toLowerCase())
         .maybeSingle();
-      setMyPermissions((data && data.permissions) || {});
+      const mine = (data && data.permissions) || {};
+      setMyPermissions(mine);
+      return mine;
     }
   }
 
@@ -737,7 +853,7 @@ export default function Home() {
     const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
     const totalValue = list.reduce((a, i) => a + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_value) || 0), 0);
-    const rows = list.map(i => `<tr><td>${esc(i.tag)}</td><td>${esc(i.name)}</td><td>${esc(i.category)}</td><td>${esc(i.quantity)}</td><td>${esc(i.condition)}</td><td>${esc(i.location)}</td><td>${i.unit_value ? esc((parseFloat(i.quantity) || 0) * (parseFloat(i.unit_value) || 0)) : ''}</td></tr>`).join('');
+    const rows = list.map(i => `<tr><td>${esc(i.tag)}</td><td>${esc(i.name)}</td><td>${esc(i.category)}</td><td>${esc(i.quantity)}</td><td>${esc(i.condition)}</td><td>${esc(i.location)}</td><td>${currentLoan(i) ? esc('Lent to ' + currentLoan(i).borrower) : ''}</td><td>${i.unit_value ? esc((parseFloat(i.quantity) || 0) * (parseFloat(i.unit_value) || 0)) : ''}</td></tr>`).join('');
     const w = window.open('', '_blank');
     if (!w) { alert('Please allow pop-ups for this site to print.'); return; }
     w.document.write(`<html><head><title>Asset Register - ${esc(churchName)}</title><style>
@@ -749,7 +865,7 @@ export default function Home() {
       th{background:#f1f5f9} .tot{margin-top:12px;font-weight:bold}
     </style></head><body>
       <div class="head"><img id="lg" src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>FACILITIES &amp; ASSET REGISTER</strong> - ${new Date().toLocaleDateString()}</div></div></div>
-      <table><thead><tr><th>Tag</th><th>Item</th><th>Category</th><th>Qty</th><th>Condition</th><th>Location</th><th>Total value (GHS)</th></tr></thead><tbody>${rows || '<tr><td colspan="7">No items</td></tr>'}</tbody></table>
+      <table><thead><tr><th>Tag</th><th>Item</th><th>Category</th><th>Qty</th><th>Condition</th><th>Location</th><th>Out on loan</th><th>Total value (GHS)</th></tr></thead><tbody>${rows || '<tr><td colspan="8">No items</td></tr>'}</tbody></table>
       <div class="tot">Estimated total value: GHS ${totalValue.toFixed(2)}</div>
       <script>window.onload = function() { window.print(); };</script>
     </body></html>`);
@@ -1503,67 +1619,35 @@ export default function Home() {
           <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{saveError}</div>
         )}
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
-          {[['Members', true], ['Contributions', can('access_finance') || can('view_balance_sheet')], ['Attendance', can('record_attendance')], ['Services', can('register_services')], ['Events', can('register_events')], ['Announcements', can('post_announcements')], ['Visitors', can('record_visitors')], ['New Converts', can('record_new_converts')], ['Facilities', can('manage_facilities')]].filter(([, ok]) => ok).map(([tab]) => {
-            const tabId = tab.toLowerCase().replace(/ /g, '_');
-            const isActive = activeTab === tabId;
-            return (
-              <button 
-                key={tab}
-                type="button"
-                onClick={() => { setActiveTab(tabId); setFinanceView('hub'); setShowRegisterForm(false); }}
-                style={{ 
-                  backgroundColor: isActive ? themeColor : '#f1f5f9', 
-                  color: isActive ? '#ffffff' : '#334155', 
-                  border: 'none', 
-                  padding: '0.65rem 1rem', 
-                  borderRadius: '0.5rem', 
-                  fontWeight: '600', 
-                  cursor: 'pointer', 
-                  fontSize: '0.9rem' 
-                }}
-              >
-                {tab}
-              </button>
-            );
-          })}
-          {role === 'super_admin' && (
-            <button 
-              type="button"
-              onClick={() => { setActiveTab('permissions'); setFinanceView('hub'); setShowRegisterForm(false); }}
-              style={{ 
-                backgroundColor: activeTab === 'permissions' ? themeColor : '#f1f5f9', 
-                color: activeTab === 'permissions' ? '#ffffff' : '#334155', 
-                border: 'none', 
-                padding: '0.65rem 1rem', 
-                borderRadius: '0.5rem', 
-                fontWeight: '600', 
-                cursor: 'pointer', 
-                fontSize: '0.9rem' 
-              }}
-            >
-              🔐 Admin Permissions
-            </button>
-          )}
-          {role === 'super_admin' && (
-            <button 
-              type="button"
-              onClick={() => { setActiveTab('settings'); setFinanceView('hub'); setShowRegisterForm(false); }}
-              style={{ 
-                backgroundColor: activeTab === 'settings' ? themeColor : '#f1f5f9', 
-                color: activeTab === 'settings' ? '#ffffff' : '#334155', 
-                border: 'none', 
-                padding: '0.65rem 1rem', 
-                borderRadius: '0.5rem', 
-                fontWeight: '600', 
-                cursor: 'pointer', 
-                fontSize: '0.9rem' 
-              }}
-            >
-              ⚙️ Settings
-            </button>
-          )}
-        </div>
+        {(() => {
+          const groups = [
+            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')]] },
+            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')]] },
+            { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')]] },
+            { id: 'facilities', label: '🏢 Facilities', tabs: [['facilities', 'Facilities', can('manage_facilities')]] },
+            { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')]] },
+            { id: 'admin', label: '⚙️ Admin', tabs: [['permissions', '🔐 Admin Permissions', role === 'super_admin'], ['settings', '⚙️ Settings', role === 'super_admin']] }
+          ].map(g => ({ ...g, tabs: g.tabs.filter(t => t[2]) })).filter(g => g.tabs.length > 0);
+          const activeGroup = groups.find(g => g.tabs.some(t => t[0] === activeTab)) || groups[0];
+          const goTo = (id) => { setActiveTab(id); setFinanceView('hub'); setShowRegisterForm(false); };
+          const pill = (on) => ({ backgroundColor: on ? themeColor : '#f1f5f9', color: on ? '#ffffff' : '#334155', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' });
+          return (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                {groups.map(g => (
+                  <button key={g.id} type="button" onClick={() => goTo(g.tabs[0][0])} style={pill(activeGroup && activeGroup.id === g.id)}>{g.label}</button>
+                ))}
+              </div>
+              {activeGroup && activeGroup.tabs.length > 1 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', padding: '0.6rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}>
+                  {activeGroup.tabs.map(t => (
+                    <button key={t[0]} type="button" onClick={() => goTo(t[0])} style={{ ...pill(activeTab === t[0]), padding: '0.5rem 0.85rem', fontSize: '0.85rem' }}>{t[1]}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Admin Permissions Tab (Super Admin Only) */}
         {activeTab === 'permissions' && role === 'super_admin' && (() => {
