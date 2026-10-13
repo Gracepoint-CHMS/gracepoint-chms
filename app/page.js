@@ -20,7 +20,7 @@ const authOnlyClient = createClient(
 const EMPTY_FORM = {
   first_name: '', last_name: '', email: '', phone: '', password: '',
   emergency_contact_name: '', emergency_contact_phone: '',
-  role: 'member', core_department: 'LOVE', sub_departments: [],
+  title: '', role: 'member', core_department: 'LOVE', sub_departments: [],
   date_of_birth: '', date_of_baptism: '', date_joined: '',
   home_address: '', home_town: '', photo_url: ''
 };
@@ -502,7 +502,7 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, them
   const row = (k, v) => (<div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem', padding: '0.25rem 0', borderBottom: '1px dashed #e2e8f0' }}><span>{k}</span><strong>{v}</strong></div>);
 
   const printMembers = () => {
-    const rows = members.map(m => `<tr><td>${esc(((m.first_name || '') + ' ' + (m.last_name || '')).trim())}</td><td>${esc(m.phone)}</td><td>${esc(m.email)}</td><td>${esc(m.core_department)}</td><td>${esc(m.sub_departments)}</td><td>${esc(m.date_joined)}</td></tr>`).join('');
+    const rows = members.map(m => `<tr><td>${esc(displayName(m))}</td><td>${esc(m.phone)}</td><td>${esc(m.email)}</td><td>${esc(m.core_department)}</td><td>${esc(m.sub_departments)}</td><td>${esc(m.date_joined)}</td></tr>`).join('');
     openPrint('Membership List', `<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Core dept</th><th>Sub-departments</th><th>Joined</th></tr></thead><tbody>${rows}</tbody></table><div class="tot">Total members: ${members.length}</div>`);
   };
   const printSummary = () => {
@@ -631,7 +631,7 @@ function MessagesTab({ members, theme, churchName }) {
       <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
         <h4 style={{ margin: '0 0 0.75rem 0', color: theme }}>🎂 Birthdays this month ({bdays.length})</h4>
         {bdays.length > 0 ? bdays.map(m => {
-          const nm = ((m.first_name || '') + ' ' + (m.last_name || '')).trim();
+          const nm = displayName(m);
           const wish = 'Happy birthday ' + (m.first_name || '') + '! God bless you. - ' + churchName;
           return (
             <div key={m.id || m.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
@@ -668,7 +668,7 @@ function LeadersTab({ items, onAdd, onDelete, canDelete, members, theme }) {
   const box = { width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' };
   const lab = { display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' };
   const sorted = [...members].sort((a, b) => String((a.first_name || '') + (a.last_name || '')).localeCompare(String((b.first_name || '') + (b.last_name || ''))));
-  const fullName = (m) => ((m.first_name || '') + ' ' + (m.last_name || '')).trim();
+  const fullName = (m) => displayName(m);
 
   const pickMember = (id) => {
     if (id === '__other') { setManual(true); setForm({ ...blank, position: form.position }); return; }
@@ -766,6 +766,392 @@ function LeadersTab({ items, onAdd, onDelete, canDelete, members, theme }) {
   );
 }
 
+// ---------- Small QR code generator (byte mode, error correction level M, versions 1-10) ----------
+const QR_ECC_PER_BLOCK_M = [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+const QR_NUM_BLOCKS_M = [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+
+function qrRawModules(ver) {
+  let result = (16 * ver + 128) * ver + 64;
+  if (ver >= 2) {
+    const numAlign = Math.floor(ver / 7) + 2;
+    result -= (25 * numAlign - 10) * numAlign - 55;
+    if (ver >= 7) result -= 36;
+  }
+  return result;
+}
+function qrDataCodewords(ver) {
+  return Math.floor(qrRawModules(ver) / 8) - QR_ECC_PER_BLOCK_M[ver] * QR_NUM_BLOCKS_M[ver];
+}
+function qrAlignPositions(ver) {
+  if (ver === 1) return [];
+  const numAlign = Math.floor(ver / 7) + 2;
+  const size = ver * 4 + 17;
+  const step = Math.ceil((ver * 4 + 4) / (numAlign * 2 - 2)) * 2;
+  const result = [6];
+  for (let pos = size - 7; result.length < numAlign; pos -= step) result.splice(1, 0, pos);
+  return result;
+}
+function qrGfMul(x, y) {
+  let z = 0;
+  for (let i = 7; i >= 0; i--) {
+    z = (z << 1) ^ ((z >>> 7) * 0x11d);
+    z ^= ((y >>> i) & 1) * x;
+  }
+  return z;
+}
+function qrRsDivisor(degree) {
+  const result = [];
+  for (let i = 0; i < degree - 1; i++) result.push(0);
+  result.push(1);
+  let root = 1;
+  for (let i = 0; i < degree; i++) {
+    for (let j = 0; j < result.length; j++) {
+      result[j] = qrGfMul(result[j], root);
+      if (j + 1 < result.length) result[j] ^= result[j + 1];
+    }
+    root = qrGfMul(root, 0x02);
+  }
+  return result;
+}
+function qrRsRemainder(data, divisor) {
+  const result = divisor.map(() => 0);
+  for (const b of data) {
+    const factor = b ^ result.shift();
+    result.push(0);
+    divisor.forEach((coef, i) => { result[i] ^= qrGfMul(coef, factor); });
+  }
+  return result;
+}
+function qrUtf8Bytes(text) {
+  const out = [];
+  const enc = unescape(encodeURIComponent(text));
+  for (let i = 0; i < enc.length; i++) out.push(enc.charCodeAt(i));
+  return out;
+}
+
+function makeQrMatrix(text) {
+  const bytes = qrUtf8Bytes(text);
+  let ver = 1;
+  for (; ver <= 10; ver++) {
+    const lenBits = ver < 10 ? 8 : 16;
+    if (4 + lenBits + bytes.length * 8 <= qrDataCodewords(ver) * 8) break;
+  }
+  if (ver > 10) throw new Error('Text too long for the QR code');
+
+  // 1) bit stream
+  const bits = [];
+  const put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+  put(0x4, 4);
+  put(bytes.length, ver < 10 ? 8 : 16);
+  bytes.forEach(b => put(b, 8));
+  const capBits = qrDataCodewords(ver) * 8;
+  put(0, Math.min(4, capBits - bits.length));
+  put(0, (8 - (bits.length % 8)) % 8);
+  for (let pad = 0xec; bits.length < capBits; pad ^= 0xec ^ 0x11) put(pad, 8);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let v = 0;
+    for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j];
+    data.push(v);
+  }
+
+  // 2) error correction + interleave
+  const numBlocks = QR_NUM_BLOCKS_M[ver];
+  const blockEcc = QR_ECC_PER_BLOCK_M[ver];
+  const rawCodewords = Math.floor(qrRawModules(ver) / 8);
+  const numShort = numBlocks - (rawCodewords % numBlocks);
+  const shortLen = Math.floor(rawCodewords / numBlocks);
+  const blocks = [];
+  const div = qrRsDivisor(blockEcc);
+  for (let i = 0, k = 0; i < numBlocks; i++) {
+    const dat = data.slice(k, k + shortLen - blockEcc + (i < numShort ? 0 : 1));
+    k += dat.length;
+    const ecc = qrRsRemainder(dat, div);
+    if (i < numShort) dat.push(0);
+    blocks.push(dat.concat(ecc));
+  }
+  const all = [];
+  for (let i = 0; i < blocks[0].length; i++) {
+    blocks.forEach((blk, j) => { if (i !== shortLen - blockEcc || j >= numShort) all.push(blk[i]); });
+  }
+
+  // 3) draw
+  const size = ver * 4 + 17;
+  const modules = [];
+  const isFn = [];
+  for (let i = 0; i < size; i++) { modules.push(new Array(size).fill(false)); isFn.push(new Array(size).fill(false)); }
+  const setFn = (x, y, dark) => { modules[y][x] = dark; isFn[y][x] = true; };
+
+  for (let i = 0; i < size; i++) { setFn(6, i, i % 2 === 0); setFn(i, 6, i % 2 === 0); }
+  const finder = (cx, cy) => {
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const dist = Math.max(Math.abs(dx), Math.abs(dy));
+      const xx = cx + dx, yy = cy + dy;
+      if (xx >= 0 && xx < size && yy >= 0 && yy < size) setFn(xx, yy, dist !== 2 && dist !== 4);
+    }
+  };
+  finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+  const ap = qrAlignPositions(ver);
+  const n = ap.length;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if ((i === 0 && j === 0) || (i === 0 && j === n - 1) || (i === n - 1 && j === 0)) continue;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) setFn(ap[i] + dx, ap[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+  }
+  const drawFormat = (mask) => {
+    const fdata = (0 << 3) | mask; // level M = 00
+    let rem = fdata;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const fbits = ((fdata << 10) | rem) ^ 0x5412;
+    const bit = (i) => ((fbits >>> i) & 1) !== 0;
+    for (let i = 0; i <= 5; i++) setFn(8, i, bit(i));
+    setFn(8, 7, bit(6)); setFn(8, 8, bit(7)); setFn(7, 8, bit(8));
+    for (let i = 9; i < 15; i++) setFn(14 - i, 8, bit(i));
+    for (let i = 0; i < 8; i++) setFn(size - 1 - i, 8, bit(i));
+    for (let i = 8; i < 15; i++) setFn(8, size - 15 + i, bit(i));
+    setFn(8, size - 8, true);
+  };
+  drawFormat(0);
+  if (ver >= 7) {
+    let rem = ver;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+    const vbits = (ver << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const bit = ((vbits >>> i) & 1) !== 0;
+      const a = size - 11 + (i % 3), b = Math.floor(i / 3);
+      setFn(a, b, bit); setFn(b, a, bit);
+    }
+  }
+
+  // codewords in zigzag
+  let bitIdx = 0;
+  for (let right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let vert = 0; vert < size; vert++) {
+      for (let j = 0; j < 2; j++) {
+        const x = right - j;
+        const upward = ((right + 1) & 2) === 0;
+        const y = upward ? size - 1 - vert : vert;
+        if (!isFn[y][x] && bitIdx < all.length * 8) {
+          modules[y][x] = ((all[bitIdx >>> 3] >>> (7 - (bitIdx & 7))) & 1) !== 0;
+          bitIdx++;
+        }
+      }
+    }
+  }
+
+  // masks
+  const applyMask = (mask) => {
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      let inv;
+      switch (mask) {
+        case 0: inv = (x + y) % 2 === 0; break;
+        case 1: inv = y % 2 === 0; break;
+        case 2: inv = x % 3 === 0; break;
+        case 3: inv = (x + y) % 3 === 0; break;
+        case 4: inv = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
+        case 5: inv = (x * y) % 2 + (x * y) % 3 === 0; break;
+        case 6: inv = ((x * y) % 2 + (x * y) % 3) % 2 === 0; break;
+        default: inv = ((x + y) % 2 + (x * y) % 3) % 2 === 0;
+      }
+      if (!isFn[y][x] && inv) modules[y][x] = !modules[y][x];
+    }
+  };
+  const penalty = () => {
+    let p = 0;
+    const lines = [];
+    for (let y = 0; y < size; y++) lines.push(modules[y].map(v => (v ? '1' : '0')).join(''));
+    for (let x = 0; x < size; x++) { let s = ''; for (let y = 0; y < size; y++) s += modules[y][x] ? '1' : '0'; lines.push(s); }
+    lines.forEach(s => {
+      let run = 1;
+      for (let i = 1; i <= s.length; i++) {
+        if (i < s.length && s[i] === s[i - 1]) run++;
+        else { if (run >= 5) p += 3 + (run - 5); run = 1; }
+      }
+      p += 40 * ((s.match(/(?=00001011101)/g) || []).length + (s.match(/(?=10111010000)/g) || []).length);
+    });
+    for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+      const c = modules[y][x];
+      if (c === modules[y][x + 1] && c === modules[y + 1][x] && c === modules[y + 1][x + 1]) p += 3;
+    }
+    let dark = 0;
+    modules.forEach(r => r.forEach(v => { if (v) dark++; }));
+    const total = size * size;
+    p += (Math.ceil(Math.abs(dark * 20 - total * 10) / total) - 1) * 10;
+    return p;
+  };
+  let best = 0, bestPen = Infinity;
+  for (let m = 0; m < 8; m++) {
+    applyMask(m); drawFormat(m);
+    const pen = penalty();
+    if (pen < bestPen) { bestPen = pen; best = m; }
+    applyMask(m);
+  }
+  applyMask(best); drawFormat(best);
+  return modules;
+}
+
+
+const TITLES = ['Mr.', 'Mrs.', 'Miss', 'Prophet', 'Pastor', 'Apostle', 'Rev.', 'Evangelist', 'Elder', 'Deacon', 'Deaconess'];
+const displayName = (m) => [m && m.title, m && m.first_name, m && m.last_name].filter(Boolean).join(' ').trim();
+
+function QRCodeSvg({ text, size }) {
+  let matrix = null;
+  try { matrix = makeQrMatrix(text); } catch (e) { matrix = null; }
+  if (!matrix) return <div style={{ color: '#991b1b' }}>Could not make the QR code.</div>;
+  const quiet = 4;
+  const total = matrix.length + quiet * 2;
+  let d = '';
+  matrix.forEach((row, y) => row.forEach((v, x) => { if (v) d += 'M' + (x + quiet) + ',' + (y + quiet) + 'h1v1h-1z'; }));
+  return (
+    <svg viewBox={'0 0 ' + total + ' ' + total} width={size || 240} height={size || 240} shapeRendering="crispEdges" style={{ backgroundColor: '#ffffff', maxWidth: '100%', height: 'auto' }}>
+      <path d={d} fill="#000000" />
+    </svg>
+  );
+}
+
+function downloadQrPng(text, filename, caption) {
+  const matrix = makeQrMatrix(text);
+  const scale = 10, quiet = 4, n = matrix.length;
+  const w = (n + quiet * 2) * scale;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = w + 70;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#000000';
+  matrix.forEach((row, y) => row.forEach((v, x) => { if (v) ctx.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale); }));
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(caption || '', w / 2, w + 20);
+  canvas.toBlob((blob) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, 'image/png');
+}
+
+// ---------- QR Check-in (admins): scan a member's QR code or search by name ----------
+function CheckinTab({ members, serviceOptions, date, setDate, service, setService, checkins, onCheckin, onDelete, canDelete, theme, message }) {
+  const [search, setSearch] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState('');
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const timerRef = useRef(null);
+  const busyRef = useRef(false);
+
+  const stop = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    setScanning(false);
+  };
+  useEffect(() => stop, []);
+
+  const handleScanned = async (id) => {
+    const m = members.find(x => String(x.id) === String(id));
+    if (!m) return 'This QR code does not belong to a registered member.';
+    return await onCheckin(m);
+  };
+
+  const start = async () => {
+    setScanMsg('');
+    if (typeof window === 'undefined' || !('BarcodeDetector' in window)) {
+      setScanMsg('This browser cannot scan QR codes. Please use "Search member" below.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      streamRef.current = stream;
+      setScanning(true);
+      setTimeout(async () => {
+        const v = videoRef.current;
+        if (!v) return;
+        v.srcObject = stream;
+        try { await v.play(); } catch (e) { /* ignore */ }
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        timerRef.current = setInterval(async () => {
+          if (busyRef.current) return;
+          try {
+            const codes = await detector.detect(v);
+            if (codes && codes.length) {
+              const raw = codes[0].rawValue || '';
+              if (raw.startsWith('GPC:')) {
+                busyRef.current = true;
+                setScanMsg(await handleScanned(raw.slice(4)));
+                setTimeout(() => { busyRef.current = false; }, 2500);
+              }
+            }
+          } catch (e) { /* keep scanning */ }
+        }, 400);
+      }, 150);
+    } catch (e) {
+      setScanMsg('Could not open the camera: ' + e.message);
+    }
+  };
+
+  const box = { width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff', fontSize: '0.95rem' };
+  const lab = { display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' };
+  const q = search.trim().toLowerCase();
+  const matches = q ? members.filter(m => (displayName(m) + ' ' + (m.phone || '') + ' ' + (m.email || '')).toLowerCase().includes(q)).slice(0, 8) : [];
+  const done = new Set(checkins.map(c => String(c.member_id)));
+
+  return (
+    <div>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>QR Check-in</h3>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Choose the service, then scan each member's QR code (from their Attendance page) or search for them by name.</p>
+
+      <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div><label style={lab}>Date</label><input style={box} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div><label style={lab}>Service</label><select style={box} value={service} onChange={(e) => setService(e.target.value)}>{serviceOptions.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+        </div>
+
+        {scanning ? (
+          <div>
+            <video ref={videoRef} playsInline muted style={{ width: '100%', borderRadius: '0.5rem', backgroundColor: '#000000' }} />
+            <button type="button" onClick={stop} style={{ marginTop: '0.6rem', backgroundColor: '#dc2626', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Stop scanning</button>
+          </div>
+        ) : (
+          <button type="button" onClick={start} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', width: '100%' }}>📷 Scan member QR code</button>
+        )}
+        {scanMsg && <div style={{ marginTop: '0.75rem', padding: '0.7rem', borderRadius: '0.5rem', backgroundColor: /^(Could not|This |No )/.test(scanMsg) ? '#fee2e2' : '#dcfce7', color: /^(Could not|This |No )/.test(scanMsg) ? '#991b1b' : '#166534', fontSize: '0.9rem' }}>{scanMsg}</div>}
+
+        <div style={{ marginTop: '1.25rem' }}>
+          <label style={lab}>Search member</label>
+          <input style={box} placeholder="Type a name, phone or email..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          {matches.map(m => (
+            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.92rem' }}>
+              <span>{displayName(m) || m.email}</span>
+              {done.has(String(m.id)) ? <span style={{ color: '#16a34a', fontWeight: '600' }}>✓ Present</span> : (
+                <button type="button" onClick={async () => { setScanMsg(await onCheckin(m)); setSearch(''); }} style={{ backgroundColor: '#dcfce7', color: '#166534', border: 'none', padding: '0.35rem 0.8rem', borderRadius: '0.35rem', cursor: 'pointer', fontWeight: '600' }}>Mark present</button>
+              )}
+            </div>
+          ))}
+        </div>
+        {message && <div style={{ marginTop: '0.75rem', color: '#991b1b', fontSize: '0.85rem' }}>{message}</div>}
+      </div>
+
+      <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem' }}>
+        <h4 style={{ margin: '0 0 0.75rem 0', color: theme }}>Present on {date} - {service} ({checkins.length})</h4>
+        {checkins.length > 0 ? checkins.map(c => (
+          <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+            <span>{c.member_name} <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{c.checked_in_at ? new Date(c.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span></span>
+            {canDelete && <button type="button" onClick={() => { if (window.confirm('Remove this check-in?')) onDelete(c.id); }} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.2rem 0.55rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Remove</button>}
+          </div>
+        )) : <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Nobody has been checked in yet.</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('member');
@@ -804,6 +1190,16 @@ export default function Home() {
   const [permMessage, setPermMessage] = useState('');
   const [welfareLocked, setWelfareLocked] = useState({});
   const [viewAsMember, setViewAsMember] = useState(false);
+  const [memberPage, setMemberPage] = useState('dashboard');
+  const [memberMenuOpen, setMemberMenuOpen] = useState(false);
+  const [profileEdit, setProfileEdit] = useState(false);
+  const [profileForm, setProfileForm] = useState({});
+  const [profileMsg, setProfileMsg] = useState('');
+  const [myCheckins, setMyCheckins] = useState([]);
+  const [checkins, setCheckins] = useState([]);
+  const [checkinDate, setCheckinDate] = useState(todayStr());
+  const [checkinService, setCheckinService] = useState('Sunday Service');
+  const [checkinMsg, setCheckinMsg] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [settingsMsg, setSettingsMsg] = useState('');
   const [assetsList, setAssetsList] = useState([]);
@@ -1207,6 +1603,72 @@ export default function Home() {
     w.document.close();
   };
 
+
+  // ----- QR check-in (admins) -----
+  const loadCheckins = async (date) => {
+    const { data, error } = await supabase
+      .from('attendance_checkins')
+      .select('*')
+      .eq('service_date', date)
+      .order('checked_in_at', { ascending: false });
+    if (error) { setCheckinMsg('Could not load check-ins: ' + error.message + ' (Has supabase-portal.sql been run?)'); return; }
+    setCheckinMsg('');
+    setCheckins((data || []).filter(c => c.service_name === checkinService));
+  };
+
+  const checkInMember = async (m) => {
+    const row = {
+      member_id: String(m.id),
+      member_email: String(m.email || '').trim().toLowerCase(),
+      member_name: displayName(m) || m.email,
+      service_date: checkinDate,
+      service_name: checkinService,
+      recorded_by: user ? user.email : ''
+    };
+    const { error } = await supabase.from('attendance_checkins').insert(row);
+    if (error) {
+      if (error.code === '23505') return row.member_name + ' is already checked in for this service.';
+      return 'Could not check in: ' + error.message;
+    }
+    await loadCheckins(checkinDate);
+    return '✓ ' + row.member_name + ' marked present.';
+  };
+
+  const deleteCheckin = async (id) => {
+    const { error } = await supabase.from('attendance_checkins').delete().eq('id', id);
+    if (error) setCheckinMsg('Could not remove: ' + error.message);
+    else loadCheckins(checkinDate);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'checkin' && user && role !== 'member') loadCheckins(checkinDate);
+  }, [activeTab, checkinDate, checkinService, user]);
+
+  // ----- member profile (limited fields, saved through a safe database function) -----
+  const saveProfile = async () => {
+    setProfileMsg('');
+    const { error } = await supabase.rpc('update_my_profile', {
+      p_phone: profileForm.phone || '',
+      p_home_address: profileForm.home_address || '',
+      p_home_town: profileForm.home_town || '',
+      p_emergency_contact_name: profileForm.emergency_contact_name || '',
+      p_emergency_contact_phone: profileForm.emergency_contact_phone || ''
+    });
+    if (error) { setProfileMsg('Could not save: ' + error.message + ' (Has supabase-portal.sql been run?)'); return; }
+    setProfileMsg('Profile updated.');
+    setProfileEdit(false);
+    fetchMembers();
+  };
+
+  // member's own attendance history
+  useEffect(() => {
+    if (!user || memberPage !== 'attendance') return;
+    const me = members.find(m => String(m.email || '').toLowerCase() === String(user.email || '').toLowerCase());
+    if (!me) return;
+    supabase.from('attendance_checkins').select('service_date, service_name, checked_in_at').eq('member_id', String(me.id)).order('service_date', { ascending: false }).limit(60)
+      .then(({ data }) => setMyCheckins(data || []));
+  }, [memberPage, members, user]);
+
   async function fetchMembers() {
     const { data: allMembers } = await supabase
       .from('members')
@@ -1275,10 +1737,14 @@ export default function Home() {
     };
 
     if (editingMemberId) {
-      const { error } = await supabase
+      let { error } = await supabase
         .from('members')
         .update(payload)
         .eq('id', editingMemberId);
+      if (error && /title/i.test(error.message)) {
+        const { title: _t, ...noTitle } = payload;
+        ({ error } = await supabase.from('members').update(noTitle).eq('id', editingMemberId));
+      }
 
       if (error) {
         setFormError(error.message);
@@ -1308,9 +1774,13 @@ export default function Home() {
       }
 
       // 2) Save the member details
-      const { error } = await supabase
+      let { error } = await supabase
         .from('members')
         .insert([payload]);
+      if (error && /title/i.test(error.message)) {
+        const { title: _t, ...noTitle } = payload;
+        ({ error } = await supabase.from('members').insert([noTitle]));
+      }
 
       if (error) {
         setFormError('Login account was created, but saving member details failed: ' + error.message);
@@ -1349,6 +1819,7 @@ export default function Home() {
       subs = typeof m.sub_departments === 'string' ? m.sub_departments.split(', ').map(s => s.trim()) : m.sub_departments;
     }
     setFormData({
+      title: m.title || '',
       first_name: m.first_name || '',
       last_name: m.last_name || '',
       email: m.email || '',
@@ -1539,7 +2010,7 @@ export default function Home() {
   };
 
   const filteredMembers = members.filter((m) => {
-    const fullName = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
+    const fullName = displayName(m).toLowerCase();
     const email = (m.email || '').toLowerCase();
     const query = searchQuery.toLowerCase();
     return fullName.includes(query) || email.includes(query);
@@ -1626,6 +2097,14 @@ export default function Home() {
                 {formSuccess && <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formSuccess}</div>}
 
                 <form onSubmit={handleSaveMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '25rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>Title</label>
+                    <select value={formData.title || ''} onChange={(e) => setFormData({...formData, title: e.target.value})} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' }}>
+                      <option value="">-- Select title --</option>
+                      {TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.2rem' }}>First Name *</label>
@@ -1759,10 +2238,11 @@ export default function Home() {
       <main style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingBottom: '2.5rem' }}>
         <div style={{ backgroundColor: themeColor, color: '#ffffff', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button type="button" aria-label="Menu" onClick={() => setMemberMenuOpen(true)} style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.4rem', padding: '0.4rem 0.65rem', fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}>☰</button>
             <img src={logoSrc} alt="Logo" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />
             <div>
               <h1 style={{ fontSize: '1.15rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>{churchName}</h1>
-              <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Financial Portal</span>
+              <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>Member Portal</span>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1777,12 +2257,120 @@ export default function Home() {
           </div>
         </div>
 
+        {memberMenuOpen && (() => {
+          const groups = [
+            ['MAIN', [['dashboard', '🏠 Dashboard'], ['profile', '👤 Profile'], ['attendance', '📅 Attendance (QR)']]],
+            ['MY GIVING', [['giving', '💰 My Records']]],
+            ['COMMUNICATION', [['communication', '📢 Announcements']]],
+            ['EVENTS & MINISTRY', [['ministry', '⛪ Events, Duty Roster & Leaders']]],
+            ['SPIRITUAL CORNER', [['spiritual', '🎬 Sermons & Videos']]]
+          ];
+          return (
+            <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, zIndex: 50 }}>
+              <div onClick={() => setMemberMenuOpen(false)} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(15,23,42,0.55)' }} />
+              <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '17.5rem', maxWidth: '85%', backgroundColor: themeColor, color: '#ffffff', overflowY: 'auto', padding: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', paddingBottom: '0.9rem', borderBottom: '1px solid rgba(255,255,255,0.25)', marginBottom: '0.5rem' }}>
+                  {currentMemberRecord.photo_url ? <img src={currentMemberRecord.photo_url} alt="Me" style={{ width: '2.8rem', height: '2.8rem', borderRadius: '50%', objectFit: 'cover' }} /> : <img src={logoSrc} alt="Logo" style={{ width: '2.8rem', height: '2.8rem', borderRadius: '50%', background: '#ffffff', objectFit: 'contain', padding: '2px' }} />}
+                  <div style={{ fontWeight: 'bold', fontSize: '0.95rem', lineHeight: 1.2 }}>{displayName(currentMemberRecord) || user.email}</div>
+                </div>
+                {groups.map(([label, items]) => (
+                  <div key={label} style={{ marginTop: '0.9rem' }}>
+                    <div style={{ fontSize: '0.72rem', letterSpacing: '0.08em', opacity: 0.7, marginBottom: '0.3rem' }}>{label}</div>
+                    {items.map(([id, text]) => (
+                      <button key={id} type="button" onClick={() => { setMemberPage(id); setMemberMenuOpen(false); }} style={{ display: 'block', width: '100%', textAlign: 'left', backgroundColor: memberPage === id ? 'rgba(255,255,255,0.25)' : 'transparent', color: '#ffffff', border: 'none', padding: '0.7rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.95rem', cursor: 'pointer', marginBottom: '0.15rem' }}>{text}</button>
+                    ))}
+                  </div>
+                ))}
+                <button type="button" onClick={handleLogout} style={{ display: 'block', width: '100%', marginTop: '1.5rem', backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.4)', padding: '0.7rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600' }}>Logout</button>
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{ maxWidth: '40rem', margin: '1.5rem auto', padding: '0 1rem' }}>
+          <div style={{ display: memberPage === 'profile' ? 'block' : 'none' }}>
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
+              <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                {currentMemberRecord.photo_url ? (
+                  <img src={currentMemberRecord.photo_url} alt="Profile" style={{ width: '7rem', height: '7rem', borderRadius: '50%', objectFit: 'cover', border: '3px solid ' + themeColor }} />
+                ) : (
+                  <div style={{ width: '7rem', height: '7rem', borderRadius: '50%', backgroundColor: '#cbd5e1', color: '#334155', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '2rem' }}>{String(currentMemberRecord.first_name || user.email || '?').charAt(0).toUpperCase()}</div>
+                )}
+                <h2 style={{ margin: '0.75rem 0 0 0', color: themeColor, fontSize: '1.4rem' }}>{displayName(currentMemberRecord) || user.email}</h2>
+              </div>
+
+              {profileMsg && <div style={{ marginBottom: '0.75rem', padding: '0.7rem', borderRadius: '0.5rem', fontSize: '0.88rem', backgroundColor: profileMsg.startsWith('Could not') ? '#fee2e2' : '#dcfce7', color: profileMsg.startsWith('Could not') ? '#991b1b' : '#166534' }}>{profileMsg}</div>}
+
+              {!profileEdit ? (
+                <div>
+                  {[
+                    ['Email', currentMemberRecord.email || user.email],
+                    ['Phone', currentMemberRecord.phone],
+                    ['Date of birth', currentMemberRecord.date_of_birth],
+                    ['Home address', currentMemberRecord.home_address],
+                    ['Home town', currentMemberRecord.home_town],
+                    ['Core department', currentMemberRecord.core_department],
+                    ['Sub-departments', Array.isArray(currentMemberRecord.sub_departments) ? currentMemberRecord.sub_departments.join(', ') : currentMemberRecord.sub_departments],
+                    ['Baptism date', currentMemberRecord.date_of_baptism],
+                    ['Date joined', currentMemberRecord.date_joined],
+                    ['Emergency contact', [currentMemberRecord.emergency_contact_name, currentMemberRecord.emergency_contact_phone].filter(Boolean).join(' - ')]
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ backgroundColor: '#f8fafc', borderRadius: '0.5rem', padding: '0.7rem 0.9rem', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '600' }}>{k}</div>
+                      <div style={{ fontSize: '0.98rem', color: '#0f172a', wordBreak: 'break-word' }}>{v || 'Not set'}</div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => { setProfileMsg(''); setProfileForm({ phone: currentMemberRecord.phone || '', home_address: currentMemberRecord.home_address || '', home_town: currentMemberRecord.home_town || '', emergency_contact_name: currentMemberRecord.emergency_contact_name || '', emergency_contact_phone: currentMemberRecord.emergency_contact_phone || '' }); setProfileEdit(true); }} style={{ width: '100%', backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>Edit Profile</button>
+                  <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.6rem 0 0 0' }}>To change your name, email or department, please ask a church admin.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {[['phone', 'Phone', 'tel'], ['home_address', 'Home address', 'text'], ['home_town', 'Home town', 'text'], ['emergency_contact_name', 'Emergency contact person', 'text'], ['emergency_contact_phone', 'Emergency contact number', 'tel']].map(([k, label, type]) => (
+                    <div key={k}>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>{label}</label>
+                      <input type={type} value={profileForm[k] || ''} onChange={(e) => setProfileForm({ ...profileForm, [k]: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button type="button" onClick={saveProfile} style={{ flex: 1, backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.7rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Save</button>
+                    <button type="button" onClick={() => setProfileEdit(false)} style={{ flex: 1, backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '0.7rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: memberPage === 'attendance' ? 'block' : 'none' }}>
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem', textAlign: 'center' }}>
+              <h2 style={{ margin: '0 0 1rem 0', color: themeColor, fontSize: '1.4rem' }}>Attendance QR Code</h2>
+              {currentMemberRecord.id ? (
+                <div>
+                  <div style={{ display: 'inline-block', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem' }}>
+                    <QRCodeSvg text={'GPC:' + currentMemberRecord.id} size={240} />
+                  </div>
+                  <div style={{ marginTop: '0.9rem', fontSize: '1.1rem', color: '#0f172a' }}>{displayName(currentMemberRecord)}</div>
+                  <p style={{ fontSize: '0.9rem', color: '#64748b' }}>Show this QR code to the admin to mark your attendance.</p>
+                  <button type="button" onClick={() => downloadQrPng('GPC:' + currentMemberRecord.id, 'attendance-qr-' + (currentMemberRecord.first_name || 'member') + '.png', displayName(currentMemberRecord))} style={{ backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.7rem 1.2rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Download QR Code</button>
+                </div>
+              ) : (
+                <p style={{ color: '#64748b' }}>Your member record was not found, so no QR code can be shown. Please contact the church admin.</p>
+              )}
+            </div>
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>My attendance ({myCheckins.length})</h3>
+              {myCheckins.length > 0 ? myCheckins.map((c, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.92rem' }}><span>{c.service_name}</span><span style={{ color: '#64748b' }}>{c.service_date}</span></div>
+              )) : <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>No attendance recorded yet.</p>}
+            </div>
+          </div>
+
+          <div style={{ display: memberPage === 'dashboard' ? 'block' : 'none' }}>
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>
-              Welcome, {currentMemberRecord.first_name || user.email}
+              Welcome, {displayName(currentMemberRecord) || user.email}
             </h2>
             <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Core Department: <strong>{currentMemberRecord.core_department || 'N/A'}</strong></p>
+          </div>
           </div>
 
           {saveError && (
@@ -1803,7 +2391,7 @@ export default function Home() {
             const h3s = { fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' };
             return (
               <div>
-                {upcoming.length > 0 && (
+                {memberPage === 'ministry' && upcoming.length > 0 && (
                   <div style={card}>
                     <h3 style={h3s}>Duty Roster</h3>
                     {upcoming.map((r, i) => {
@@ -1817,7 +2405,7 @@ export default function Home() {
                     })}
                   </div>
                 )}
-                {L.length > 0 && (
+                {memberPage === 'ministry' && L.length > 0 && (
                   <div style={card}>
                     <h3 style={h3s}>Church Leaders</h3>
                     {L.map((l, i) => (
@@ -1835,7 +2423,7 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-                {V.length > 0 && (
+                {memberPage === 'spiritual' && V.length > 0 && (
                   <div style={card}>
                     <h3 style={h3s}>Sermons &amp; Videos</h3>
                     {V.slice(0, 8).map((v, i) => (
@@ -1851,6 +2439,7 @@ export default function Home() {
             );
           })()}
 
+          <div style={{ display: memberPage === 'dashboard' ? 'block' : 'none' }}>
           {(settings.phone || settings.address || settings.whatsapp || settings.email || settings.website || settings.facebook || settings.youtube || (settings.services || []).length > 0) && (
             <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>Church Information</h3>
@@ -1889,13 +2478,14 @@ export default function Home() {
               <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(settings.bank.account_number); alert('Account number copied.'); } catch (e) { prompt('Copy the account number:', settings.bank.account_number); } }} style={{ marginTop: '0.75rem', backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.4rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.88rem' }}>Copy account number</button>
             </div>
           ) : null}
+          </div>
 
           {(() => {
             const evs = role === 'member' ? board.events : eventsList;
             const anns = role === 'member' ? board.announcements : announcementsList;
             return (
               <div>
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+                <div style={{ display: memberPage === 'communication' ? 'block' : 'none', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>Announcements</h3>
                   {anns.length > 0 ? anns.slice(0, 10).map((a, i) => (
                     <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
@@ -1904,7 +2494,7 @@ export default function Home() {
                     </div>
                   )) : <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>No announcements right now.</p>}
                 </div>
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+                <div style={{ display: memberPage === 'ministry' ? 'block' : 'none', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>Church Events</h3>
                   {evs.length > 0 ? evs.slice(0, 10).map((ev, i) => (
                     <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
@@ -1917,6 +2507,7 @@ export default function Home() {
             );
           })()}
 
+          <div style={{ display: memberPage === 'giving' ? 'block' : 'none' }}>
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>My Financial Summary (read-only)</h3>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Tithes</span><strong>GHS {memberTitheTotal.toFixed(2)}</strong></div>
@@ -1964,6 +2555,7 @@ export default function Home() {
                 <strong style={{ color: '#16a34a' }}>GHS {weeks.reduce((a, w) => a + w, 0).toFixed(2)}</strong>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </main>
@@ -2023,7 +2615,7 @@ export default function Home() {
           const groups = [
             { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')]] },
             { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')]] },
-            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')]] },
+            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['checkin', 'QR Check-in', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')]] },
             { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')]] },
             { id: 'facilities', label: '🏢 Facilities', tabs: [['facilities', 'Facilities', can('manage_facilities')]] },
             { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')], ['messages', 'Messages', can('send_messages')], ['reports', 'Reports', can('view_reports')]] },
@@ -2070,7 +2662,7 @@ export default function Home() {
               >
                 <option value="">-- Choose account --</option>
                 {members.filter(m => m.email && m.role !== 'super_admin').map(m => (
-                  <option key={m.id} value={m.email}>{`${m.first_name || ''} ${m.last_name || ''}`.trim()} - {m.email}{m.role && m.role !== 'member' ? ' (Sub-Admin)' : ''}</option>
+                  <option key={m.id} value={m.email}>{displayName(m).trim()} - {m.email}{m.role && m.role !== 'member' ? ' (Sub-Admin)' : ''}</option>
                 ))}
               </select>
             </div>
@@ -2166,8 +2758,8 @@ export default function Home() {
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {filteredMembers.map((m, index) => {
-                    const nameStr = `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email;
-                    const initials = nameStr.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                    const nameStr = displayName(m).trim() || m.email;
+                    const initials = (`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email || '?').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
                     return (
                       <div key={m.id || index} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
@@ -2222,6 +2814,14 @@ export default function Home() {
                 {formSuccess && <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{formSuccess}</div>}
 
                 <form onSubmit={handleSaveMember} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Title</label>
+                    <select value={formData.title || ''} onChange={(e) => setFormData({...formData, title: e.target.value})} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' }}>
+                      <option value="">-- Select title --</option>
+                      {TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>First Name *</label>
@@ -2439,11 +3039,11 @@ export default function Home() {
                       <select value={incomeForm.member_id || ''} onChange={(e) => {
                         const mId = e.target.value;
                         const mem = members.find(m => m.id === mId);
-                        setIncomeForm({ ...incomeForm, member_id: mId, member_name: mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : '' });
+                        setIncomeForm({ ...incomeForm, member_id: mId, member_name: mem ? displayName(mem).trim() : '' });
                       }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
                         <option value="">-- Not linked to a member --</option>
                         {members.map(m => (
-                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                          <option key={m.id} value={m.id}>{displayName(m).trim() || m.email}</option>
                         ))}
                       </select>
                     </div>
@@ -2536,7 +3136,7 @@ export default function Home() {
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     const selectedMember = members.find(m => m.id === titheForm.member_id);
-                    const memberName = selectedMember ? `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() : titheForm.member_name;
+                    const memberName = selectedMember ? displayName(selectedMember).trim() : titheForm.member_name;
                     const payload = { ...titheForm, member_name: memberName };
 
                     if (editingTitheIndex !== null) {
@@ -2557,11 +3157,11 @@ export default function Home() {
                       <select required value={titheForm.member_id} onChange={(e) => {
                         const mId = e.target.value;
                         const mem = members.find(m => m.id === mId);
-                        setTitheForm({ ...titheForm, member_id: mId, member_name: mem ? `${mem.first_name} ${mem.last_name}` : '' });
+                        setTitheForm({ ...titheForm, member_id: mId, member_name: mem ? displayName(mem) : '' });
                       }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
                         <option value="">-- Choose Member --</option>
                         {members.map(m => (
-                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                          <option key={m.id} value={m.id}>{displayName(m).trim() || m.email}</option>
                         ))}
                       </select>
                     </div>
@@ -2603,7 +3203,7 @@ export default function Home() {
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     const selectedMember = members.find(m => m.id === contribForm.member_id);
-                    const contributorName = selectedMember ? `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() : contribForm.contributor;
+                    const contributorName = selectedMember ? displayName(selectedMember).trim() : contribForm.contributor;
                     const payload = { ...contribForm, contributor: contributorName };
                     if (editingContribIndex !== null) {
                       if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit entries.'); return; }
@@ -2623,11 +3223,11 @@ export default function Home() {
                       <select required value={contribForm.member_id} onChange={(e) => {
                         const mId = e.target.value;
                         const mem = members.find(m => m.id === mId);
-                        setContribForm({ ...contribForm, member_id: mId, contributor: mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : '' });
+                        setContribForm({ ...contribForm, member_id: mId, contributor: mem ? displayName(mem).trim() : '' });
                       }} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
                         <option value="">-- Choose Member --</option>
                         {members.map(m => (
-                          <option key={m.id} value={m.id}>{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</option>
+                          <option key={m.id} value={m.id}>{displayName(m).trim() || m.email}</option>
                         ))}
                       </select>
                     </div>
@@ -2763,8 +3363,8 @@ export default function Home() {
                     <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>Welfare Contribution - Select Member</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                       {members.map((m, index) => {
-                        const nameStr = `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email;
-                        const initials = nameStr.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        const nameStr = displayName(m).trim() || m.email;
+                        const initials = (`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email || '?').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
                         return (
                           <div key={m.id || index} onClick={() => { const rec = welfareRecords[m.id || 'default'] || {}; const locked = {}; if (role !== 'super_admin') { Object.entries(rec).forEach(([mo, wks]) => wks.forEach((v, i) => { if (v) locked[mo + '-' + i] = true; })); } setWelfareLocked(locked); setSelectedMemberForWelfare(m); }} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
                             {m.photo_url ? (
@@ -2785,7 +3385,7 @@ export default function Home() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                         {selectedMemberForWelfare.photo_url ? <img src={selectedMemberForWelfare.photo_url} alt="Member" style={{ width: '2.4rem', height: '2.4rem', borderRadius: '50%', objectFit: 'cover' }} /> : null}
-                        {`${selectedMemberForWelfare.first_name || ''} ${selectedMemberForWelfare.last_name || ''}`.trim() || selectedMemberForWelfare.email}
+                        {displayName(selectedMemberForWelfare).trim() || selectedMemberForWelfare.email}
                       </h3>
                       <button type="button" onClick={() => setSelectedMemberForWelfare(null)} style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
@@ -2948,7 +3548,7 @@ export default function Home() {
                       <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Member Welfare Tracking:</div>
                       {Object.entries(welfareRecords).map(([mId, monthsData], i) => {
                         const memObj = members.find(m => (m.id || 'default') === mId) || { first_name: 'Member', last_name: '' };
-                        const memName = `${memObj.first_name || ''} ${memObj.last_name || ''}`.trim() || 'Member';
+                        const memName = displayName(memObj).trim() || 'Member';
                         const memTotal = Object.values(monthsData).reduce((mSum, weeks) => mSum + weeks.reduce((wSum, w) => wSum + w, 0), 0);
                         const paidDate = welfareDates[mId] || new Date().toISOString().split('T')[0];
                         if (memTotal <= 0) return null;
@@ -3118,6 +3718,24 @@ export default function Home() {
               )}
             </div>
           </div>
+        )}
+
+        {/* QR Check-in Tab */}
+        {activeTab === 'checkin' && can('record_attendance') && (
+          <CheckinTab
+            members={members}
+            serviceOptions={Array.from(new Set(['Sunday Service', 'Midweek Service', 'Prayer Meeting', 'Special Service', ...(settings.services || []).map(sv => sv.activity).filter(Boolean)]))}
+            date={checkinDate}
+            setDate={setCheckinDate}
+            service={checkinService}
+            setService={setCheckinService}
+            checkins={checkins}
+            onCheckin={checkInMember}
+            onDelete={deleteCheckin}
+            canDelete={role === 'super_admin'}
+            theme={themeColor}
+            message={checkinMsg}
+          />
         )}
 
         {/* Leaders Tab */}
