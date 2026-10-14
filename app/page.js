@@ -434,20 +434,25 @@ const SECTION_DEFS = {
   assets: ['assetsList'],
   leaders: ['leadersList'],
   rotas: ['rotasList'],
-  videos: ['videosList']
+  videos: ['videosList'],
+  fellowships: ['fellowshipsList', 'branchesList'],
+  pledges: ['pledgesList']
 };
 const SECTION_WRITE_PERM = {
   finance: 'access_finance', attendance: 'record_attendance', events: 'register_events',
   announcements: 'post_announcements', services: 'register_services', visitors: 'record_visitors',
   converts: 'record_new_converts', assets: 'manage_facilities',
-  leaders: 'manage_leaders', rotas: 'manage_rotas', videos: 'manage_videos'
+  leaders: 'manage_leaders', rotas: 'manage_rotas', videos: 'manage_videos',
+  fellowships: 'manage_fellowships', pledges: 'access_finance'
 };
+const SECTION_LABELS = { finance: 'Finance', attendance: 'Attendance', events: 'Events', announcements: 'Announcements', services: 'Services', visitors: 'Visitors', converts: 'New Converts', assets: 'Facilities', leaders: 'Leaders', rotas: 'Duty Rotas', videos: 'Videos', fellowships: 'Fellowships', pledges: 'Pledges' };
 const FIELD_DEFAULTS = {
   incomes: [], expenses: [], tithes: [], budgets: [], contributions: [],
   welfareRecords: {}, welfareDates: {}, openingBalance: 2484.32,
   accountReportNotes: DEFAULT_ACCOUNT_NOTES, balanceSheetNotes: DEFAULT_BALANCE_NOTES,
   attendanceLogs: [], eventsList: [], announcementsList: [], servicesList: [],
-  visitorsList: [], convertsList: [], assetsList: [], leadersList: [], rotasList: [], videosList: []
+  visitorsList: [], convertsList: [], assetsList: [], leadersList: [], rotasList: [], videosList: [],
+  fellowshipsList: [], branchesList: [], pledgesList: []
 };
 
 const pickSection = (vals, key) => {
@@ -457,7 +462,7 @@ const pickSection = (vals, key) => {
 };
 const canWriteSectionFn = (key, isSuper, perms) => !!isSuper || !!(perms && perms[SECTION_WRITE_PERM[key]]);
 const canReadSectionFn = (key, isSuper, perms) =>
-  !!isSuper || ['events', 'announcements', 'leaders', 'rotas', 'videos'].includes(key) ||
+  !!isSuper || ['events', 'announcements', 'leaders', 'rotas', 'videos', 'fellowships'].includes(key) ||
   (key === 'finance' ? !!(perms && (perms.access_finance || perms.view_balance_sheet)) : !!(perms && perms[SECTION_WRITE_PERM[key]]));
 
 // When two admins change the same section, keep BOTH people's additions and removals.
@@ -531,7 +536,7 @@ function ReportChart({ type, labels, values, color }) {
   );
 }
 
-function ReportsTab({ members, fin, attendance, assets, visitors, converts, services, events, theme, openPrint, churchName }) {
+function ReportsTab({ members, fin, attendance, assets, visitors, converts, services, events, fellowships, branches, pledges, onBackupExcel, onBackupJson, theme, openPrint, churchName }) {
   const num = (v) => parseFloat(v) || 0;
   const sum = (arr, f) => (arr || []).reduce((a, x) => a + num(x[f]), 0);
   const thisYear = String(new Date().getFullYear());
@@ -638,6 +643,30 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
     groups: [['By condition', tally(assets, i => i.condition)]], chart: { title: 'Items by condition', type: 'hbar', color: '#0891b2', labels: tally(assets, i => i.condition).map(x => x[0]), values: tally(assets, i => i.condition).map(x => x[1]) },
     table: tableFor('Assets', ['Item', 'Quantity', 'Condition'], assets.map(i => [i.item_name || i.name, i.quantity, i.condition])) }) });
 
+  if (fellowships) defs.push({ id: 'fellowships', label: 'House Fellowship', icon: '🏠', build: () => {
+    const assigned = new Set();
+    fellowships.forEach(f => (f.member_ids || []).forEach(id => assigned.add(String(id))));
+    const rows = fellowships.map(f => [f.name, (f.member_ids || []).length]);
+    return { stats: [['Fellowships', fellowships.length], ['Members assigned', assigned.size], ['Not in a fellowship', members.filter(m => !assigned.has(String(m.id))).length]],
+      groups: [['Members per fellowship', rows]],
+      chart: { title: 'Members per fellowship', type: 'hbar', color: '#0d9488', labels: rows.map(r => r[0]), values: rows.map(r => r[1]) },
+      table: tableFor('Fellowships', ['Name', 'Leader', 'Day', 'Time', 'Place', 'Members'], fellowships.map(f => [f.name, f.leader_name, f.meeting_day, f.meeting_time, f.location, (f.member_ids || []).length])) };
+  } });
+  if (branches) defs.push({ id: 'branches', label: 'Branches', icon: '🌿', build: () => ({
+    stats: [['Total branches', branches.length]], groups: [],
+    chart: { title: 'Branches', type: 'hbar', color: '#2563eb', labels: branches.map(b => b.name), values: branches.map(() => 1) },
+    table: tableFor('Branches', ['Name', 'Pastor / overseer', 'Phone', 'Location', 'Established'], branches.map(b => [b.name, b.pastor, b.phone, b.location, b.established])) }) });
+  if (pledges) defs.push({ id: 'pledges', label: 'Pledges', icon: '🤝', build: () => {
+    const paidOf = (p) => (p.payments || []).reduce((a, x) => a + num(x.amount), 0);
+    const pledged = sum(pledges, 'amount'), paid = pledges.reduce((a, p) => a + paidOf(p), 0);
+    const per = {};
+    pledges.forEach(p => { const k = p.project || 'General'; per[k] = (per[k] || 0) + paidOf(p); });
+    return { stats: [['Pledges', pledges.length], ['Total pledged', money(pledged)], ['Total paid', money(paid)], ['Balance', money(pledged - paid)]],
+      groups: [['Paid per project', Object.entries(per).map(([k, v]) => [k, money(v)])]],
+      chart: { title: 'Paid per project (GHS)', type: 'hbar', color: '#16a34a', labels: Object.keys(per), values: Object.values(per).map(v => Math.round(v)) },
+      table: tableFor('Pledges', ['Member', 'Project', 'Pledged', 'Paid', 'Balance', 'Due'], pledges.map(p => [p.member_name, p.project, money(p.amount), money(paidOf(p)), money(num(p.amount) - paidOf(p)), p.due_date])) };
+  } });
+
   const printSummary = () => {
     let html = `<h3>Membership</h3><table><tbody><tr><td>Total members</td><td>${members.length}</td></tr><tr><td>Admins / Sub-admins</td><td>${members.filter(m => m.role && m.role !== 'member').length}</td></tr><tr><td>Joined this year</td><td>${members.filter(m => String(m.date_joined || '').startsWith(thisYear)).length}</td></tr><tr><td>Birthdays this month</td><td>${members.filter(m => m.date_of_birth && parseInt(String(m.date_of_birth).slice(5, 7), 10) === thisMonth).length}</td></tr></tbody></table>`;
     if (attendance) { const att = attendance.map(a => num(a.men_count) + num(a.women_count) + num(a.children_count)); const t = att.reduce((a, b) => a + b, 0); html += `<h3>Attendance</h3><table><tbody><tr><td>Services recorded</td><td>${att.length}</td></tr><tr><td>Total attendance</td><td>${t}</td></tr><tr><td>Average per service</td><td>${att.length ? (t / att.length).toFixed(1) : 0}</td></tr></tbody></table>`; }
@@ -663,6 +692,16 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <button type="button" onClick={printSummary} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.7rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>🖨 Summary Report (PDF)</button>
       </div>
+      {onBackupExcel && (
+        <div style={{ ...card, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
+          <h4 style={h}>💾 Backup & Export (Super Admin)</h4>
+          <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 0.6rem 0' }}>Download a copy of all church records. Keep it somewhere safe, because it contains private information.</p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button type="button" onClick={onBackupExcel} style={{ backgroundColor: '#16a34a', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📊 Excel backup</button>
+            <button type="button" onClick={onBackupJson} style={{ backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>🗄️ Full data file</button>
+          </div>
+        </div>
+      )}
       {defs.map(d => (
         <button key={d.id} type="button" onClick={() => { setOpen(d.id); }} style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', width: '100%', textAlign: 'left', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.9rem', padding: '0.9rem 1rem', marginBottom: '0.7rem', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a' }}>
           <span style={{ width: '2.6rem', height: '2.6rem', borderRadius: '0.7rem', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>{d.icon}</span>
@@ -797,6 +836,380 @@ const SUB_DEPARTMENTS = [
   'Children Ministry',
   'Media/IT Department'
 ];
+
+// ---------- Shared helpers for the newer screens ----------
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const waNumber = (phone) => {
+  const d = String(phone || '').replace(/[^0-9]/g, '');
+  if (!d) return '';
+  return d.startsWith('0') ? '233' + d.slice(1) : d;
+};
+const formBox = { width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' };
+const formLab = { display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' };
+const cardBox = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.9rem' };
+const greenBtn = { backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' };
+const sortedMembers = (members) => [...members].sort((a, b) => String((a.first_name || '') + (a.last_name || '')).localeCompare(String((b.first_name || '') + (b.last_name || ''))));
+const memberNo = (m) => 'GPC-' + String(m.id || '').replace(/-/g, '').slice(0, 6).toUpperCase();
+
+function qrSvgString(text, px) {
+  const m = makeQrMatrix(text);
+  const q = 2, t = m.length + q * 2;
+  let d = '';
+  m.forEach((row, y) => row.forEach((v, x) => { if (v) d += 'M' + (x + q) + ',' + (y + q) + 'h1v1h-1z'; }));
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + t + ' ' + t + '" width="' + px + '" height="' + px + '" shape-rendering="crispEdges"><rect width="' + t + '" height="' + t + '" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
+}
+
+// ---------- Backup workbook (opens in Excel, WPS, Google Sheets) ----------
+function buildWorkbookXml(sheets) {
+  const x = (v) => String(v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : v)).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const omit = ['photo_url', 'password'];
+  const body = sheets.map(s => {
+    const cols = [];
+    s.rows.forEach(r => Object.keys(r || {}).forEach(k => { if (!omit.includes(k) && !cols.includes(k)) cols.push(k); }));
+    const cell = (v) => '<Cell><Data ss:Type="String">' + x(v).slice(0, 30000) + '</Data></Cell>';
+    const head = '<Row>' + cols.map(cell).join('') + '</Row>';
+    const rows = s.rows.map(r => '<Row>' + cols.map(c => cell((r || {})[c])).join('') + '</Row>').join('');
+    const name = s.name.replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31);
+    return '<Worksheet ss:Name="' + x(name) + '"><Table>' + (cols.length ? head : '<Row><Cell><Data ss:Type="String">No records</Data></Cell></Row>') + rows + '</Table></Worksheet>';
+  }).join('');
+  return '<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' + body + '</Workbook>';
+}
+function saveTextFile(text, filename, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// ---------- Activity log summary: what changed between the saved copy and the new copy ----------
+const ACTIVITY_LABEL_KEYS = ['member_name', 'contributor', 'source', 'description', 'title', 'name', 'visitor_name', 'convert_name', 'leader_name', 'rota_name', 'service_name', 'item', 'project'];
+function summarizeChange(base, local) {
+  const parts = [];
+  const J = (v) => JSON.stringify(v);
+  const labelOf = (it) => { for (const k of ACTIVITY_LABEL_KEYS) { if (it && it[k]) return String(it[k]); } return 'entry'; };
+  Object.keys(local || {}).forEach(f => {
+    const b = base ? base[f] : undefined;
+    const l = local[f];
+    const nice = f.replace(/List$/, '').replace(/([A-Z])/g, ' $1').toLowerCase();
+    if (Array.isArray(l)) {
+      const bArr = Array.isArray(b) ? b : [];
+      const bs = new Set(bArr.map(J)), ls = new Set(l.map(J));
+      const added = l.filter(i => !bs.has(J(i)));
+      const removed = bArr.filter(i => !ls.has(J(i)));
+      if (added.length && removed.length && added.length === removed.length) parts.push('Edited ' + added.length + ' ' + nice + ': ' + added.slice(0, 3).map(labelOf).join(', '));
+      else {
+        if (added.length) parts.push('Added ' + nice + ': ' + added.slice(0, 3).map(labelOf).join(', ') + (added.length > 3 ? ' +' + (added.length - 3) + ' more' : ''));
+        if (removed.length) parts.push('Removed ' + nice + ': ' + removed.slice(0, 3).map(labelOf).join(', ') + (removed.length > 3 ? ' +' + (removed.length - 3) + ' more' : ''));
+      }
+    } else if (J(b) !== J(l)) {
+      parts.push('Changed ' + nice);
+    }
+  });
+  return parts.join('; ').slice(0, 400);
+}
+
+// ---------- House Fellowship ----------
+function FellowshipsTab({ items, onChange, members, theme, canDelete }) {
+  const blank = { name: '', leader_id: '', leader_name: '', meeting_day: 'Wednesday', meeting_time: '', location: '', notes: '', member_ids: [] };
+  const [show, setShow] = useState(false);
+  const [form, setForm] = useState(blank);
+  const [editIndex, setEditIndex] = useState(null);
+  const [find, setFind] = useState('');
+  const sorted = sortedMembers(members);
+  const nameOf = (id) => { const m = members.find(x => String(x.id) === String(id)); return m ? displayName(m) : ''; };
+  const assigned = new Set();
+  items.forEach(f => (f.member_ids || []).forEach(id => assigned.add(String(id))));
+  const unassigned = members.filter(m => !assigned.has(String(m.id))).length;
+  const toggle = (id) => {
+    const cur = form.member_ids || [];
+    setForm({ ...form, member_ids: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] });
+  };
+  const shown = sorted.filter(m => displayName(m).toLowerCase().includes(find.toLowerCase()));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>House Fellowships</h3>
+        <button type="button" onClick={() => { setShow(!show); setForm(blank); setEditIndex(null); }} style={greenBtn}>{show ? 'Cancel' : '+ Add Fellowship'}</button>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>{items.length} fellowship(s) - {unassigned} member(s) not yet in any fellowship.</p>
+
+      {show && (
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const leaderName = form.leader_id ? nameOf(form.leader_id) : form.leader_name;
+          const item = { ...form, leader_name: leaderName };
+          if (editIndex !== null) { const next = [...items]; next[editIndex] = item; onChange(next); }
+          else onChange([item, ...items]);
+          setForm(blank); setEditIndex(null); setShow(false);
+        }} style={{ ...cardBox, border: '1px solid #cbd5e1', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div><label style={formLab}>Fellowship name *</label><input style={formBox} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Zion House Fellowship" /></div>
+            <div>
+              <label style={formLab}>Fellowship leader</label>
+              <select style={formBox} value={form.leader_id} onChange={(e) => setForm({ ...form, leader_id: e.target.value })}>
+                <option value="">-- Select member --</option>
+                {sorted.map(m => <option key={m.id} value={m.id}>{displayName(m)}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <div><label style={formLab}>Meeting day</label><select style={formBox} value={form.meeting_day} onChange={(e) => setForm({ ...form, meeting_day: e.target.value })}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+              <div><label style={formLab}>Time</label><input style={formBox} value={form.meeting_time} onChange={(e) => setForm({ ...form, meeting_time: e.target.value })} placeholder="e.g. 6:00 PM" /></div>
+            </div>
+            <div><label style={formLab}>Meeting place / area</label><input style={formBox} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
+            <div>
+              <label style={formLab}>Members in this fellowship ({(form.member_ids || []).length} selected)</label>
+              <input style={{ ...formBox, marginBottom: '0.4rem' }} value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search name..." />
+              <div style={{ maxHeight: '14rem', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '0.375rem', padding: '0.4rem' }}>
+                {shown.map(m => (
+                  <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0.2rem', fontSize: '0.9rem' }}>
+                    <input type="checkbox" checked={(form.member_ids || []).includes(String(m.id))} onChange={() => toggle(String(m.id))} />
+                    <span>{displayName(m)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div><label style={formLab}>Notes</label><textarea style={{ ...formBox, minHeight: '4rem' }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <button type="submit" style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>{editIndex !== null ? 'Update Fellowship' : 'Save Fellowship'}</button>
+          </div>
+        </form>
+      )}
+
+      {items.length === 0 && !show && <p style={{ color: '#64748b' }}>No house fellowships yet.</p>}
+      {items.map((f, i) => (
+        <div key={i} style={cardBox}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+            <div>
+              <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#0f172a' }}>{f.name}</div>
+              <div style={{ fontSize: '0.85rem', color: '#475569' }}>Leader: {f.leader_name || 'Not set'}</div>
+              <div style={{ fontSize: '0.85rem', color: '#475569' }}>{f.meeting_day}{f.meeting_time ? ' at ' + f.meeting_time : ''}{f.location ? ' - ' + f.location : ''}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+              <button type="button" onClick={() => { setForm({ ...blank, ...f, member_ids: (f.member_ids || []).map(String) }); setEditIndex(i); setShow(true); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}>✏️ Edit</button>
+              {canDelete && <button type="button" onClick={() => { if (confirm('Delete this fellowship?')) onChange(items.filter((_, idx) => idx !== i)); }} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626' }}>🗑️ Delete</button>}
+            </div>
+          </div>
+          <div style={{ fontSize: '0.85rem', color: theme, fontWeight: 'bold', marginTop: '0.6rem' }}>{(f.member_ids || []).length} member(s)</div>
+          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{(f.member_ids || []).map(nameOf).filter(Boolean).join(', ') || 'No members assigned yet.'}</div>
+          {f.notes ? <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.3rem' }}>{f.notes}</div> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Follow-up of visitors and new converts ----------
+function FollowUpTab({ visitors, converts, setVisitors, setConverts, theme }) {
+  const [showDone, setShowDone] = useState(false);
+  const vPending = (visitors || []).map((v, i) => ({ v, i })).filter(x => !x.v.followed_up);
+  const vDone = (visitors || []).map((v, i) => ({ v, i })).filter(x => x.v.followed_up);
+  const cPending = (converts || []).map((c, i) => ({ c, i })).filter(x => !x.c.followed_up && (x.c.follow_up || 'New') === 'New');
+  const cDone = (converts || []).map((c, i) => ({ c, i })).filter(x => x.c.followed_up || (x.c.follow_up && x.c.follow_up !== 'New'));
+  const markVisitor = (i) => {
+    const note = prompt('Short note about the follow-up (optional):', '');
+    if (note === null) return;
+    setVisitors(visitors.map((v, idx) => idx === i ? { ...v, followed_up: todayISO(), follow_note: note } : v));
+  };
+  const markConvert = (i) => {
+    const note = prompt('Short note about the follow-up (optional):', '');
+    if (note === null) return;
+    setConverts(converts.map((c, idx) => idx === i ? { ...c, followed_up: todayISO(), follow_note: note, follow_up: c.follow_up && c.follow_up !== 'New' ? c.follow_up : 'Contacted' } : c));
+  };
+  const actions = (phone) => (
+    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+      {phone ? <a href={'tel:' + String(phone).replace(/\s+/g, '')} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', textDecoration: 'none', padding: '0.35rem 0.7rem', borderRadius: '0.4rem', fontSize: '0.82rem', fontWeight: 'bold' }}>📞 Call</a> : null}
+      {phone ? <a href={'https://wa.me/' + waNumber(phone)} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#dcfce7', color: '#166534', textDecoration: 'none', padding: '0.35rem 0.7rem', borderRadius: '0.4rem', fontSize: '0.82rem', fontWeight: 'bold' }}>🟢 WhatsApp</a> : null}
+    </div>
+  );
+  const rowCard = (key, title, sub, phone, done, onDone, note) => (
+    <div key={key} style={cardBox}>
+      <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{title}</div>
+      <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{sub}</div>
+      {note ? <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '0.2rem' }}>Note: {note}</div> : null}
+      {done ? <div style={{ fontSize: '0.82rem', color: '#16a34a', marginTop: '0.4rem', fontWeight: 'bold' }}>✔ Followed up on {done}</div> : (
+        <div>
+          {actions(phone)}
+          <button type="button" onClick={onDone} style={{ marginTop: '0.5rem', backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.45rem 0.9rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.82rem', cursor: 'pointer' }}>✔ Mark followed up</button>
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <div>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.25rem 0' }}>Follow-up</h3>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>People who still need a call or visit. Mark them when done.</p>
+      {visitors && (
+        <div>
+          <h4 style={{ color: theme, margin: '1rem 0 0.5rem 0' }}>Visitors to follow up ({vPending.length})</h4>
+          {vPending.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No visitors waiting.</p>}
+          {vPending.map(({ v, i }) => rowCard('v' + i, v.visitor_name, 'Visited ' + (v.date_visited || '') + (v.invited_by ? ' - invited by ' + v.invited_by : '') + (v.address ? ' - ' + v.address : ''), v.phone, null, () => markVisitor(i)))}
+        </div>
+      )}
+      {converts && (
+        <div>
+          <h4 style={{ color: theme, margin: '1rem 0 0.5rem 0' }}>New converts to follow up ({cPending.length})</h4>
+          {cPending.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No new converts waiting.</p>}
+          {cPending.map(({ c, i }) => rowCard('c' + i, c.convert_name, 'Converted ' + (c.date_of_conversion || '') + (c.address ? ' - ' + c.address : ''), c.phone, null, () => markConvert(i)))}
+        </div>
+      )}
+      <button type="button" onClick={() => setShowDone(!showDone)} style={{ marginTop: '1rem', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>{showDone ? 'Hide' : 'Show'} completed ({(visitors ? vDone.length : 0) + (converts ? cDone.length : 0)})</button>
+      {showDone && (
+        <div style={{ marginTop: '0.75rem' }}>
+          {visitors && vDone.map(({ v, i }) => rowCard('vd' + i, v.visitor_name, 'Visitor - ' + (v.date_visited || ''), v.phone, v.followed_up, null, v.follow_note))}
+          {converts && cDone.map(({ c, i }) => rowCard('cd' + i, c.convert_name, 'New convert - ' + (c.follow_up || ''), c.phone, c.followed_up || 'earlier', null, c.follow_note))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Pledges and giving goals ----------
+function PledgesTab({ items, onChange, members, theme, isSuper }) {
+  const blank = { project: '', member_id: '', member_name: '', amount: '', due_date: '', goal: '', payments: [] };
+  const [show, setShow] = useState(false);
+  const [form, setForm] = useState(blank);
+  const [pay, setPay] = useState({});
+  const sorted = sortedMembers(members);
+  const num = (v) => parseFloat(v) || 0;
+  const paidOf = (p) => (p.payments || []).reduce((a, x) => a + num(x.amount), 0);
+  const projects = {};
+  items.forEach(p => {
+    const k = p.project || 'General';
+    if (!projects[k]) projects[k] = { pledged: 0, paid: 0, goal: 0 };
+    projects[k].pledged += num(p.amount); projects[k].paid += paidOf(p);
+    if (num(p.goal) > projects[k].goal) projects[k].goal = num(p.goal);
+  });
+  const bar = (paid, total) => (
+    <div style={{ height: '0.6rem', backgroundColor: '#e2e8f0', borderRadius: '0.4rem', overflow: 'hidden', margin: '0.3rem 0' }}>
+      <div style={{ width: Math.min(100, total ? paid / total * 100 : 0) + '%', height: '100%', backgroundColor: paid >= total && total > 0 ? '#16a34a' : theme }} />
+    </div>
+  );
+  const addPayment = (i) => {
+    const amt = num((pay[i] || {}).amount);
+    if (amt <= 0) { alert('Enter the amount paid.'); return; }
+    const entry = { amount: String(amt), date: (pay[i] || {}).date || todayISO() };
+    onChange(items.map((p, idx) => idx === i ? { ...p, payments: [...(p.payments || []), entry] } : p));
+    setPay({ ...pay, [i]: { amount: '', date: '' } });
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Pledges & Giving Goals</h3>
+        <button type="button" onClick={() => { setShow(!show); setForm(blank); }} style={greenBtn}>{show ? 'Cancel' : '+ Add Pledge'}</button>
+      </div>
+      <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 0 }}>This screen only tracks promises and progress. When money is received, also record it under Finance so it appears in the Account Report.</p>
+
+      {Object.keys(projects).length > 0 && (
+        <div style={{ ...cardBox, backgroundColor: '#f8fafc' }}>
+          <h4 style={{ margin: '0 0 0.5rem 0', color: theme }}>Projects</h4>
+          {Object.entries(projects).map(([k, v]) => {
+            const target = v.goal || v.pledged;
+            return (
+              <div key={k} style={{ marginBottom: '0.8rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}><strong>{k}</strong><span>GHS {v.paid.toFixed(2)} / {target.toFixed(2)}</span></div>
+                {bar(v.paid, target)}
+                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Pledged GHS {v.pledged.toFixed(2)}{v.goal ? ' - Goal GHS ' + v.goal.toFixed(2) : ''} - {target ? Math.min(100, v.paid / target * 100).toFixed(0) : 0}% reached</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {show && (
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const m = members.find(x => String(x.id) === String(form.member_id));
+          onChange([{ ...form, member_name: m ? displayName(m) : form.member_name, recorded_on: todayISO() }, ...items]);
+          setForm(blank); setShow(false);
+        }} style={{ ...cardBox, border: '1px solid #cbd5e1', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div><label style={formLab}>Project / purpose *</label><input style={formBox} required value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} placeholder="e.g. Church building" /></div>
+            <div>
+              <label style={formLab}>Member *</label>
+              <select style={formBox} required value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
+                <option value="">-- Select member --</option>
+                {sorted.map(m => <option key={m.id} value={m.id}>{displayName(m)}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <div><label style={formLab}>Amount pledged (GHS) *</label><input style={formBox} type="number" min="1" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
+              <div><label style={formLab}>Due date</label><input style={formBox} type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></div>
+            </div>
+            <div><label style={formLab}>Project goal, all members (GHS, optional)</label><input style={formBox} type="number" min="0" step="0.01" value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} /></div>
+            <button type="submit" style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>Save Pledge</button>
+          </div>
+        </form>
+      )}
+
+      {items.length === 0 && !show && <p style={{ color: '#64748b' }}>No pledges recorded yet.</p>}
+      {items.map((p, i) => {
+        const paid = paidOf(p), total = num(p.amount);
+        const overdue = p.due_date && p.due_date < todayISO() && paid < total;
+        return (
+          <div key={i} style={cardBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{p.member_name || 'Member'}</div>
+                <div style={{ fontSize: '0.85rem', color: '#475569' }}>{p.project}{p.due_date ? ' - due ' + p.due_date : ''}{overdue ? ' (overdue)' : ''}</div>
+              </div>
+              {isSuper && <button type="button" onClick={() => { if (confirm('Delete this pledge?')) onChange(items.filter((_, idx) => idx !== i)); }} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626', alignSelf: 'flex-start' }}>🗑️</button>}
+            </div>
+            {bar(paid, total)}
+            <div style={{ fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between' }}><span>Paid GHS {paid.toFixed(2)} of {total.toFixed(2)}</span><strong style={{ color: paid >= total ? '#16a34a' : '#b45309' }}>{paid >= total ? 'Completed' : 'Balance ' + (total - paid).toFixed(2)}</strong></div>
+            {(p.payments || []).length > 0 && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>{(p.payments || []).map(x => x.date + ': GHS ' + num(x.amount).toFixed(2)).join('  |  ')}</div>}
+            {paid < total && (
+              <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                <input type="number" min="0" step="0.01" placeholder="Amount paid" value={(pay[i] || {}).amount || ''} onChange={(e) => setPay({ ...pay, [i]: { ...(pay[i] || {}), amount: e.target.value } })} style={{ ...formBox, flex: 1, minWidth: '6rem', width: 'auto' }} />
+                <input type="date" value={(pay[i] || {}).date || ''} onChange={(e) => setPay({ ...pay, [i]: { ...(pay[i] || {}), date: e.target.value } })} style={{ ...formBox, flex: 1, minWidth: '8rem', width: 'auto' }} />
+                <button type="button" onClick={() => addPayment(i)} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.4rem', fontWeight: 'bold', cursor: 'pointer' }}>+ Payment</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Activity log (Super Admin only) ----------
+function ActivityTab({ theme }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [q, setQ] = useState('');
+  const load = async () => {
+    setErr('');
+    const { data, error } = await supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300);
+    if (error) { setErr('Could not load the activity log: ' + error.message + ' (has supabase-batch3.sql been run?)'); setRows([]); }
+    else setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const shown = (rows || []).filter(r => (r.actor_name + ' ' + r.actor_email + ' ' + r.action + ' ' + r.detail).toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Activity Log</h3>
+        <button type="button" onClick={load} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.9rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>↻ Refresh</button>
+      </div>
+      <input style={{ ...formBox, marginBottom: '0.75rem' }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by person, area or words..." />
+      {err && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>{err}</div>}
+      {rows === null && <p style={{ color: '#64748b' }}>Loading...</p>}
+      {rows && rows.length === 0 && !err && <p style={{ color: '#64748b' }}>Nothing recorded yet. Changes made from now on will appear here.</p>}
+      {shown.map(r => (
+        <div key={r.id} style={{ ...cardBox, padding: '0.7rem 1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', color: '#64748b' }}>
+            <span>{new Date(r.created_at).toLocaleString()}</span>
+            <strong style={{ color: theme }}>{r.action}</strong>
+          </div>
+          <div style={{ fontSize: '0.9rem', color: '#0f172a', marginTop: '0.2rem' }}>{r.detail}</div>
+          <div style={{ fontSize: '0.78rem', color: '#64748b' }}>by {r.actor_name || r.actor_email}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 // ---------- Church Leaders: pick the member, department fills in from the lists ----------
 function LeadersTab({ items, onAdd, onDelete, canDelete, members, theme }) {
@@ -1346,12 +1759,19 @@ export default function Home() {
   const [settingsMsg, setSettingsMsg] = useState('');
   const [assetsList, setAssetsList] = useState([]);
   const [leadersList, setLeadersList] = useState([]);
+  const [fellowshipsList, setFellowshipsList] = useState([]);
+  const [branchesList, setBranchesList] = useState([]);
+  const [pledgesList, setPledgesList] = useState([]);
+  const [fDept, setFDept] = useState('');
+  const [fSub, setFSub] = useState('');
+  const [fGender, setFGender] = useState('');
+  const [fMarital, setFMarital] = useState('');
   const [rotasList, setRotasList] = useState([]);
   const [videosList, setVideosList] = useState([]);
   const [servicesList, setServicesList] = useState([]);
   const [visitorsList, setVisitorsList] = useState([]);
   const [convertsList, setConvertsList] = useState([]);
-  const [board, setBoard] = useState({ events: [], announcements: [], leaders: [], rotas: [], videos: [] });
+  const [board, setBoard] = useState({ events: [], announcements: [], leaders: [], rotas: [], videos: [], fellowships: [] });
   const baseRef = useRef({});
 
   // Financial Data State with Edit/Delete restricted to Super Admin
@@ -1418,7 +1838,8 @@ export default function Home() {
       { key: 'record_new_converts', label: 'Record new converts' }
     ],
     'Administration & Leadership': [
-      { key: 'manage_leaders', label: 'Manage church leaders directory' }
+      { key: 'manage_leaders', label: 'Manage church leaders directory' },
+      { key: 'manage_fellowships', label: 'Manage house fellowships & branches' }
     ],
     'Reports & Communication': [
       { key: 'view_reports', label: 'View reports' },
@@ -1491,7 +1912,8 @@ export default function Home() {
     accountReportNotes: setAccountReportNotes, balanceSheetNotes: setBalanceSheetNotes,
     attendanceLogs: setAttendanceLogs, eventsList: setEventsList, announcementsList: setAnnouncementsList,
     servicesList: setServicesList, visitorsList: setVisitorsList, convertsList: setConvertsList, assetsList: setAssetsList,
-    leadersList: setLeadersList, rotasList: setRotasList, videosList: setVideosList
+    leadersList: setLeadersList, rotasList: setRotasList, videosList: setVideosList,
+    fellowshipsList: setFellowshipsList, branchesList: setBranchesList, pledgesList: setPledgesList
   };
 
   const makeMemberRows = () => members
@@ -1541,10 +1963,18 @@ export default function Home() {
       .maybeSingle();
     if (error) setSaveError('Could not load your records: ' + error.message);
     setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
-    const { data: rows } = await supabase.from('app_data').select('key, data').in('key', ['events', 'announcements', 'leaders', 'rotas', 'videos']);
+    const { data: rows } = await supabase.from('app_data').select('key, data').in('key', ['events', 'announcements', 'leaders', 'rotas', 'videos', 'fellowships']);
     const get = (k, f) => { const r = (rows || []).find(x => x.key === k); return (r && r.data && r.data[f]) || []; };
-    setBoard({ events: get('events', 'eventsList'), announcements: get('announcements', 'announcementsList'), leaders: get('leaders', 'leadersList'), rotas: get('rotas', 'rotasList'), videos: get('videos', 'videosList') });
+    setBoard({ events: get('events', 'eventsList'), announcements: get('announcements', 'announcementsList'), leaders: get('leaders', 'leadersList'), rotas: get('rotas', 'rotasList'), videos: get('videos', 'videosList'), fellowships: get('fellowships', 'fellowshipsList') });
   }
+
+  const logActivity = async (action, detail) => {
+    try {
+      if (!user) return;
+      const me = members.find(m => String(m.email || '').toLowerCase() === String(user.email || '').toLowerCase());
+      await supabase.from('activity_log').insert({ actor_email: String(user.email || '').toLowerCase(), actor_name: me ? displayName(me) : '', action, detail: String(detail || '').slice(0, 500) });
+    } catch (e) { /* the log is optional */ }
+  };
 
   // Save one section. If another admin saved first, merge both people's changes and try again.
   async function saveSection(key, valsIn) {
@@ -1568,6 +1998,7 @@ export default function Home() {
         if (error) errMsg = error.message; else if (data && data.length) ok = true; else conflict = true;
       }
       if (errMsg) return errMsg;
+      if (ok && base.version !== 0) { const msg = summarizeChange(base.data, local); if (msg) logActivity(SECTION_LABELS[key] || key, msg); }
       if (ok) { baseRef.current[key] = { data: JSON.parse(JSON.stringify(local)), version: base.version === 0 ? 1 : base.version + 1 }; return ''; }
       const { data: srv, error: e2 } = await supabase.from('app_data').select('data, version').eq('key', key).maybeSingle();
       if (e2 || !srv) return e2 ? e2.message : 'You do not have permission to save this section.';
@@ -1635,7 +2066,8 @@ export default function Home() {
     const vals = {
       incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance,
       accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList,
-      servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList
+      servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList,
+      fellowshipsList, branchesList, pledgesList
     };
     const dirty = Object.keys(SECTION_DEFS).filter(key => {
       if (!canWriteSectionFn(key, isSuper, myPermissions)) return false;
@@ -1665,11 +2097,11 @@ export default function Home() {
       setSaveError(failed ? 'Could not save: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList]);
+  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList]);
 
   // Pick up other admins' latest entries when a records screen is opened
   useEffect(() => {
-    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos', 'fellowships', 'branches', 'followup', 'pledges'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
       loadSections(role === 'super_admin', myPermissions);
     }
   }, [activeTab]);
@@ -1701,6 +2133,7 @@ export default function Home() {
     const { error } = await supabase
       .from('admin_permissions')
       .upsert({ email, permissions: adminPermissions[email] || {}, updated_at: new Date().toISOString() }, { onConflict: 'email' });
+    if (!error) logActivity('Permissions', 'Saved permissions for ' + email);
     setPermMessage(error ? 'Could not save permissions: ' + error.message : 'Permissions saved. They apply the next time that admin opens the app.');
   };
 
@@ -1710,6 +2143,7 @@ export default function Home() {
     const target = members.find(m => String(m.email || '').toLowerCase() === email);
     if (!target || target.role === 'super_admin') return;
     const { error } = await supabase.from('members').update({ role: newRole }).eq('id', target.id);
+    if (!error) logActivity('Permissions', 'Changed role of ' + displayName(target) + ' to ' + newRole);
     if (error) setPermMessage('Could not change role: ' + error.message);
     else { setPermMessage(newRole === 'admin' ? 'Now a Sub-Admin. Tick what they may do, then press Save Permissions.' : 'Now a regular member.'); fetchMembers(); }
   };
@@ -1940,6 +2374,7 @@ export default function Home() {
       if (error) {
         setFormError(error.message);
       } else {
+        logActivity('Members', 'Updated member ' + displayName(payload));
         setFormSuccess('Member details successfully updated!');
         fetchMembers();
         setTimeout(() => {
@@ -1975,6 +2410,7 @@ export default function Home() {
       if (error) {
         setFormError('Login account was created, but saving member details failed: ' + error.message);
       } else {
+        logActivity('Members', 'Registered member ' + displayName(payload));
         setFormSuccess(isSelfRegistering ? 'Self-registration successful! You can now log in.' : 'Member successfully registered with all details!');
         setFormData({ ...EMPTY_FORM });
         fetchMembers();
@@ -1993,10 +2429,12 @@ export default function Home() {
       return;
     }
     if (confirm('Are you sure you want to delete this member?')) {
+      const gone = members.find(m => m.id === id);
       const { error } = await supabase.from('members').delete().eq('id', id);
       if (error) {
         alert('Error deleting member: ' + error.message);
       } else {
+        logActivity('Members', 'Deleted member ' + (gone ? displayName(gone) : id));
         fetchMembers();
       }
     }
@@ -2207,8 +2645,64 @@ export default function Home() {
     const fullName = displayName(m).toLowerCase();
     const email = (m.email || '').toLowerCase();
     const query = searchQuery.toLowerCase();
-    return fullName.includes(query) || email.includes(query);
+    const textOk = fullName.includes(query) || email.includes(query) || String(m.occupation || '').toLowerCase().includes(query) || String(m.phone || '').replace(/\s+/g, '').includes(query.replace(/\s+/g, ''));
+    if (!textOk) return false;
+    if (fDept && m.core_department !== fDept) return false;
+    if (fSub && !String(m.sub_departments || '').includes(fSub)) return false;
+    if (fGender && m.gender !== fGender) return false;
+    if (fMarital && m.marital_status !== fMarital) return false;
+    return true;
   });
+
+  const printIdCards = (list) => {
+    if (!list.length) { alert('There are no members to print.'); return; }
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
+    const cards = list.map(m => {
+      let qr = '';
+      try { qr = qrSvgString('GPC:' + m.id, 86); } catch (e) { qr = ''; }
+      const ini = esc((((m.first_name || '') + ' ' + (m.last_name || '')).trim() || '?').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2));
+      const photo = m.photo_url ? '<img class="ph" src="' + esc(m.photo_url) + '" />' : '<div class="ph ini">' + ini + '</div>';
+      return '<div class="card"><div class="top"><img src="' + esc(logo) + '" /><div><b>' + esc(churchName) + '</b><br/><small>MEMBER ID CARD</small></div></div>'
+        + '<div class="mid">' + photo + '<div class="info"><div class="nm">' + esc(displayName(m)) + '</div><div>' + esc(m.core_department || '') + '</div><div class="sm">' + esc(m.sub_departments || '') + '</div><div class="sm">No: ' + esc(memberNo(m)) + '</div>' + (m.phone ? '<div class="sm">Tel: ' + esc(m.phone) + '</div>' : '') + '</div><div class="qr">' + qr + '</div></div>'
+        + '<div class="bot">' + esc(churchTagline || churchName) + '</div></div>';
+    }).join('');
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow pop-ups for this site to print.'); return; }
+    w.document.write('<html><head><title>Member ID Cards</title><style>'
+      + '@page{size:A4;margin:10mm} body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:#0f172a}'
+      + '.sheet{display:grid;grid-template-columns:repeat(2,86mm);gap:6mm;justify-content:center}'
+      + '.card{width:86mm;height:54mm;border:1px solid #94a3b8;border-radius:3mm;overflow:hidden;display:flex;flex-direction:column;page-break-inside:avoid;background:#fff}'
+      + '.top{background:' + themeColor + ';color:#fff;display:flex;align-items:center;gap:2.5mm;padding:1.8mm 3mm;font-size:9pt}.top img{width:9mm;height:9mm;object-fit:contain;background:#fff;border-radius:50%}.top small{font-size:6.5pt;letter-spacing:.6px}'
+      + '.mid{flex:1;display:flex;align-items:center;gap:2.5mm;padding:2mm 3mm}.ph{width:19mm;height:23mm;object-fit:cover;border-radius:1.5mm;border:1px solid #cbd5e1;flex:none}.ini{display:flex;align-items:center;justify-content:center;background:#e2e8f0;font-weight:bold;font-size:14pt;color:#334155}'
+      + '.info{flex:1;font-size:7.5pt;min-width:0}.nm{font-weight:bold;font-size:9.5pt;margin-bottom:.6mm;color:' + themeColor + '}.sm{color:#475569;font-size:6.5pt}.qr{flex:none}'
+      + '.bot{background:#f1f5f9;text-align:center;font-size:6pt;color:#475569;padding:1mm}'
+      + '</style></head><body><div class="sheet">' + cards + '</div><script>window.onload=function(){window.print();};<\/script></body></html>');
+    w.document.close();
+  };
+
+  const downloadBackupExcel = () => {
+    const nameOf = (id) => { const m = members.find(x => String(x.id) === String(id)); return m ? displayName(m) : ''; };
+    const sheets = [
+      { name: 'Members', rows: members.map(m => ({ ...m, full_name: displayName(m) })) },
+      { name: 'Tithes', rows: tithes }, { name: 'Contributions', rows: contributions }, { name: 'Other income', rows: incomes },
+      { name: 'Expenses', rows: expenses }, { name: 'Budgets', rows: budgets },
+      { name: 'Welfare', rows: Object.entries(welfareRecords || {}).map(([id, rec]) => ({ member: nameOf(id), member_id: id, last_updated: (welfareDates || {})[id] || '', records: rec })) },
+      { name: 'Attendance', rows: attendanceLogs }, { name: 'Services', rows: servicesList }, { name: 'Events', rows: eventsList },
+      { name: 'Visitors', rows: visitorsList }, { name: 'New converts', rows: convertsList },
+      { name: 'Facilities', rows: assetsList }, { name: 'Leaders', rows: leadersList }, { name: 'Duty rotas', rows: rotasList }, { name: 'Videos', rows: videosList },
+      { name: 'Fellowships', rows: fellowshipsList.map(f => ({ ...f, member_ids: undefined, members: (f.member_ids || []).map(nameOf).join(', ') })) },
+      { name: 'Branches', rows: branchesList },
+      { name: 'Pledges', rows: pledgesList.map(p => ({ ...p, payments: undefined, paid: (p.payments || []).reduce((a, x) => a + (parseFloat(x.amount) || 0), 0), payment_dates: (p.payments || []).map(x => x.date + ' ' + x.amount).join('; ') })) }
+    ];
+    saveTextFile(buildWorkbookXml(sheets), 'Gracepoint-backup-' + new Date().toISOString().slice(0, 10) + '.xls', 'application/vnd.ms-excel');
+    logActivity('Backup', 'Downloaded the Excel backup');
+  };
+  const downloadBackupJson = () => {
+    const all = { exported_at: new Date().toISOString(), members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList };
+    saveTextFile(JSON.stringify(all, null, 1), 'Gracepoint-backup-' + new Date().toISOString().slice(0, 10) + '.json', 'application/json');
+    logActivity('Backup', 'Downloaded the full data backup');
+  };
 
   if (loading) {
     return (
@@ -2614,6 +3108,8 @@ export default function Home() {
             const L = role === 'member' ? board.leaders : leadersList;
             const R = role === 'member' ? board.rotas : rotasList;
             const V = role === 'member' ? board.videos : videosList;
+            const FS = role === 'member' ? board.fellowships : fellowshipsList;
+            const myFellowships = (FS || []).filter(f => (f.member_ids || []).map(String).includes(String(currentMemberRecord.id)));
             const first = String(currentMemberRecord.first_name || '').trim().toLowerCase();
             const today = todayStr();
             const upcoming = [...R].filter(r => !r.rota_date || r.rota_date >= today).sort((a, b) => String(a.rota_date || '').localeCompare(String(b.rota_date || ''))).slice(0, 8);
@@ -2621,6 +3117,18 @@ export default function Home() {
             const h3s = { fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' };
             return (
               <div>
+                {memberPage === 'ministry' && myFellowships.length > 0 && (
+                  <div style={card}>
+                    <h3 style={h3s}>🏠 My House Fellowship</h3>
+                    {myFellowships.map((f, i) => (
+                      <div key={i} style={{ padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.92rem' }}>
+                        <strong>{f.name}</strong>
+                        <div style={{ color: '#475569', fontSize: '0.85rem' }}>Leader: {f.leader_name || 'Not set'}</div>
+                        <div style={{ color: '#475569', fontSize: '0.85rem' }}>{f.meeting_day}{f.meeting_time ? ' at ' + f.meeting_time : ''}{f.location ? ' - ' + f.location : ''}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {memberPage === 'ministry' && upcoming.length > 0 && (
                   <div style={card}>
                     <h3 style={h3s}>Duty Roster</h3>
@@ -2859,14 +3367,14 @@ export default function Home() {
 
         {(() => {
           const groups = [
-            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')]] },
-            { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')]] },
+            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')], ['followup', 'Follow-up', can('record_visitors') || can('record_new_converts')], ['fellowships', 'House Fellowship', can('manage_fellowships')]] },
+            { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')], ['branches', 'Branches', can('manage_fellowships')]] },
             { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['checkin', 'QR Check-in', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')]] },
-            { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')]] },
+            { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')], ['pledges', 'Pledges', can('access_finance')]] },
             { id: 'facilities', label: '🏢 Facilities', tabs: [['facilities', 'Facilities', can('manage_facilities')]] },
             { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')], ['messages', 'Messages', can('send_messages')], ['reports', 'Reports', can('view_reports')]] },
             { id: 'media', label: '🎬 Videos', tabs: [['videos', 'Sermons & Videos', can('manage_videos')]] },
-            { id: 'admin', label: '⚙️ Admin', tabs: [['permissions', '🔐 Admin Permissions', role === 'super_admin'], ['settings', '⚙️ Settings', role === 'super_admin']] }
+            { id: 'admin', label: '⚙️ Admin', tabs: [['permissions', '🔐 Admin Permissions', role === 'super_admin'], ['settings', '⚙️ Settings', role === 'super_admin'], ['activity', '📜 Activity Log', role === 'super_admin']] }
           ].map(g => ({ ...g, tabs: g.tabs.filter(t => t[2]) })).filter(g => g.tabs.length > 0);
           const activeGroup = groups.find(g => g.tabs.some(t => t[0] === activeTab)) || groups[0];
           const goTo = (id) => { setActiveTab(id); setFinanceView('hub'); setShowRegisterForm(false); };
@@ -2979,6 +3487,35 @@ export default function Home() {
                     style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', fontSize: '0.95rem', boxSizing: 'border-box', backgroundColor: '#ffffff' }}
                   />
                 </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                  <select value={fDept} onChange={(e) => setFDept(e.target.value)} style={{ padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', fontSize: '0.85rem' }}>
+                    <option value="">All core departments</option>
+                    {CORE_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <select value={fSub} onChange={(e) => setFSub(e.target.value)} style={{ padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', fontSize: '0.85rem' }}>
+                    <option value="">All sub-departments</option>
+                    {SUB_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <select value={fGender} onChange={(e) => setFGender(e.target.value)} style={{ padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', fontSize: '0.85rem' }}>
+                    <option value="">All genders</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                  <select value={fMarital} onChange={(e) => setFMarital(e.target.value)} style={{ padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', fontSize: '0.85rem' }}>
+                    <option value="">All marital statuses</option>
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Divorced">Divorced</option>
+                    <option value="Widowed">Widowed</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.9rem', fontSize: '0.85rem', color: '#475569' }}>
+                  <span>Showing {filteredMembers.length} of {members.length} members</span>
+                  <span style={{ display: 'flex', gap: '0.5rem' }}>
+                    {(fDept || fSub || fGender || fMarital || searchQuery) && <button type="button" onClick={() => { setFDept(''); setFSub(''); setFGender(''); setFMarital(''); setSearchQuery(''); }} style={{ background: 'none', border: 'none', color: themeColor, fontWeight: 'bold', cursor: 'pointer' }}>Clear filters</button>}
+                    {can('register_members') && <button type="button" onClick={() => printIdCards(filteredMembers)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.35rem 0.7rem', borderRadius: '0.4rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.82rem' }}>🪪 Print ID cards</button>}
+                  </span>
+                </div>
                 {can('register_members') && (
                 <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.75rem' }}>
                   <button 
@@ -3028,9 +3565,17 @@ export default function Home() {
                             <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.1rem' }}>
                               DOB: {m.date_of_birth || 'N/A'} | Baptism: {m.date_of_baptism || 'N/A'} | Joined: {m.date_joined || 'N/A'}
                             </div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.1rem' }}>
+                              {m.gender || 'Gender N/A'} | {m.marital_status || 'Marital N/A'} | Occupation: {m.occupation || 'N/A'} | Children: {m.number_of_children == null ? 'N/A' : m.number_of_children}
+                            </div>
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+{can('register_members') && (
+                          <button type="button" onClick={() => printIdCards([m])} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                            🪪 ID Card
+                          </button>
+                          )}
 {can('register_members') && (
                           <button type="button" onClick={() => handleStartEditMember(m)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#2563eb' }}>
                             ✏️ Edit
@@ -4028,6 +4573,56 @@ export default function Home() {
           />
         )}
 
+        {/* House Fellowship */}
+        {activeTab === 'fellowships' && can('manage_fellowships') && (
+          <FellowshipsTab items={fellowshipsList} onChange={setFellowshipsList} members={members} theme={themeColor} canDelete={role === 'super_admin'} />
+        )}
+
+        {/* Branches */}
+        {activeTab === 'branches' && can('manage_fellowships') && (
+          <RecordTab
+            title="Church Branches"
+            addLabel="+ Add Branch"
+            titleKey="name"
+            emptyText="No branches added yet."
+            canDelete={role === 'super_admin'}
+            theme={themeColor}
+            items={branchesList}
+            onAdd={(item) => setBranchesList([item, ...branchesList])}
+            onDelete={(i) => setBranchesList(branchesList.filter((_, idx) => idx !== i))}
+            fields={[
+              { key: 'name', label: 'Branch name', required: true },
+              { key: 'pastor', label: 'Resident pastor / overseer' },
+              { key: 'phone', label: 'Phone number', type: 'tel' },
+              { key: 'location', label: 'Town / location' },
+              { key: 'address', label: 'Address' },
+              { key: 'established', label: 'Date established', type: 'date' },
+              { key: 'notes', label: 'Notes', type: 'textarea' }
+            ]}
+          />
+        )}
+
+        {/* Follow-up */}
+        {activeTab === 'followup' && (can('record_visitors') || can('record_new_converts')) && (
+          <FollowUpTab
+            visitors={can('record_visitors') ? visitorsList : null}
+            converts={can('record_new_converts') ? convertsList : null}
+            setVisitors={setVisitorsList}
+            setConverts={setConvertsList}
+            theme={themeColor}
+          />
+        )}
+
+        {/* Pledges */}
+        {activeTab === 'pledges' && can('access_finance') && (
+          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} />
+        )}
+
+        {/* Activity Log */}
+        {activeTab === 'activity' && role === 'super_admin' && (
+          <ActivityTab theme={themeColor} />
+        )}
+
         {/* Leaders Tab */}
         {activeTab === 'leaders' && can('manage_leaders') && (
           <LeadersTab
@@ -4094,6 +4689,11 @@ export default function Home() {
             visitors={can('record_visitors') ? visitorsList : null}
             converts={can('record_new_converts') ? convertsList : null}
             services={can('register_services') ? servicesList : null}
+            fellowships={can('manage_fellowships') ? fellowshipsList : null}
+            branches={can('manage_fellowships') ? branchesList : null}
+            pledges={can('access_finance') ? pledgesList : null}
+            onBackupExcel={role === 'super_admin' ? downloadBackupExcel : null}
+            onBackupJson={role === 'super_admin' ? downloadBackupJson : null}
             events={can('register_events') ? eventsList : null}
             theme={themeColor}
             openPrint={openPrintWindow}
