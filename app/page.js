@@ -1211,6 +1211,261 @@ function ActivityTab({ theme }) {
 }
 
 
+// ---------- Birthdays and anniversaries ----------
+function celebrations(members, withinDays) {
+  const out = [];
+  const now = new Date();
+  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const kinds = [['date_of_birth', 'Birthday'], ['date_joined', 'Membership anniversary'], ['date_of_baptism', 'Baptism anniversary']];
+  members.forEach(m => {
+    kinds.forEach(([field, kind]) => {
+      const v = String(m[field] || '');
+      if (!/^\d{4}-\d{2}-\d{2}/.test(v)) return;
+      const y0 = parseInt(v.slice(0, 4), 10), mo = parseInt(v.slice(5, 7), 10), d = parseInt(v.slice(8, 10), 10);
+      let next = new Date(t0.getFullYear(), mo - 1, d);
+      if (next < t0) next = new Date(t0.getFullYear() + 1, mo - 1, d);
+      const daysAway = Math.round((next - t0) / 86400000);
+      const years = next.getFullYear() - y0;
+      if (daysAway > withinDays) return;
+      if (kind !== 'Birthday' && years < 1) return;
+      out.push({ m, kind, daysAway, years, label: String(mo).padStart(2, '0') + '/' + String(d).padStart(2, '0') });
+    });
+  });
+  return out.sort((a, b) => a.daysAway - b.daysAway || String(a.m.first_name || '').localeCompare(String(b.m.first_name || '')));
+}
+function greetingText(c, churchName) {
+  const first = c.m.first_name || '';
+  if (c.kind === 'Birthday') return 'Happy birthday ' + first + '! May God bless you and grant you another wonderful year. - ' + churchName;
+  if (c.kind === 'Membership anniversary') return 'Happy ' + c.years + '-year anniversary as part of ' + churchName + ', ' + first + '! Thank you for being family. God bless you.';
+  return 'Happy ' + c.years + '-year baptism anniversary, ' + first + '! May you keep walking with Christ. - ' + churchName;
+}
+
+// ---------- Admin home: today's celebrations, quick numbers, attendance trend ----------
+function HomeDashboard({ members, attendance, money, followUps, theme, churchName, goTo }) {
+  const num = (v) => parseFloat(v) || 0;
+  const cel = celebrations(members, 7);
+  const today = cel.filter(c => c.daysAway === 0);
+  const soon = cel.filter(c => c.daysAway > 0);
+  const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1rem' };
+  const h = { margin: '0 0 0.6rem 0', fontSize: '1.05rem', fontWeight: 'bold', color: theme };
+  const tile = (label, value, tab) => (
+    <button key={label} type="button" onClick={tab ? () => goTo(tab) : undefined} style={{ textAlign: 'left', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.8rem', padding: '0.8rem', cursor: tab ? 'pointer' : 'default' }}>
+      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{label}</div>
+      <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#0f172a' }}>{value}</div>
+    </button>
+  );
+  const ym = new Date().toISOString().slice(0, 7);
+  const yr = String(new Date().getFullYear());
+  const tiles = [tile('Members', members.length, 'members'), tile('Joined this year', members.filter(m => String(m.date_joined || '').startsWith(yr)).length, 'members')];
+  const totals = (attendance || []).map(a => ({ d: String(a.service_date || ''), t: num(a.men_count) + num(a.women_count) + num(a.children_count) })).filter(x => x.d);
+  if (attendance) {
+    const last = [...totals].sort((a, b) => b.d.localeCompare(a.d))[0];
+    tiles.push(tile('Last service attendance', last ? last.t : '-', 'attendance'));
+  }
+  if (money) tiles.push(tile('Income this month', 'GHS ' + [...money.tithes, ...money.contributions, ...money.incomes].filter(x => String(x.date || '').startsWith(ym)).reduce((a, x) => a + num(x.amount), 0).toFixed(2), 'contributions'));
+  if (followUps !== null) tiles.push(tile('Waiting for follow-up', followUps, 'followup'));
+
+  // weekly attendance for the last 8 weeks (weeks start on Monday)
+  const weekStart = (d) => { const dt = new Date(d + 'T00:00:00'); const day = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - day); return dt.toISOString().slice(0, 10); };
+  const labels = [], values = [];
+  if (attendance) {
+    const now = new Date();
+    const thisWeek = weekStart(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12).toISOString().slice(0, 10));
+    const byWeek = {};
+    totals.forEach(x => { const w = weekStart(x.d); byWeek[w] = (byWeek[w] || 0) + x.t; });
+    for (let i = 7; i >= 0; i--) {
+      const dt = new Date(thisWeek + 'T00:00:00'); dt.setDate(dt.getDate() - i * 7);
+      const k = dt.toISOString().slice(0, 10);
+      labels.push(k.slice(5)); values.push(byWeek[k] || 0);
+    }
+  }
+  const trendNote = (() => {
+    if (!attendance || values.length < 2) return '';
+    const withData = values.filter(v => v > 0);
+    if (withData.length < 2) return '';
+    const last = values[values.length - 1] || values[values.length - 2];
+    const prev = values.slice(0, -1).filter(v => v > 0);
+    const avg = prev.reduce((a, b) => a + b, 0) / prev.length;
+    const diff = Math.round((last - avg) / avg * 100);
+    return 'Latest week is ' + Math.abs(diff) + '% ' + (diff >= 0 ? 'above' : 'below') + ' the average of the earlier weeks.';
+  })();
+
+  const celRow = (c, i) => {
+    const phone = String(c.m.phone || '').replace(/\s+/g, '');
+    const msg = greetingText(c, churchName);
+    return (
+      <div key={c.kind + c.m.id + i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.92rem' }}>
+          <span><strong>{displayName(c.m)}</strong> - {c.kind}{c.kind !== 'Birthday' ? ' (' + c.years + ' yrs)' : ''}</span>
+          <span style={{ color: '#64748b', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{c.daysAway === 0 ? 'Today' : c.daysAway === 1 ? 'Tomorrow' : c.label}</span>
+        </div>
+        {phone ? (
+          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+            <a href={'sms:' + phone + '?body=' + encodeURIComponent(msg)} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', textDecoration: 'none', padding: '0.3rem 0.65rem', borderRadius: '0.4rem', fontSize: '0.8rem', fontWeight: 'bold' }}>💬 SMS</a>
+            <a href={'https://wa.me/' + waNumber(phone) + '?text=' + encodeURIComponent(msg)} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#dcfce7', color: '#166534', textDecoration: 'none', padding: '0.3rem 0.65rem', borderRadius: '0.4rem', fontSize: '0.8rem', fontWeight: 'bold' }}>🟢 WhatsApp</a>
+          </div>
+        ) : <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>No phone number saved.</div>}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 1rem 0' }}>Home</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '1rem' }}>{tiles}</div>
+
+      <div style={card}>
+        <h4 style={h}>🎉 Celebrating today ({today.length})</h4>
+        {today.length === 0 && <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>No birthdays or anniversaries today.</p>}
+        {today.map(celRow)}
+      </div>
+
+      <div style={card}>
+        <h4 style={h}>📅 Coming up in the next 7 days ({soon.length})</h4>
+        {soon.length === 0 && <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Nothing in the next 7 days.</p>}
+        {soon.map(celRow)}
+      </div>
+
+      {attendance && (
+        <div style={card}>
+          <h4 style={h}>Weekly attendance (last 8 weeks)</h4>
+          {values.some(v => v > 0) ? <ReportChart type="line" labels={labels} values={values} color={theme} /> : <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Record attendance to see the weekly trend here.</p>}
+          {trendNote && <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#475569' }}>{trendNote}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Prayer requests: member side ----------
+const PRAYER_CATEGORIES = ['Healing', 'Family', 'Finance & work', 'Guidance', 'Thanksgiving', 'Salvation', 'Other'];
+function MemberPrayer({ user, member, theme }) {
+  const [rows, setRows] = useState(null);
+  const [form, setForm] = useState({ request: '', category: 'Healing', confidential: false });
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const email = String((user && user.email) || '').toLowerCase();
+  const load = async () => {
+    const { data, error } = await supabase.from('prayer_requests').select('*').eq('member_email', email).order('created_at', { ascending: false });
+    if (error) { setMsg('Could not load your requests: ' + error.message + ' (has supabase-batch4.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { if (email) load(); }, [email]);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.request.trim()) return;
+    setBusy(true); setMsg('');
+    const { error } = await supabase.from('prayer_requests').insert({ member_id: String((member && member.id) || ''), member_email: email, member_name: displayName(member || {}), request: form.request.trim(), category: form.category, confidential: !!form.confidential, status: 'new' });
+    setBusy(false);
+    if (error) { setMsg('Could not send: ' + error.message); return; }
+    setForm({ request: '', category: 'Healing', confidential: false });
+    setMsg('Your prayer request has been sent. We are praying with you.');
+    load();
+  };
+  const remove = async (id) => {
+    if (!confirm('Remove this request?')) return;
+    await supabase.from('prayer_requests').delete().eq('id', id);
+    load();
+  };
+  const statusLook = { new: ['Received', '#fef3c7', '#92400e'], praying: ['We are praying', '#dbeafe', '#1e40af'], answered: ['Answered 🙌', '#dcfce7', '#166534'] };
+  return (
+    <div>
+      <div style={{ ...cardBox, border: '2px solid ' + theme }}>
+        <h3 style={{ margin: '0 0 0.4rem 0', color: theme, fontSize: '1.1rem' }}>🙏 Send a Prayer Request</h3>
+        <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Our pastors and prayer team will pray with you. Tick "Confidential" if only the Super Admin should see it.</p>
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+          <select style={formBox} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{PRAYER_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+          <textarea style={{ ...formBox, minHeight: '6rem' }} required maxLength={1500} placeholder="Write your prayer request here..." value={form.request} onChange={(e) => setForm({ ...form, request: e.target.value })} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.88rem', color: '#334155' }}><input type="checkbox" checked={form.confidential} onChange={(e) => setForm({ ...form, confidential: e.target.checked })} /> Confidential (Super Admin only)</label>
+          <button type="submit" disabled={busy} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>{busy ? 'Sending...' : 'Send Request'}</button>
+        </form>
+        {msg && <div style={{ marginTop: '0.7rem', padding: '0.7rem', borderRadius: '0.5rem', fontSize: '0.88rem', backgroundColor: msg.startsWith('Could not') ? '#fee2e2' : '#dcfce7', color: msg.startsWith('Could not') ? '#991b1b' : '#166534' }}>{msg}</div>}
+      </div>
+      <h4 style={{ color: theme, margin: '1rem 0 0.5rem 0' }}>My requests</h4>
+      {rows === null && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Loading...</p>}
+      {rows && rows.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>You have not sent any requests yet.</p>}
+      {(rows || []).map(r => {
+        const look = statusLook[r.status] || statusLook.new;
+        return (
+          <div key={r.id} style={cardBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleDateString()} - {r.category}{r.confidential ? ' - confidential' : ''}</span>
+              <span style={{ backgroundColor: look[1], color: look[2], padding: '0.15rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 'bold' }}>{look[0]}</span>
+            </div>
+            <div style={{ fontSize: '0.92rem', color: '#0f172a', marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{r.request}</div>
+            {r.admin_note ? <div style={{ fontSize: '0.85rem', color: theme, marginTop: '0.4rem' }}>Note from the prayer team: {r.admin_note}</div> : null}
+            {r.status === 'new' && <button type="button" onClick={() => remove(r.id)} style={{ marginTop: '0.5rem', background: 'none', border: 'none', color: '#dc2626', fontWeight: 'bold', cursor: 'pointer', padding: 0, fontSize: '0.8rem' }}>Remove</button>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Prayer requests: prayer team / admin side ----------
+function PrayerAdmin({ members, theme, isSuper }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [filter, setFilter] = useState('open');
+  const [notes, setNotes] = useState({});
+  const load = async () => {
+    setErr('');
+    const { data, error } = await supabase.from('prayer_requests').select('*').order('created_at', { ascending: false }).limit(300);
+    if (error) { setErr('Could not load prayer requests: ' + error.message + ' (has supabase-batch4.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const update = async (id, patch) => {
+    const { error } = await supabase.from('prayer_requests').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) alert('Could not update: ' + error.message); else load();
+  };
+  const remove = async (id) => {
+    if (!confirm('Delete this prayer request?')) return;
+    const { error } = await supabase.from('prayer_requests').delete().eq('id', id);
+    if (error) alert('Could not delete: ' + error.message); else load();
+  };
+  const shown = (rows || []).filter(r => filter === 'all' ? true : filter === 'open' ? r.status !== 'answered' : r.status === filter);
+  const phoneOf = (email) => { const m = members.find(x => String(x.email || '').toLowerCase() === String(email || '').toLowerCase()); return m ? String(m.phone || '').replace(/\s+/g, '') : ''; };
+  const pill = (on) => ({ backgroundColor: on ? theme : '#f1f5f9', color: on ? '#ffffff' : '#334155', border: 'none', padding: '0.45rem 0.8rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.82rem' });
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Prayer Requests</h3>
+        <button type="button" onClick={load} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.5rem 0.9rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>↻ Refresh</button>
+      </div>
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
+        {[['open', 'Open'], ['new', 'New'], ['praying', 'Praying'], ['answered', 'Answered'], ['all', 'All']].map(([k, t]) => <button key={k} type="button" onClick={() => setFilter(k)} style={pill(filter === k)}>{t}</button>)}
+      </div>
+      {err && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>{err}</div>}
+      {rows === null && <p style={{ color: '#64748b' }}>Loading...</p>}
+      {rows && shown.length === 0 && !err && <p style={{ color: '#64748b' }}>No prayer requests here.</p>}
+      {shown.map(r => {
+        const phone = phoneOf(r.member_email);
+        return (
+          <div key={r.id} style={cardBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{r.member_name || r.member_email}{r.confidential ? ' 🔒' : ''}</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()} - {r.category} - {r.status}</div>
+              </div>
+              {isSuper && <button type="button" onClick={() => remove(r.id)} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626', alignSelf: 'flex-start' }}>🗑️</button>}
+            </div>
+            <div style={{ fontSize: '0.92rem', color: '#0f172a', margin: '0.5rem 0', whiteSpace: 'pre-wrap' }}>{r.request}</div>
+            <input style={{ ...formBox, marginBottom: '0.5rem' }} placeholder="Short note to the member (optional)" value={notes[r.id] !== undefined ? notes[r.id] : (r.admin_note || '')} onChange={(e) => setNotes({ ...notes, [r.id]: e.target.value })} />
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {r.status !== 'praying' && <button type="button" onClick={() => update(r.id, { status: 'praying', admin_note: notes[r.id] !== undefined ? notes[r.id] : r.admin_note })} style={{ backgroundColor: '#dbeafe', color: '#1e40af', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}>🙏 Praying</button>}
+              {r.status !== 'answered' && <button type="button" onClick={() => update(r.id, { status: 'answered', admin_note: notes[r.id] !== undefined ? notes[r.id] : r.admin_note })} style={{ backgroundColor: '#dcfce7', color: '#166534', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}>🙌 Answered</button>}
+              {r.status !== 'new' && <button type="button" onClick={() => update(r.id, { status: 'new' })} style={{ backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}>Reopen</button>}
+              <button type="button" onClick={() => update(r.id, { admin_note: notes[r.id] !== undefined ? notes[r.id] : r.admin_note })} style={{ backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}>Save note</button>
+              {phone && <a href={'tel:' + phone} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', textDecoration: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem' }}>📞 Call</a>}
+              {phone && <a href={'https://wa.me/' + waNumber(phone)} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#dcfce7', color: '#166534', textDecoration: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem' }}>🟢 WhatsApp</a>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 // ---------- Church Leaders: pick the member, department fills in from the lists ----------
 function LeadersTab({ items, onAdd, onDelete, canDelete, members, theme }) {
   const blank = { member_id: '', leader_name: '', position: '', department: '', phone: '', email: '', since: '', notes: '', photo_url: '' };
@@ -1716,7 +1971,7 @@ export default function Home() {
   const [isSelfRegistering, setIsSelfRegistering] = useState(false);
 
   // Dashboard State
-  const [activeTab, setActiveTab] = useState('members');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [financeView, setFinanceView] = useState('hub');
   
   const [members, setMembers] = useState([]);
@@ -1746,6 +2001,7 @@ export default function Home() {
   const [memberMenuOpen, setMemberMenuOpen] = useState(false);
   const [payForm, setPayForm] = useState({ amount: '', type: 'Offering' });
   const [payBusy, setPayBusy] = useState(false);
+  const [stmtYear, setStmtYear] = useState(String(new Date().getFullYear()));
   const [payMsg, setPayMsg] = useState('');
   const [profileEdit, setProfileEdit] = useState(false);
   const [profileForm, setProfileForm] = useState({});
@@ -1843,7 +2099,8 @@ export default function Home() {
     ],
     'Reports & Communication': [
       { key: 'view_reports', label: 'View reports' },
-      { key: 'send_messages', label: 'Send messages to members' }
+      { key: 'send_messages', label: 'Send messages to members' },
+      { key: 'manage_prayer', label: 'View & manage prayer requests' }
     ],
     'Videos & Integrations': [
       { key: 'manage_videos', label: 'Manage sermon videos & links' }
@@ -2101,7 +2358,7 @@ export default function Home() {
 
   // Pick up other admins' latest entries when a records screen is opened
   useEffect(() => {
-    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos', 'fellowships', 'branches', 'followup', 'pledges'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos', 'fellowships', 'branches', 'followup', 'pledges', 'dashboard', 'prayer'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
       loadSections(role === 'super_admin', myPermissions);
     }
   }, [activeTab]);
@@ -2681,6 +2938,25 @@ export default function Home() {
     w.document.close();
   };
 
+  const printGivingStatement = (member, src, year) => {
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const num = (v) => parseFloat(v) || 0;
+    const money = (n) => 'GHS ' + num(n).toFixed(2);
+    const inYear = (d) => String(d || '').startsWith(String(year));
+    const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || ''));
+    const t = (src.tithes || []).filter(x => inYear(x.date)).sort(byDate);
+    const c = [...(src.contributions || []).map(x => ({ date: x.date, type: x.type || 'Contribution', amount: x.amount })), ...(src.incomes || []).map(x => ({ date: x.date, type: x.source || 'General income', amount: x.amount }))].filter(x => inYear(x.date)).sort(byDate);
+    const welMonths = Object.entries(src.welfare || {}).map(([m, w]) => [m, (Array.isArray(w) ? w : []).reduce((a, b) => a + num(b), 0)]).filter(([, v]) => v > 0);
+    const tT = t.reduce((a, x) => a + num(x.amount), 0), cT = c.reduce((a, x) => a + num(x.amount), 0), wT = welMonths.reduce((a, [, v]) => a + v, 0);
+    let html = '<div class="sub"><strong>' + esc(displayName(member)) + '</strong> - ' + esc(memberNo(member)) + '<br/>Statement period: 1 January ' + esc(year) + ' to 31 December ' + esc(year) + '</div>';
+    html += '<h3>Tithes</h3>' + (t.length ? '<table><thead><tr><th>Date</th><th>Amount</th></tr></thead><tbody>' + t.map(x => '<tr><td>' + esc(x.date) + (x.online ? ' (online)' : '') + '</td><td>' + money(x.amount) + '</td></tr>').join('') + '</tbody></table>' : '<p>No tithes recorded for ' + esc(year) + '.</p>');
+    html += '<h3>Contributions and other giving</h3>' + (c.length ? '<table><thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead><tbody>' + c.map(x => '<tr><td>' + esc(x.date) + '</td><td>' + esc(x.type) + '</td><td>' + money(x.amount) + '</td></tr>').join('') + '</tbody></table>' : '<p>No contributions recorded for ' + esc(year) + '.</p>');
+    html += '<h3>Welfare (from the welfare tracker)</h3>' + (welMonths.length ? '<table><thead><tr><th>Month</th><th>Amount</th></tr></thead><tbody>' + welMonths.map(([m, v]) => '<tr><td>' + esc(m) + '</td><td>' + money(v) + '</td></tr>').join('') + '</tbody></table>' : '<p>No welfare recorded.</p>');
+    html += '<h3>Summary</h3><table><tbody><tr><td>Total tithes</td><td>' + money(tT) + '</td></tr><tr><td>Total contributions and other giving</td><td>' + money(cT) + '</td></tr><tr><td>Total welfare</td><td>' + money(wT) + '</td></tr><tr><td><strong>Grand total</strong></td><td><strong>' + money(tT + cT + wT) + '</strong></td></tr></tbody></table>';
+    html += '<p style="margin-top:22px;font-size:12px;color:#475569">Thank you for your faithful giving. This statement was produced from the church records on ' + new Date().toLocaleDateString() + '. For any correction, please contact the church office.</p>';
+    openPrintWindow('Giving Statement ' + year, html);
+  };
+
   const downloadBackupExcel = () => {
     const nameOf = (id) => { const m = members.find(x => String(x.id) === String(id)); return m ? displayName(m) : ''; };
     const sheets = [
@@ -2983,7 +3259,7 @@ export default function Home() {
             ['MY GIVING', [['giving', '💳 Give Online & My Records']]],
             ['COMMUNICATION', [['communication', '📢 Announcements']]],
             ['EVENTS & MINISTRY', [['ministry', '⛪ Events, Duty Roster & Leaders']]],
-            ['SPIRITUAL CORNER', [['spiritual', '🎬 Sermons & Videos']]]
+            ['SPIRITUAL CORNER', [['spiritual', '🎬 Sermons & Videos'], ['prayer', '🙏 Prayer Requests']]]
           ];
           return (
             <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, zIndex: 50 }}>
@@ -3095,6 +3371,11 @@ export default function Home() {
             </h2>
             <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Core Department: <strong>{currentMemberRecord.core_department || 'N/A'}</strong></p>
           </div>
+          {celebrations(currentMemberRecord.id ? [currentMemberRecord] : [], 0).map((c, i) => (
+            <div key={i} style={{ backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1rem', color: '#92400e', fontWeight: 'bold' }}>
+              {c.kind === 'Birthday' ? '🎉 Happy Birthday, ' + (currentMemberRecord.first_name || '') + '! May God bless you abundantly.' : '🎊 Happy ' + c.years + '-year ' + c.kind.toLowerCase() + ', ' + (currentMemberRecord.first_name || '') + '!'}
+            </div>
+          ))}
           </div>
 
           {saveError && (
@@ -3245,6 +3526,10 @@ export default function Home() {
             );
           })()}
 
+          {memberPage === 'prayer' && (
+            <MemberPrayer user={user} member={currentMemberRecord} theme={themeColor} />
+          )}
+
           <div style={{ display: memberPage === 'giving' ? 'block' : 'none' }}>
           <div style={{ backgroundColor: '#ffffff', border: '2px solid ' + themeColor, borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.4rem 0' }}>💳 Give Online</h3>
@@ -3268,6 +3553,24 @@ export default function Home() {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Contributions &amp; Income</span><strong>GHS {memberContribTotal.toFixed(2)}</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Welfare</span><strong>GHS {memberWelfareTotal.toFixed(2)}</strong></div>
           </div>
+
+          {(() => {
+            const yrs = new Set([String(new Date().getFullYear())]);
+            [...(mf.tithes || []), ...(mf.contributions || []), ...(mf.incomes || [])].forEach(x => { const y = String(x.date || '').slice(0, 4); if (/^\d{4}$/.test(y)) yrs.add(y); });
+            const list = [...yrs].sort().reverse();
+            return (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.4rem 0' }}>📄 Giving Statement</h3>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.7rem 0' }}>Download your yearly giving statement as a PDF with the church logo.</p>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select value={stmtYear} onChange={(e) => setStmtYear(e.target.value)} style={{ padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff' }}>
+                    {list.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <button type="button" onClick={() => printGivingStatement(currentMemberRecord, mf, stmtYear)} style={{ flex: 1, backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.65rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Download Statement (PDF)</button>
+                </div>
+              </div>
+            );
+          })()}
 
           <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.5rem', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>My Tithes History</h3>
@@ -3367,12 +3670,13 @@ export default function Home() {
 
         {(() => {
           const groups = [
+            { id: 'home', label: '🏠 Home', tabs: [['dashboard', 'Dashboard', true]] },
             { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')], ['followup', 'Follow-up', can('record_visitors') || can('record_new_converts')], ['fellowships', 'House Fellowship', can('manage_fellowships')]] },
             { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')], ['branches', 'Branches', can('manage_fellowships')]] },
             { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['checkin', 'QR Check-in', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')]] },
             { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')], ['pledges', 'Pledges', can('access_finance')]] },
             { id: 'facilities', label: '🏢 Facilities', tabs: [['facilities', 'Facilities', can('manage_facilities')]] },
-            { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')], ['messages', 'Messages', can('send_messages')], ['reports', 'Reports', can('view_reports')]] },
+            { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')], ['messages', 'Messages', can('send_messages')], ['prayer', 'Prayer Requests', can('manage_prayer')], ['reports', 'Reports', can('view_reports')]] },
             { id: 'media', label: '🎬 Videos', tabs: [['videos', 'Sermons & Videos', can('manage_videos')]] },
             { id: 'admin', label: '⚙️ Admin', tabs: [['permissions', '🔐 Admin Permissions', role === 'super_admin'], ['settings', '⚙️ Settings', role === 'super_admin'], ['activity', '📜 Activity Log', role === 'super_admin']] }
           ].map(g => ({ ...g, tabs: g.tabs.filter(t => t[2]) })).filter(g => g.tabs.length > 0);
@@ -3396,6 +3700,24 @@ export default function Home() {
             </div>
           );
         })()}
+
+        {/* Home dashboard */}
+        {activeTab === 'dashboard' && (
+          <HomeDashboard
+            members={members}
+            attendance={can('record_attendance') ? attendanceLogs : null}
+            money={(can('access_finance') || can('view_balance_sheet')) ? { tithes, contributions, incomes } : null}
+            followUps={(can('record_visitors') || can('record_new_converts')) ? ((can('record_visitors') ? visitorsList.filter(v => !v.followed_up).length : 0) + (can('record_new_converts') ? convertsList.filter(c => !c.followed_up && (c.follow_up || 'New') === 'New').length : 0)) : null}
+            theme={themeColor}
+            churchName={churchName}
+            goTo={(id) => { setActiveTab(id); setFinanceView('hub'); setShowRegisterForm(false); }}
+          />
+        )}
+
+        {/* Prayer requests */}
+        {activeTab === 'prayer' && can('manage_prayer') && (
+          <PrayerAdmin members={members} theme={themeColor} isSuper={role === 'super_admin'} />
+        )}
 
         {/* Admin Permissions Tab (Super Admin Only) */}
         {activeTab === 'permissions' && role === 'super_admin' && (() => {
@@ -3574,6 +3896,16 @@ export default function Home() {
 {can('register_members') && (
                           <button type="button" onClick={() => printIdCards([m])} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}>
                             🪪 ID Card
+                          </button>
+                          )}
+{can('access_finance') && (
+                          <button type="button" onClick={() => {
+                            const y = prompt('Giving statement for which year?', String(new Date().getFullYear()));
+                            if (!y) return;
+                            const id = String(m.id);
+                            printGivingStatement(m, { tithes: tithes.filter(x => String(x.member_id) === id), contributions: contributions.filter(x => String(x.member_id) === id), incomes: incomes.filter(x => x.member_id && String(x.member_id) === id), welfare: welfareRecords[id] || {} }, y.trim());
+                          }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                            📄 Statement
                           </button>
                           )}
 {can('register_members') && (
