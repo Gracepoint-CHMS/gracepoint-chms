@@ -424,7 +424,7 @@ const DEFAULT_BALANCE_NOTES = 'Assets match total equity and liabilities.';
 
 // Records are saved in sections. Each section is one row in the app_data table.
 const SECTION_DEFS = {
-  finance: ['incomes', 'expenses', 'tithes', 'budgets', 'contributions', 'welfareRecords', 'welfareDates', 'openingBalance', 'accountReportNotes', 'balanceSheetNotes'],
+  finance: ['incomes', 'expenses', 'tithes', 'budgets', 'contributions', 'welfareRecords', 'welfareDates', 'openingBalance', 'accountReportNotes', 'balanceSheetNotes', 'deptBudgets'],
   attendance: ['attendanceLogs'],
   events: ['eventsList'],
   announcements: ['announcementsList'],
@@ -435,7 +435,7 @@ const SECTION_DEFS = {
   leaders: ['leadersList'],
   rotas: ['rotasList'],
   videos: ['videosList'],
-  fellowships: ['fellowshipsList', 'branchesList'],
+  fellowships: ['fellowshipsList', 'branchesList', 'groupsList'],
   pledges: ['pledgesList']
 };
 const SECTION_WRITE_PERM = {
@@ -452,7 +452,7 @@ const FIELD_DEFAULTS = {
   accountReportNotes: DEFAULT_ACCOUNT_NOTES, balanceSheetNotes: DEFAULT_BALANCE_NOTES,
   attendanceLogs: [], eventsList: [], announcementsList: [], servicesList: [],
   visitorsList: [], convertsList: [], assetsList: [], leadersList: [], rotasList: [], videosList: [],
-  fellowshipsList: [], branchesList: [], pledgesList: []
+  fellowshipsList: [], branchesList: [], pledgesList: [], deptBudgets: [], groupsList: []
 };
 
 const pickSection = (vals, key) => {
@@ -1487,6 +1487,777 @@ function PrayerAdmin({ members, theme, isSuper }) {
 }
 
 
+// ---------- Batch 5: install help, welfare requests, dept budgets, sermons, groups, absentees, RSVP, volunteers ----------
+const dayName = (iso) => { try { return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } };
+const smallBtn = (bg, fg) => ({ backgroundColor: bg || '#f1f5f9', color: fg || '#334155', border: bg ? 'none' : '1px solid #cbd5e1', padding: '0.3rem 0.65rem', borderRadius: '0.35rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' });
+const noteBox = (bad) => ({ marginTop: '0.7rem', padding: '0.7rem', borderRadius: '0.5rem', fontSize: '0.88rem', backgroundColor: bad ? '#fee2e2' : '#dcfce7', color: bad ? '#991b1b' : '#166534' });
+const isBad = (m) => /^(Could not|Please)/.test(String(m || ''));
+
+// Send an SMS through the church's Hubtel account (server route /api/sms). Returns a message to show.
+async function sendAppSms(phones, message) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: JSON.stringify({ message, phones }) });
+    const out = await res.json().catch(() => ({}));
+    if (res.ok && out.sent) return 'Sent to ' + out.sent + ' of ' + out.total + ' people.' + (out.failed ? ' ' + out.failed + ' could not be sent.' : '');
+    return 'Could not send: ' + (out.error || 'please try again.');
+  } catch (e) { return 'Could not send: ' + e.message; }
+}
+
+// ---------- 1) Install help on the login screen ----------
+function InstallHelp({ theme }) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('');
+  const [os, setOs] = useState('');
+  const [standalone, setStandalone] = useState(false);
+  useEffect(() => {
+    try {
+      const ua = navigator.userAgent || '';
+      setOs((/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) ? 'ios' : /Android/i.test(ua) ? 'android' : '');
+      setStandalone(!!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true));
+    } catch (e) {}
+  }, []);
+  if (standalone) return null;
+  const cur = tab || os || 'android';
+  const steps = cur === 'ios'
+    ? ['Open this page in Safari (the blue compass icon).', 'Tap the Share button (a square with an arrow pointing up) at the bottom of the screen.', 'Scroll down and tap "Add to Home Screen".', 'Tap "Add". The Gracepoint icon now appears on your home screen.']
+    : ['Open this page in Chrome.', 'Tap the three dots menu at the top right.', 'Tap "Install app" (or "Add to Home screen").', 'Tap "Install". The Gracepoint icon now appears on your phone.'];
+  const pill = (on) => ({ flex: 1, backgroundColor: on ? theme : '#f1f5f9', color: on ? '#ffffff' : '#334155', border: 'none', padding: '0.5rem', borderRadius: '0.4rem', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer' });
+  return (
+    <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+      <button type="button" onClick={() => setOpen(!open)} style={{ background: 'none', border: 'none', color: theme, fontWeight: 'bold', fontSize: '0.88rem', cursor: 'pointer' }}>📲 {open ? 'Hide install help' : 'Install this app on your phone'}</button>
+      {open && (
+        <div style={{ textAlign: 'left', marginTop: '0.6rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.6rem', padding: '0.9rem' }}>
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.7rem' }}>
+            <button type="button" onClick={() => setTab('ios')} style={pill(cur === 'ios')}>iPhone</button>
+            <button type="button" onClick={() => setTab('android')} style={pill(cur === 'android')}>Android</button>
+          </div>
+          <ol style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.88rem', color: '#334155', lineHeight: 1.6 }}>
+            {steps.map((s, i) => <li key={i}>{s}</li>)}
+          </ol>
+          {cur === 'ios' && <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.6rem 0 0 0' }}>On an iPhone, the app is installed from the browser, not from the App Store. It does not work from a private tab.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- 2) Welfare / benevolence requests ----------
+const WELFARE_CATEGORIES = ['Funeral / Bereavement', 'Medical / Hospital bill', 'School fees', 'Rent / Housing', 'Food / Basic needs', 'Emergency', 'Other'];
+const WELFARE_LOOK = { new: ['Received', '#fef3c7', '#92400e'], approved: ['Approved', '#dbeafe', '#1e40af'], paid: ['Help given 🙏', '#dcfce7', '#166534'], declined: ['Not approved', '#fee2e2', '#991b1b'] };
+
+function MemberWelfare({ user, member, theme }) {
+  const blank = { category: WELFARE_CATEGORIES[0], description: '', amount_requested: '' };
+  const [rows, setRows] = useState(null);
+  const [form, setForm] = useState(blank);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const email = String((user && user.email) || '').toLowerCase();
+  const load = async () => {
+    const { data, error } = await supabase.from('welfare_requests').select('*').eq('member_email', email).order('created_at', { ascending: false });
+    if (error) { setMsg('Could not load your requests: ' + error.message + ' (has supabase-batch5.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { if (email) load(); }, [email]);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.description.trim()) return;
+    setBusy(true); setMsg('');
+    const amt = parseFloat(form.amount_requested);
+    const { error } = await supabase.from('welfare_requests').insert({ member_id: String((member && member.id) || ''), member_email: email, member_name: displayName(member || {}), phone: (member && member.phone) || '', category: form.category, description: form.description.trim(), amount_requested: amt > 0 ? amt : null, status: 'new' });
+    setBusy(false);
+    if (error) { setMsg('Could not send: ' + error.message); return; }
+    setForm(blank);
+    setMsg('Your request has been sent to the welfare team. They will contact you.');
+    load();
+  };
+  const remove = async (id) => {
+    if (!confirm('Cancel this request?')) return;
+    await supabase.from('welfare_requests').delete().eq('id', id);
+    load();
+  };
+  return (
+    <div>
+      <div style={{ ...cardBox, border: '2px solid ' + theme }}>
+        <h3 style={{ margin: '0 0 0.4rem 0', color: theme, fontSize: '1.1rem' }}>🤝 Ask for Welfare Help</h3>
+        <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>If you or your family is in need, tell the welfare team. Your request is private: only the welfare team and the Super Admin can see it.</p>
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+          <select style={formBox} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{WELFARE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+          <textarea style={{ ...formBox, minHeight: '6rem' }} required maxLength={1500} placeholder="Tell us about the need..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <input style={formBox} type="number" min="0" step="0.01" placeholder="Amount needed in GHS (optional)" value={form.amount_requested} onChange={(e) => setForm({ ...form, amount_requested: e.target.value })} />
+          <button type="submit" disabled={busy} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>{busy ? 'Sending...' : 'Send Request'}</button>
+        </form>
+        {msg && <div style={noteBox(isBad(msg))}>{msg}</div>}
+      </div>
+      <h4 style={{ color: theme, margin: '1rem 0 0.5rem 0' }}>My requests</h4>
+      {rows === null && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Loading...</p>}
+      {rows && rows.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>You have not made any request.</p>}
+      {(rows || []).map(r => {
+        const look = WELFARE_LOOK[r.status] || WELFARE_LOOK.new;
+        return (
+          <div key={r.id} style={cardBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleDateString()} - {r.category}</span>
+              <span style={{ backgroundColor: look[1], color: look[2], padding: '0.15rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 'bold' }}>{look[0]}</span>
+            </div>
+            <div style={{ fontSize: '0.92rem', color: '#0f172a', marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{r.description}</div>
+            {r.amount_given ? <div style={{ fontSize: '0.85rem', color: '#166534', marginTop: '0.3rem' }}>Support given: GHS {Number(r.amount_given).toFixed(2)}</div> : null}
+            {r.admin_note ? <div style={{ fontSize: '0.85rem', color: theme, marginTop: '0.3rem' }}>Note from the welfare team: {r.admin_note}</div> : null}
+            {r.status === 'new' && <button type="button" onClick={() => remove(r.id)} style={{ marginTop: '0.5rem', background: 'none', border: 'none', color: '#dc2626', fontWeight: 'bold', cursor: 'pointer', padding: 0, fontSize: '0.8rem' }}>Cancel request</button>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WelfareAdmin({ members, theme, isSuper, onRecordExpense }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [filter, setFilter] = useState('open');
+  const [edit, setEdit] = useState({});
+  const load = async () => {
+    setErr('');
+    const { data, error } = await supabase.from('welfare_requests').select('*').order('created_at', { ascending: false }).limit(300);
+    if (error) { setErr('Could not load welfare requests: ' + error.message + ' (has supabase-batch5.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const patch = async (id, p) => {
+    const { error } = await supabase.from('welfare_requests').update({ ...p, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) alert('Could not update: ' + error.message); else load();
+  };
+  const remove = async (id) => {
+    if (!confirm('Delete this request?')) return;
+    const { error } = await supabase.from('welfare_requests').delete().eq('id', id);
+    if (error) alert('Could not delete: ' + error.message); else load();
+  };
+  const shown = (rows || []).filter(r => filter === 'all' ? true : filter === 'open' ? (r.status === 'new' || r.status === 'approved') : r.status === filter);
+  const given = (rows || []).filter(r => r.status === 'paid').reduce((s, r) => s + Number(r.amount_given || 0), 0);
+  const pill = (on) => ({ backgroundColor: on ? theme : '#f1f5f9', color: on ? '#ffffff' : '#334155', border: 'none', padding: '0.45rem 0.8rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.82rem' });
+  const ed = (r) => edit[r.id] || { amount: r.amount_given || r.amount_requested || '', note: r.admin_note || '' };
+  const setEd = (r, p) => setEdit({ ...edit, [r.id]: { ...ed(r), ...p } });
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Welfare Requests</h3>
+        <button type="button" onClick={load} style={smallBtn()}>↻ Refresh</button>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>{(rows || []).length} request(s) - total support given so far: <strong>GHS {given.toFixed(2)}</strong></p>
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
+        {[['open', 'Open'], ['new', 'New'], ['approved', 'Approved'], ['paid', 'Helped'], ['declined', 'Declined'], ['all', 'All']].map(([k, t]) => <button key={k} type="button" onClick={() => setFilter(k)} style={pill(filter === k)}>{t}</button>)}
+      </div>
+      {err && <div style={noteBox(true)}>{err}</div>}
+      {rows === null && <p style={{ color: '#64748b' }}>Loading...</p>}
+      {rows && shown.length === 0 && !err && <p style={{ color: '#64748b' }}>No requests here.</p>}
+      {shown.map(r => {
+        const look = WELFARE_LOOK[r.status] || WELFARE_LOOK.new;
+        const e = ed(r);
+        const phone = String(r.phone || '').replace(/\s+/g, '');
+        return (
+          <div key={r.id} style={cardBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{r.member_name || r.member_email}</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleDateString()} - {r.category}{r.amount_requested ? ' - asks GHS ' + Number(r.amount_requested).toFixed(2) : ''}</div>
+              </div>
+              <span style={{ backgroundColor: look[1], color: look[2], padding: '0.15rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 'bold', alignSelf: 'flex-start' }}>{look[0]}</span>
+            </div>
+            <div style={{ fontSize: '0.92rem', color: '#0f172a', margin: '0.5rem 0', whiteSpace: 'pre-wrap' }}>{r.description}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.4rem', marginBottom: '0.5rem' }}>
+              <input style={formBox} type="number" step="0.01" min="0" placeholder="GHS given" value={e.amount} onChange={(ev) => setEd(r, { amount: ev.target.value })} />
+              <input style={formBox} placeholder="Note to the member (optional)" value={e.note} onChange={(ev) => setEd(r, { note: ev.target.value })} />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+              {r.status !== 'approved' && r.status !== 'paid' && <button type="button" onClick={() => patch(r.id, { status: 'approved', admin_note: e.note })} style={smallBtn('#dbeafe', '#1e40af')}>Approve</button>}
+              {r.status !== 'paid' && <button type="button" onClick={() => {
+                const amt = parseFloat(e.amount);
+                if (!(amt > 0)) { alert('Enter the amount given first.'); return; }
+                patch(r.id, { status: 'paid', amount_given: amt, admin_note: e.note });
+                if (onRecordExpense && confirm('Also record GHS ' + amt.toFixed(2) + ' as a welfare expense in the church accounts?')) onRecordExpense('Welfare support - ' + (r.member_name || 'member') + ' (' + r.category + ')', amt);
+              }} style={smallBtn('#dcfce7', '#166534')}>Mark helped</button>}
+              {r.status !== 'declined' && r.status !== 'paid' && <button type="button" onClick={() => patch(r.id, { status: 'declined', admin_note: e.note })} style={smallBtn('#fee2e2', '#991b1b')}>Decline</button>}
+              <button type="button" onClick={() => patch(r.id, { admin_note: e.note })} style={smallBtn()}>Save note</button>
+              {phone ? <a href={'tel:' + phone} style={smallBtn('#eff6ff', '#1d4ed8')}>📞 Call</a> : null}
+              {phone ? <a href={'https://wa.me/' + waNumber(phone)} target="_blank" rel="noopener noreferrer" style={smallBtn('#dcfce7', '#166534')}>🟢 WhatsApp</a> : null}
+              {isSuper && <button type="button" onClick={() => remove(r.id)} style={smallBtn('#fee2e2', '#dc2626')}>🗑️</button>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- 3) Department budget vs actual spending ----------
+const BUDGET_DEPTS = ['General / Church', ...CORE_DEPARTMENTS, ...SUB_DEPARTMENTS, 'Welfare', 'Facilities & Maintenance', 'Other'];
+function BudgetVsActual({ deptBudgets, onChange, expenses, theme, canEdit, openPrint }) {
+  const thisYear = String(new Date().getFullYear());
+  const [year, setYear] = useState(thisYear);
+  const [form, setForm] = useState({ dept: BUDGET_DEPTS[0], amount: '' });
+  const years = Array.from(new Set([thisYear, ...(deptBudgets || []).map(b => String(b.year)), ...(expenses || []).map(x => String(x.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y))])).sort().reverse();
+  const spentBy = {};
+  let unassigned = 0;
+  (expenses || []).forEach(x => {
+    if (String(x.date || '').slice(0, 4) !== year) return;
+    const amt = parseFloat(x.amount || 0) || 0;
+    if (x.department) spentBy[x.department] = (spentBy[x.department] || 0) + amt; else unassigned += amt;
+  });
+  const budgetsThisYear = (deptBudgets || []).filter(b => String(b.year) === year);
+  const rows = budgetsThisYear.map(b => {
+    const budget = parseFloat(b.amount || 0) || 0;
+    const spent = spentBy[b.dept] || 0;
+    return { dept: b.dept, budget, spent, left: budget - spent, pct: budget > 0 ? (spent / budget) * 100 : (spent > 0 ? 999 : 0) };
+  }).sort((a, b) => b.pct - a.pct);
+  const unbudgeted = Object.keys(spentBy).filter(d => !budgetsThisYear.some(b => b.dept === d)).map(d => ({ dept: d, spent: spentBy[d] }));
+  const totBudget = rows.reduce((s, r) => s + r.budget, 0), totSpent = rows.reduce((s, r) => s + r.spent, 0);
+  const money = (n) => 'GHS ' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const colorFor = (p) => p >= 100 ? '#dc2626' : p >= 80 ? '#f59e0b' : '#16a34a';
+  const save = (e) => {
+    e.preventDefault();
+    const amt = parseFloat(form.amount);
+    if (!(amt >= 0)) return;
+    const rest = (deptBudgets || []).filter(b => !(String(b.year) === year && b.dept === form.dept));
+    onChange([{ dept: form.dept, year, amount: amt }, ...rest]);
+    setForm({ ...form, amount: '' });
+  };
+  const print = () => {
+    const tr = rows.map(r => '<tr><td>' + r.dept + '</td><td style="text-align:right">' + money(r.budget) + '</td><td style="text-align:right">' + money(r.spent) + '</td><td style="text-align:right">' + money(r.left) + '</td><td style="text-align:right">' + (r.pct > 900 ? 'no budget' : r.pct.toFixed(0) + '%') + '</td></tr>').join('');
+    openPrint('Budget vs Actual ' + year, '<h2>Budget vs Actual Spending - ' + year + '</h2><table><tr><th>Department</th><th>Budget</th><th>Spent</th><th>Left</th><th>Used</th></tr>' + tr + '<tr><th>Total</th><th style="text-align:right">' + money(totBudget) + '</th><th style="text-align:right">' + money(totSpent) + '</th><th style="text-align:right">' + money(totBudget - totSpent) + '</th><th></th></tr></table>' + (unassigned > 0 ? '<p>Expenses with no department chosen: ' + money(unassigned) + '</p>' : ''));
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+        <h3 style={{ margin: 0, color: '#0f172a' }}>Budget vs Actual</h3>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <select style={{ ...formBox, width: 'auto' }} value={year} onChange={(e) => setYear(e.target.value)}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+          <button type="button" onClick={print} style={smallBtn('#2563eb', '#ffffff')}>⬇ PDF</button>
+        </div>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Set a yearly budget for each department. Spending comes from Record Expenses (choose the department when you record an expense).</p>
+      {canEdit && (
+        <form onSubmit={save} style={{ ...cardBox, display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.4rem', alignItems: 'end' }}>
+          <div><label style={formLab}>Department</label><select style={formBox} value={form.dept} onChange={(e) => setForm({ ...form, dept: e.target.value })}>{BUDGET_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+          <div><label style={formLab}>{year} budget (GHS)</label><input style={formBox} type="number" min="0" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
+          <button type="submit" style={{ ...greenBtn, padding: '0.6rem 0.9rem' }}>Save</button>
+        </form>
+      )}
+      <div style={{ ...cardBox, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', textAlign: 'center', gap: '0.4rem' }}>
+        <div><div style={{ fontSize: '0.72rem', color: '#64748b' }}>BUDGET</div><div style={{ fontWeight: 'bold', color: '#0f172a' }}>{money(totBudget)}</div></div>
+        <div><div style={{ fontSize: '0.72rem', color: '#64748b' }}>SPENT</div><div style={{ fontWeight: 'bold', color: '#dc2626' }}>{money(totSpent)}</div></div>
+        <div><div style={{ fontSize: '0.72rem', color: '#64748b' }}>LEFT</div><div style={{ fontWeight: 'bold', color: totBudget - totSpent < 0 ? '#dc2626' : '#16a34a' }}>{money(totBudget - totSpent)}</div></div>
+      </div>
+      {rows.length === 0 && <p style={{ color: '#64748b' }}>No department budgets set for {year} yet.</p>}
+      {rows.map(r => (
+        <div key={r.dept} style={cardBox}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontWeight: 'bold', color: '#0f172a' }}>
+            <span>{r.dept}{r.pct >= 100 ? ' ⚠️ over budget' : r.pct >= 80 ? ' ⚠️ nearly used' : ''}</span>
+            {canEdit && <button type="button" onClick={() => { if (confirm('Remove the ' + year + ' budget for ' + r.dept + '?')) onChange((deptBudgets || []).filter(b => !(String(b.year) === year && b.dept === r.dept))); }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.8rem' }}>Remove</button>}
+          </div>
+          <div style={{ height: '0.6rem', backgroundColor: '#e2e8f0', borderRadius: '1rem', margin: '0.5rem 0', overflow: 'hidden' }}>
+            <div style={{ width: Math.min(100, r.pct) + '%', height: '100%', backgroundColor: colorFor(r.pct) }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', color: '#475569', flexWrap: 'wrap', gap: '0.3rem' }}>
+            <span>Spent {money(r.spent)} of {money(r.budget)}</span>
+            <span style={{ color: colorFor(r.pct), fontWeight: 'bold' }}>{r.pct > 900 ? 'No budget' : r.pct.toFixed(0) + '% used'} - {r.left >= 0 ? money(r.left) + ' left' : money(-r.left) + ' over'}</span>
+          </div>
+        </div>
+      ))}
+      {unbudgeted.length > 0 && <div style={cardBox}><strong style={{ color: '#92400e' }}>Spending with no budget set:</strong> {unbudgeted.map(u => u.dept + ' (' + money(u.spent) + ')').join(', ')}</div>}
+      {unassigned > 0 && <div style={cardBox}><strong style={{ color: '#92400e' }}>Expenses with no department chosen:</strong> {money(unassigned)}. Edit those expenses and pick a department to count them here.</div>}
+    </div>
+  );
+}
+
+// ---------- 4) Sermons: search, series, summary and private notes ----------
+function MemberSermons({ videos, user, theme }) {
+  const email = String((user && user.email) || '').toLowerCase();
+  const [q, setQ] = useState('');
+  const [series, setSeries] = useState('');
+  const [notes, setNotes] = useState({});
+  const [open, setOpen] = useState('');
+  const [msg, setMsg] = useState('');
+  const keyOf = (v) => String(v.title || '') + '|' + String(v.video_date || '');
+  useEffect(() => {
+    if (!email) return;
+    (async () => {
+      const { data } = await supabase.from('sermon_notes').select('video_key, note').eq('member_email', email);
+      const o = {}; (data || []).forEach(r => { o[r.video_key] = r.note; }); setNotes(o);
+    })();
+  }, [email]);
+  const saveNote = async (v) => {
+    const k = keyOf(v);
+    const text = String(notes[k] || '').trim();
+    setMsg('Saving...');
+    const res = text
+      ? await supabase.from('sermon_notes').upsert({ member_email: email, video_key: k, video_title: v.title, note: text, updated_at: new Date().toISOString() }, { onConflict: 'member_email,video_key' })
+      : await supabase.from('sermon_notes').delete().eq('member_email', email).eq('video_key', k);
+    setMsg(res.error ? 'Could not save your note: ' + res.error.message + ' (has supabase-batch5.sql been run?)' : 'Your note is saved.');
+  };
+  const allSeries = Array.from(new Set((videos || []).map(v => String(v.series || '').trim()).filter(Boolean)));
+  const needle = q.trim().toLowerCase();
+  const shown = (videos || []).filter(v => (!series || String(v.series || '') === series) && (!needle || [v.title, v.speaker, v.topic, v.series, v.description, v.notes].some(x => String(x || '').toLowerCase().includes(needle))));
+  return (
+    <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: theme, margin: '0 0 0.75rem 0' }}>Sermons &amp; Videos</h3>
+      <input style={{ ...formBox, marginBottom: '0.5rem' }} placeholder="Search by title, speaker, topic or series..." value={q} onChange={(e) => setQ(e.target.value)} />
+      {allSeries.length > 0 && (
+        <select style={{ ...formBox, marginBottom: '0.7rem' }} value={series} onChange={(e) => setSeries(e.target.value)}>
+          <option value="">All series</option>
+          {allSeries.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      )}
+      {shown.length === 0 && <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>{(videos || []).length ? 'No sermon matches your search.' : 'No sermons have been added yet.'}</p>}
+      {shown.slice(0, 40).map((v, i) => {
+        const k = keyOf(v);
+        const isOpen = open === k;
+        return (
+          <div key={k + i} style={{ padding: '0.6rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+            <div style={{ fontWeight: '600', color: '#0f172a' }}>{v.title}{v.video_date ? <span style={{ fontWeight: 'normal', fontSize: '0.8rem', color: '#64748b' }}>  ({v.video_date})</span> : null}</div>
+            <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{[v.speaker, v.series ? 'Series: ' + v.series : '', v.topic ? 'Topic: ' + v.topic : ''].filter(Boolean).join(' - ')}</div>
+            {v.notes ? <div style={{ fontSize: '0.88rem', color: '#334155', margin: '0.35rem 0', whiteSpace: 'pre-wrap' }}>{v.notes}</div> : null}
+            <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+              <a href={v.video_url} target="_blank" rel="noopener noreferrer" style={{ ...smallBtn(theme, '#ffffff'), padding: '0.35rem 0.8rem' }}>▶ Watch</a>
+              <button type="button" onClick={() => { setOpen(isOpen ? '' : k); setMsg(''); }} style={smallBtn()}>📝 {notes[k] ? 'My notes' : 'Take notes'}</button>
+            </div>
+            {isOpen && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <textarea style={{ ...formBox, minHeight: '6rem' }} maxLength={4000} placeholder="Your private notes on this sermon..." value={notes[k] || ''} onChange={(e) => setNotes({ ...notes, [k]: e.target.value })} />
+                <button type="button" onClick={() => saveNote(v)} style={{ ...greenBtn, marginTop: '0.4rem', padding: '0.5rem 0.9rem' }}>Save my notes</button>
+                {msg && <div style={noteBox(isBad(msg))}>{msg}</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- 5) Groups and classes (Sunday School, Bible class) with their own registers ----------
+const GROUP_KINDS = ['Sunday School', 'Bible Class', 'Youth Class', 'Discipleship Class', 'Other'];
+function GroupsTab({ items, onChange, members, theme, canDelete }) {
+  const blank = { name: '', kind: GROUP_KINDS[0], teacher_id: '', teacher_name: '', meeting_day: 'Sunday', meeting_time: '', notes: '', member_ids: [], sessions: [] };
+  const [show, setShow] = useState(false);
+  const [form, setForm] = useState(blank);
+  const [editIndex, setEditIndex] = useState(null);
+  const [find, setFind] = useState('');
+  const [reg, setReg] = useState(null); // { index, date, ids }
+  const sorted = sortedMembers(members);
+  const nameOf = (id) => { const m = members.find(x => String(x.id) === String(id)); return m ? displayName(m) : ''; };
+  const toggle = (id) => { const cur = form.member_ids || []; setForm({ ...form, member_ids: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] }); };
+  const shown = sorted.filter(m => displayName(m).toLowerCase().includes(find.toLowerCase()));
+  const rate = (g) => {
+    const s = g.sessions || [];
+    const n = (g.member_ids || []).length;
+    if (!s.length || !n) return null;
+    const present = s.reduce((t, x) => t + (x.present_ids || []).filter(id => (g.member_ids || []).map(String).includes(String(id))).length, 0);
+    return Math.round((present / (s.length * n)) * 100);
+  };
+  const missing = (g) => {
+    const last = [...(g.sessions || [])].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3);
+    if (last.length < 3) return [];
+    return (g.member_ids || []).filter(id => last.every(x => !(x.present_ids || []).map(String).includes(String(id))));
+  };
+  const saveRegister = () => {
+    const g = items[reg.index];
+    const sessions = [...(g.sessions || []).filter(s => s.date !== reg.date), { date: reg.date, present_ids: reg.ids }];
+    const next = [...items]; next[reg.index] = { ...g, sessions };
+    onChange(next); setReg(null);
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Groups &amp; Classes</h3>
+        <button type="button" onClick={() => { setShow(!show); setForm(blank); setEditIndex(null); }} style={greenBtn}>{show ? 'Cancel' : '+ Add Group'}</button>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Sunday School, Bible classes and other groups, each with its own register.</p>
+
+      {show && (
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const item = { ...form, teacher_name: form.teacher_id ? nameOf(form.teacher_id) : form.teacher_name };
+          if (editIndex !== null) { const next = [...items]; next[editIndex] = item; onChange(next); } else onChange([item, ...items]);
+          setForm(blank); setEditIndex(null); setShow(false);
+        }} style={{ ...cardBox, border: '1px solid #cbd5e1', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div><label style={formLab}>Group name *</label><input style={formBox} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Youth Bible Class" /></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <div><label style={formLab}>Type</label><select style={formBox} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{GROUP_KINDS.map(k => <option key={k} value={k}>{k}</option>)}</select></div>
+              <div><label style={formLab}>Teacher / leader</label><select style={formBox} value={form.teacher_id} onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}><option value="">-- Select --</option>{sorted.map(m => <option key={m.id} value={m.id}>{displayName(m)}</option>)}</select></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <div><label style={formLab}>Meeting day</label><select style={formBox} value={form.meeting_day} onChange={(e) => setForm({ ...form, meeting_day: e.target.value })}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+              <div><label style={formLab}>Time</label><input style={formBox} value={form.meeting_time} onChange={(e) => setForm({ ...form, meeting_time: e.target.value })} placeholder="e.g. 8:30 AM" /></div>
+            </div>
+            <div>
+              <label style={formLab}>Members ({(form.member_ids || []).length} selected)</label>
+              <input style={{ ...formBox, marginBottom: '0.4rem' }} value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search name..." />
+              <div style={{ maxHeight: '14rem', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '0.375rem', padding: '0.4rem' }}>
+                {shown.map(m => (
+                  <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0.2rem', fontSize: '0.9rem' }}>
+                    <input type="checkbox" checked={(form.member_ids || []).includes(String(m.id))} onChange={() => toggle(String(m.id))} />
+                    <span>{displayName(m)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div><label style={formLab}>Notes</label><textarea style={{ ...formBox, minHeight: '4rem' }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <button type="submit" style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>{editIndex !== null ? 'Update Group' : 'Save Group'}</button>
+          </div>
+        </form>
+      )}
+
+      {items.length === 0 && !show && <p style={{ color: '#64748b' }}>No groups or classes yet.</p>}
+      {items.map((g, i) => {
+        const r = rate(g), miss = missing(g);
+        const taking = reg && reg.index === i;
+        return (
+          <div key={i} style={cardBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#0f172a' }}>{g.name} <span style={{ fontWeight: 'normal', fontSize: '0.78rem', color: '#64748b' }}>({g.kind})</span></div>
+                <div style={{ fontSize: '0.85rem', color: '#475569' }}>Teacher: {g.teacher_name || 'Not set'} - {g.meeting_day}{g.meeting_time ? ' at ' + g.meeting_time : ''}</div>
+                <div style={{ fontSize: '0.85rem', color: theme, fontWeight: 'bold', marginTop: '0.3rem' }}>{(g.member_ids || []).length} member(s) - {(g.sessions || []).length} session(s){r !== null ? ' - ' + r + '% average attendance' : ''}</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                <button type="button" onClick={() => { setForm({ ...blank, ...g, member_ids: (g.member_ids || []).map(String) }); setEditIndex(i); setShow(true); }} style={smallBtn()}>✏️ Edit</button>
+                {canDelete && <button type="button" onClick={() => { if (confirm('Delete this group and its registers?')) onChange(items.filter((_, idx) => idx !== i)); }} style={smallBtn('#fee2e2', '#dc2626')}>🗑️ Delete</button>}
+              </div>
+            </div>
+            <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.3rem' }}>{(g.member_ids || []).map(nameOf).filter(Boolean).join(', ') || 'No members yet.'}</div>
+            {miss.length > 0 && <div style={{ fontSize: '0.82rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', marginTop: '0.5rem' }}>⚠️ Missed the last 3 sessions: {miss.map(nameOf).filter(Boolean).join(', ')}</div>}
+            {!taking && <button type="button" onClick={() => setReg({ index: i, date: todayISO(), ids: ((g.sessions || []).find(s => s.date === todayISO()) || {}).present_ids || [] })} style={{ ...greenBtn, marginTop: '0.6rem', padding: '0.5rem 0.9rem' }}>✅ Take Register</button>}
+            {taking && (
+              <div style={{ marginTop: '0.7rem', border: '1px solid #cbd5e1', borderRadius: '0.5rem', padding: '0.7rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <input type="date" style={{ ...formBox, width: 'auto' }} value={reg.date} onChange={(e) => setReg({ ...reg, date: e.target.value, ids: ((g.sessions || []).find(s => s.date === e.target.value) || {}).present_ids || [] })} />
+                  <span style={{ fontSize: '0.85rem', color: '#475569' }}>{reg.ids.length} present</span>
+                </div>
+                <div style={{ maxHeight: '13rem', overflowY: 'auto' }}>
+                  {(g.member_ids || []).map(String).map(id => (
+                    <label key={id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0', fontSize: '0.92rem' }}>
+                      <input type="checkbox" checked={reg.ids.map(String).includes(id)} onChange={() => setReg({ ...reg, ids: reg.ids.map(String).includes(id) ? reg.ids.filter(x => String(x) !== id) : [...reg.ids, id] })} />
+                      <span>{nameOf(id)}</span>
+                    </label>
+                  ))}
+                  {(g.member_ids || []).length === 0 && <p style={{ color: '#64748b', fontSize: '0.85rem' }}>Add members to this group first (Edit).</p>}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button type="button" onClick={saveRegister} style={{ ...greenBtn, padding: '0.5rem 0.9rem' }}>Save Register</button>
+                  <button type="button" onClick={() => setReg(null)} style={smallBtn()}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- 6) Absentee alerts (from QR check-ins) ----------
+function AbsenteeTab({ members, theme, churchName, canSms }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [limit, setLimit] = useState(3);
+  const [smsMsg, setSmsMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setErr('');
+    const since = new Date(); since.setDate(since.getDate() - 180);
+    const { data, error } = await supabase.from('attendance_checkins').select('member_id, service_date').gte('service_date', since.toISOString().slice(0, 10)).order('service_date', { ascending: false }).limit(8000);
+    if (error) { setErr('Could not load check-ins: ' + error.message); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const calc = () => {
+    const byDate = {};
+    (rows || []).forEach(r => { (byDate[r.service_date] = byDate[r.service_date] || new Set()).add(String(r.member_id)); });
+    // a "service day" is a date with at least 3 people checked in (ignores test scans)
+    const dates = Object.keys(byDate).filter(d => byDate[d].size >= 3).sort().reverse();
+    const out = [];
+    members.forEach(m => {
+      let misses = 0, last = '';
+      for (const d of dates) { if (byDate[d].has(String(m.id))) { last = d; break; } misses++; }
+      if (dates.length >= limit && misses >= limit) out.push({ m, misses, last });
+    });
+    return { dates, out: out.sort((a, b) => b.misses - a.misses) };
+  };
+  const { dates, out } = rows ? calc() : { dates: [], out: [] };
+  const msgFor = (m) => 'Hello ' + (m.first_name || '') + ', we have missed you at church. We are praying for you and hope to see you soon. God bless you. - ' + churchName;
+  const phones = out.map(o => String(o.m.phone || '').replace(/\s+/g, '')).filter(Boolean);
+  const pill = (on) => ({ backgroundColor: on ? theme : '#f1f5f9', color: on ? '#ffffff' : '#334155', border: 'none', padding: '0.45rem 0.8rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.82rem' });
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Absentee Alerts</h3>
+        <button type="button" onClick={load} style={smallBtn()}>↻ Refresh</button>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Members who have not checked in (QR attendance) for several services in a row. Based on {dates.length} service day(s) in the last 6 months.</p>
+      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginBottom: '0.9rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.85rem', color: '#475569' }}>Missed at least</span>
+        {[2, 3, 4, 6].map(n => <button key={n} type="button" onClick={() => setLimit(n)} style={pill(limit === n)}>{n}</button>)}
+        <span style={{ fontSize: '0.85rem', color: '#475569' }}>services in a row</span>
+      </div>
+      {err && <div style={noteBox(true)}>{err}</div>}
+      {rows === null && <p style={{ color: '#64748b' }}>Loading...</p>}
+      {rows && dates.length < limit && !err && <p style={{ color: '#64748b' }}>Not enough QR check-in history yet. Alerts appear after at least {limit} services have been scanned with 3 or more people.</p>}
+      {rows && dates.length >= limit && (
+        <div>
+          <div style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <strong>{out.length} member(s) to follow up</strong>
+            {canSms && phones.length > 0 && <button type="button" disabled={busy} onClick={async () => { if (!confirm('Send the "we miss you" SMS to ' + phones.length + ' people?')) return; setBusy(true); setSmsMsg('Sending...'); setSmsMsg(await sendAppSms(phones, 'Hello, we have missed you at church. We are praying for you and hope to see you soon. God bless you. - ' + churchName)); setBusy(false); }} style={{ ...greenBtn, backgroundColor: '#f5a623', padding: '0.5rem 0.9rem' }}>{busy ? 'Sending...' : '📲 SMS all ' + phones.length}</button>}
+          </div>
+          {smsMsg && <div style={noteBox(isBad(smsMsg))}>{smsMsg}</div>}
+          {out.map(({ m, misses, last }) => {
+            const phone = String(m.phone || '').replace(/\s+/g, '');
+            return (
+              <div key={m.id} style={cardBox}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{displayName(m)}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{last ? 'Last seen ' + dayName(last) : 'No check-in in the last 6 months'}</div>
+                  </div>
+                  <span style={{ alignSelf: 'flex-start', backgroundColor: misses >= 4 ? '#fee2e2' : '#fef3c7', color: misses >= 4 ? '#991b1b' : '#92400e', padding: '0.15rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 'bold' }}>Missed {misses}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.5rem' }}>
+                  {phone ? <a href={'tel:' + phone} style={smallBtn('#eff6ff', '#1d4ed8')}>📞 Call</a> : <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No phone number</span>}
+                  {phone ? <a href={'sms:' + phone + '?body=' + encodeURIComponent(msgFor(m))} style={smallBtn('#eff6ff', '#1d4ed8')}>💬 SMS</a> : null}
+                  {phone ? <a href={'https://wa.me/' + waNumber(phone) + '?text=' + encodeURIComponent(msgFor(m))} target="_blank" rel="noopener noreferrer" style={smallBtn('#dcfce7', '#166534')}>🟢 WhatsApp</a> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- 7) Event RSVP ----------
+const eventKey = (ev) => String(ev.title || '') + '|' + String(ev.date || '');
+function MemberEvents({ events, user, member, theme }) {
+  const email = String((user && user.email) || '').toLowerCase();
+  const [mine, setMine] = useState({});
+  const [guests, setGuests] = useState({});
+  const [msg, setMsg] = useState('');
+  const load = async () => {
+    if (!email) return;
+    const { data } = await supabase.from('event_rsvps').select('event_key, guests').eq('member_email', email);
+    const o = {}; (data || []).forEach(r => { o[r.event_key] = r.guests || 0; }); setMine(o);
+  };
+  useEffect(() => { load(); }, [email]);
+  const go = async (ev) => {
+    const k = eventKey(ev);
+    const g = Math.max(0, Math.min(20, parseInt(guests[k] || 0, 10) || 0));
+    setMsg('');
+    const { error } = await supabase.from('event_rsvps').upsert({ event_key: k, event_title: ev.title, event_date: ev.date || null, member_id: String((member && member.id) || ''), member_email: email, member_name: displayName(member || {}), phone: (member && member.phone) || '', guests: g }, { onConflict: 'event_key,member_email' });
+    if (error) setMsg('Could not RSVP: ' + error.message + ' (has supabase-batch5.sql been run?)'); else { setMsg("You're on the list. See you there!"); load(); }
+  };
+  const cancel = async (ev) => {
+    await supabase.from('event_rsvps').delete().eq('member_email', email).eq('event_key', eventKey(ev));
+    setMsg('Your RSVP was cancelled.'); load();
+  };
+  const today = todayISO();
+  return (
+    <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: theme, margin: '0 0 0.75rem 0' }}>Church Events</h3>
+      {msg && <div style={{ ...noteBox(isBad(msg)), marginTop: 0, marginBottom: '0.7rem' }}>{msg}</div>}
+      {events.length > 0 ? events.slice(0, 10).map((ev, i) => {
+        const k = eventKey(ev);
+        const going = Object.prototype.hasOwnProperty.call(mine, k);
+        const past = ev.date && ev.date < today;
+        return (
+          <div key={i} style={{ padding: '0.6rem 0', borderBottom: '1px dashed #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: '#0f172a' }}><span>{ev.title}</span><span style={{ fontSize: '0.8rem', color: '#64748b' }}>{ev.date}</span></div>
+            {ev.description ? <div style={{ fontSize: '0.9rem', color: '#334155' }}>{ev.description}</div> : null}
+            {!past && (going
+              ? <div style={{ marginTop: '0.4rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}><span style={{ color: '#166534', fontWeight: 'bold', fontSize: '0.88rem' }}>✓ You are going{mine[k] ? ' (+' + mine[k] + ' guest' + (mine[k] > 1 ? 's' : '') + ')' : ''}</span><button type="button" onClick={() => cancel(ev)} style={smallBtn('#fee2e2', '#991b1b')}>Cancel</button></div>
+              : <div style={{ marginTop: '0.4rem', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="number" min="0" max="20" style={{ ...formBox, width: '6.5rem' }} placeholder="Guests" value={guests[k] || ''} onChange={(e) => setGuests({ ...guests, [k]: e.target.value })} />
+                  <button type="button" onClick={() => go(ev)} style={{ ...greenBtn, padding: '0.45rem 0.9rem' }}>I will attend</button>
+                </div>)}
+          </div>
+        );
+      }) : <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>No upcoming events right now.</p>}
+    </div>
+  );
+}
+
+function RsvpAdmin({ events, theme, openPrint, churchName }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [sel, setSel] = useState('');
+  const load = async () => {
+    setErr('');
+    const { data, error } = await supabase.from('event_rsvps').select('*').order('created_at', { ascending: true }).limit(3000);
+    if (error) { setErr('Could not load RSVPs: ' + error.message + ' (has supabase-batch5.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const keys = Array.from(new Set([...(events || []).map(eventKey), ...(rows || []).map(r => r.event_key)]));
+  const label = (k) => { const p = k.split('|'); return p[0] + (p[1] ? ' (' + p[1] + ')' : ''); };
+  const cur = sel || keys[0] || '';
+  const list = (rows || []).filter(r => r.event_key === cur);
+  const heads = list.reduce((s, r) => s + 1 + (r.guests || 0), 0);
+  const print = () => {
+    const tr = list.map((r, i) => '<tr><td>' + (i + 1) + '</td><td>' + (r.member_name || '') + '</td><td>' + (r.phone || '') + '</td><td>' + (r.guests || 0) + '</td><td></td></tr>').join('');
+    openPrint('RSVP list', '<h2>' + label(cur) + ' - RSVP List</h2><p>' + list.length + ' member(s), ' + heads + ' people expected including guests.</p><table><tr><th>#</th><th>Name</th><th>Phone</th><th>Guests</th><th>Present</th></tr>' + tr + '</table>');
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Event RSVPs</h3>
+        <button type="button" onClick={load} style={smallBtn()}>↻ Refresh</button>
+      </div>
+      {err && <div style={noteBox(true)}>{err}</div>}
+      {rows === null && <p style={{ color: '#64748b' }}>Loading...</p>}
+      {rows && keys.length === 0 && !err && <p style={{ color: '#64748b' }}>No events yet. Add an event first (Meetings → Events).</p>}
+      {keys.length > 0 && (
+        <div>
+          <select style={{ ...formBox, marginBottom: '0.7rem' }} value={cur} onChange={(e) => setSel(e.target.value)}>{keys.map(k => <option key={k} value={k}>{label(k)}</option>)}</select>
+          <div style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div><strong>{list.length}</strong> member(s) - <strong>{heads}</strong> people expected</div>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              <button type="button" disabled={!list.length} onClick={print} style={smallBtn('#2563eb', '#ffffff')}>⬇ PDF list</button>
+              <button type="button" disabled={!list.length} onClick={() => { try { navigator.clipboard.writeText(list.map(r => r.phone).filter(Boolean).join(', ')); alert('Phone numbers copied.'); } catch (e) {} }} style={smallBtn()}>Copy numbers</button>
+            </div>
+          </div>
+          {list.length === 0 && <p style={{ color: '#64748b' }}>No one has said they will attend yet.</p>}
+          {list.map((r, i) => (
+            <div key={r.id} style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', gap: '0.5rem', padding: '0.6rem 1rem', marginBottom: '0.4rem' }}>
+              <span><strong>{i + 1}. {r.member_name}</strong>{r.guests ? ' +' + r.guests : ''}</span>
+              <span style={{ fontSize: '0.82rem', color: '#64748b' }}>{r.phone}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- 8) Volunteer availability ----------
+function nextSundays(n) {
+  const out = []; const d = new Date(); d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+  for (let i = 0; i < n; i++) { out.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 7); }
+  return out;
+}
+function MemberVolunteer({ user, member, theme }) {
+  const email = String((user && user.email) || '').toLowerCase();
+  const [rows, setRows] = useState(null);
+  const [date, setDate] = useState('');
+  const [duty, setDuty] = useState('Any');
+  const [note, setNote] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = async () => {
+    const { data, error } = await supabase.from('volunteer_availability').select('*').eq('member_email', email).gte('avail_date', todayISO()).order('avail_date', { ascending: true });
+    if (error) { setMsg('Could not load: ' + error.message + ' (has supabase-batch5.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { if (email) load(); }, [email]);
+  const add = async (d) => {
+    const when = d || date;
+    if (!when) { setMsg('Please pick a date.'); return; }
+    setMsg('');
+    const { error } = await supabase.from('volunteer_availability').upsert({ member_id: String((member && member.id) || ''), member_email: email, member_name: displayName(member || {}), phone: (member && member.phone) || '', avail_date: when, duty, note: note.trim() }, { onConflict: 'member_email,avail_date' });
+    if (error) setMsg('Could not save: ' + error.message); else { setMsg('Thank you! You are marked available on ' + dayName(when) + '.'); setDate(''); setNote(''); load(); }
+  };
+  const remove = async (id) => { await supabase.from('volunteer_availability').delete().eq('id', id); load(); };
+  const have = new Set((rows || []).map(r => r.avail_date));
+  return (
+    <div>
+      <div style={{ ...cardBox, border: '2px solid ' + theme }}>
+        <h3 style={{ margin: '0 0 0.4rem 0', color: theme, fontSize: '1.1rem' }}>🙋 I Can Serve</h3>
+        <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Tell the rota team the days you are free to serve. They will use this when they plan the duty roster.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.8rem' }}>
+          {nextSundays(6).map(d => <button key={d} type="button" onClick={() => add(d)} disabled={have.has(d)} style={{ ...smallBtn(have.has(d) ? '#dcfce7' : '#f1f5f9', have.has(d) ? '#166534' : '#334155'), border: '1px solid #cbd5e1' }}>{have.has(d) ? '✓ ' : ''}{dayName(d).replace(/,? \d{4}$/, '')}</button>)}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <label style={formLab}>Or choose another date</label>
+          <input type="date" style={formBox} min={todayISO()} value={date} onChange={(e) => setDate(e.target.value)} />
+          <select style={formBox} value={duty} onChange={(e) => setDuty(e.target.value)}><option value="Any">I can serve anywhere</option>{SUB_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}</select>
+          <input style={formBox} placeholder="Note (optional), e.g. only after 10am" value={note} onChange={(e) => setNote(e.target.value)} />
+          <button type="button" onClick={() => add()} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Save my availability</button>
+        </div>
+        {msg && <div style={noteBox(isBad(msg))}>{msg}</div>}
+      </div>
+      <h4 style={{ color: theme, margin: '1rem 0 0.5rem 0' }}>My upcoming availability</h4>
+      {rows === null && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Loading...</p>}
+      {rows && rows.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>You have not marked any date yet.</p>}
+      {(rows || []).map(r => (
+        <div key={r.id} style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1rem', marginBottom: '0.5rem' }}>
+          <span><strong>{dayName(r.avail_date)}</strong><br /><span style={{ fontSize: '0.8rem', color: '#64748b' }}>{r.duty === 'Any' ? 'Anywhere' : r.duty}{r.note ? ' - ' + r.note : ''}</span></span>
+          <button type="button" onClick={() => remove(r.id)} style={smallBtn('#fee2e2', '#991b1b')}>Remove</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VolunteerAdmin({ members, rotas, theme }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [sel, setSel] = useState('');
+  const [copied, setCopied] = useState('');
+  const load = async () => {
+    setErr('');
+    const { data, error } = await supabase.from('volunteer_availability').select('*').gte('avail_date', todayISO()).order('avail_date', { ascending: true }).limit(3000);
+    if (error) { setErr('Could not load availability: ' + error.message + ' (has supabase-batch5.sql been run?)'); setRows([]); } else setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const dates = Array.from(new Set((rows || []).map(r => r.avail_date)));
+  const cur = sel && dates.includes(sel) ? sel : dates[0] || '';
+  const avail = (rows || []).filter(r => r.avail_date === cur);
+  const dutyRotas = (rotas || []).filter(r => r.rota_date === cur);
+  const bookedText = dutyRotas.map(r => String(r.assigned || '').toLowerCase()).join(' | ');
+  const isBooked = (r) => {
+    const m = members.find(x => String(x.id) === String(r.member_id));
+    const nm = String(m ? displayName(m) : r.member_name || '').toLowerCase();
+    const first = String((m && m.first_name) || '').toLowerCase();
+    return !!bookedText && ((nm && bookedText.includes(nm)) || (first && bookedText.includes(first)));
+  };
+  const free = avail.filter(r => !isBooked(r));
+  const byDuty = {};
+  free.forEach(r => { (byDuty[r.duty || 'Any'] = byDuty[r.duty || 'Any'] || []).push(r); });
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Volunteers Available</h3>
+        <button type="button" onClick={load} style={smallBtn()}>↻ Refresh</button>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Members who said they can serve. Those already named on the duty rota for the same date are marked, so you can pick from the free ones.</p>
+      {err && <div style={noteBox(true)}>{err}</div>}
+      {rows === null && <p style={{ color: '#64748b' }}>Loading...</p>}
+      {rows && dates.length === 0 && !err && <p style={{ color: '#64748b' }}>No one has marked availability yet.</p>}
+      {dates.length > 0 && (
+        <div>
+          <select style={{ ...formBox, marginBottom: '0.7rem' }} value={cur} onChange={(e) => setSel(e.target.value)}>{dates.map(d => <option key={d} value={d}>{dayName(d)} ({(rows || []).filter(r => r.avail_date === d).length})</option>)}</select>
+          <div style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span><strong>{free.length}</strong> free - {avail.length - free.length} already on the rota</span>
+            <button type="button" disabled={!free.length} onClick={() => { const t = free.map(r => r.member_name).join(', '); try { navigator.clipboard.writeText(t); setCopied('Names copied. Paste them into a Duty Rota entry.'); } catch (e) { prompt('Copy:', t); } }} style={smallBtn(theme, '#ffffff')}>Copy free names</button>
+          </div>
+          {copied && <div style={noteBox(false)}>{copied}</div>}
+          {Object.keys(byDuty).map(d => (
+            <div key={d} style={cardBox}>
+              <div style={{ fontWeight: 'bold', color: theme, marginBottom: '0.3rem' }}>{d === 'Any' ? 'Can serve anywhere' : d}</div>
+              {byDuty[d].map(r => (
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', padding: '0.3rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.9rem' }}>
+                  <span>{r.member_name}{r.note ? <span style={{ color: '#64748b', fontSize: '0.8rem' }}> - {r.note}</span> : null}</span>
+                  {r.phone ? <a href={'tel:' + String(r.phone).replace(/\s+/g, '')} style={{ color: theme, textDecoration: 'none', fontSize: '0.82rem' }}>📞 {r.phone}</a> : null}
+                </div>
+              ))}
+            </div>
+          ))}
+          {avail.length - free.length > 0 && (
+            <div style={{ ...cardBox, backgroundColor: '#f8fafc' }}>
+              <div style={{ fontWeight: 'bold', color: '#64748b', marginBottom: '0.3rem' }}>Already on the duty rota for this date</div>
+              {avail.filter(isBooked).map(r => <div key={r.id} style={{ fontSize: '0.88rem', color: '#64748b' }}>{r.member_name}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ---------- Church Leaders: pick the member, department fills in from the lists ----------
 function LeadersTab({ items, onAdd, onDelete, canDelete, members, theme }) {
   const blank = { member_id: '', leader_name: '', position: '', department: '', phone: '', email: '', since: '', notes: '', photo_url: '' };
@@ -2039,6 +2810,8 @@ export default function Home() {
   const [fellowshipsList, setFellowshipsList] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
   const [pledgesList, setPledgesList] = useState([]);
+  const [deptBudgets, setDeptBudgets] = useState([]);
+  const [groupsList, setGroupsList] = useState([]);
   const [fDept, setFDept] = useState('');
   const [fSub, setFSub] = useState('');
   const [fGender, setFGender] = useState('');
@@ -2057,7 +2830,7 @@ export default function Home() {
   const [editingIncomeIndex, setEditingIncomeIndex] = useState(null);
 
   const [expenses, setExpenses] = useState([]);
-  const [expenseForm, setExpenseForm] = useState({ description: '', amount: '', date: '' });
+  const [expenseForm, setExpenseForm] = useState({ description: '', amount: '', date: '', department: '' });
   const [editingExpenseIndex, setEditingExpenseIndex] = useState(null);
 
   const [tithes, setTithes] = useState([]);
@@ -2140,7 +2913,8 @@ export default function Home() {
     ],
     'Finance': [
       { key: 'access_finance', label: 'Access finance (record Tithes, Welfare, Incomes, Contributions)' },
-      { key: 'view_balance_sheet', label: 'View Account Report & Balance Sheet (read-only)' }
+      { key: 'view_balance_sheet', label: 'View Account Report & Balance Sheet (read-only)' },
+      { key: 'manage_welfare', label: 'View & manage member welfare requests' }
     ]
   };
 
@@ -2191,7 +2965,8 @@ export default function Home() {
     attendanceLogs: setAttendanceLogs, eventsList: setEventsList, announcementsList: setAnnouncementsList,
     servicesList: setServicesList, visitorsList: setVisitorsList, convertsList: setConvertsList, assetsList: setAssetsList,
     leadersList: setLeadersList, rotasList: setRotasList, videosList: setVideosList,
-    fellowshipsList: setFellowshipsList, branchesList: setBranchesList, pledgesList: setPledgesList
+    fellowshipsList: setFellowshipsList, branchesList: setBranchesList, pledgesList: setPledgesList,
+    deptBudgets: setDeptBudgets, groupsList: setGroupsList
   };
 
   const makeMemberRows = () => members
@@ -2332,7 +3107,7 @@ export default function Home() {
 
   const saveNotesNow = async () => {
     setNotesMsg('Saving...');
-    const err = await saveSection('finance', { incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes });
+    const err = await saveSection('finance', { incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, deptBudgets });
     setNotesMsg(err ? 'Could not save: ' + err : 'Remarks saved successfully.');
     setTimeout(() => setNotesMsg(''), 4000);
   };
@@ -2345,7 +3120,7 @@ export default function Home() {
       incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance,
       accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList,
       servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList,
-      fellowshipsList, branchesList, pledgesList
+      fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList
     };
     const dirty = Object.keys(SECTION_DEFS).filter(key => {
       if (!canWriteSectionFn(key, isSuper, myPermissions)) return false;
@@ -2375,7 +3150,7 @@ export default function Home() {
       setSaveError(failed ? 'Could not save: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList]);
+  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList]);
 
   // Pick up other admins' latest entries when a records screen is opened
   useEffect(() => {
@@ -2983,20 +3758,20 @@ export default function Home() {
     const sheets = [
       { name: 'Members', rows: members.map(m => ({ ...m, full_name: displayName(m) })) },
       { name: 'Tithes', rows: tithes }, { name: 'Contributions', rows: contributions }, { name: 'Other income', rows: incomes },
-      { name: 'Expenses', rows: expenses }, { name: 'Budgets', rows: budgets },
+      { name: 'Expenses', rows: expenses }, { name: 'Budgets', rows: budgets }, { name: 'Dept budgets', rows: deptBudgets },
       { name: 'Welfare', rows: Object.entries(welfareRecords || {}).map(([id, rec]) => ({ member: nameOf(id), member_id: id, last_updated: (welfareDates || {})[id] || '', records: rec })) },
       { name: 'Attendance', rows: attendanceLogs }, { name: 'Services', rows: servicesList }, { name: 'Events', rows: eventsList },
       { name: 'Visitors', rows: visitorsList }, { name: 'New converts', rows: convertsList },
       { name: 'Facilities', rows: assetsList }, { name: 'Leaders', rows: leadersList }, { name: 'Duty rotas', rows: rotasList }, { name: 'Videos', rows: videosList },
       { name: 'Fellowships', rows: fellowshipsList.map(f => ({ ...f, member_ids: undefined, members: (f.member_ids || []).map(nameOf).join(', ') })) },
-      { name: 'Branches', rows: branchesList },
+      { name: 'Branches', rows: branchesList }, { name: 'Groups', rows: groupsList.map(g => ({ ...g, member_ids: undefined, sessions: undefined, members: (g.member_ids || []).map(nameOf).join(', '), sessions_held: (g.sessions || []).length })) },
       { name: 'Pledges', rows: pledgesList.map(p => ({ ...p, payments: undefined, paid: (p.payments || []).reduce((a, x) => a + (parseFloat(x.amount) || 0), 0), payment_dates: (p.payments || []).map(x => x.date + ' ' + x.amount).join('; ') })) }
     ];
     saveTextFile(buildWorkbookXml(sheets), 'Gracepoint-backup-' + new Date().toISOString().slice(0, 10) + '.xls', 'application/vnd.ms-excel');
     logActivity('Backup', 'Downloaded the Excel backup');
   };
   const downloadBackupJson = () => {
-    const all = { exported_at: new Date().toISOString(), members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList };
+    const all = { exported_at: new Date().toISOString(), members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList };
     saveTextFile(JSON.stringify(all, null, 1), 'Gracepoint-backup-' + new Date().toISOString().slice(0, 10) + '.json', 'application/json');
     logActivity('Backup', 'Downloaded the full data backup');
   };
@@ -3070,6 +3845,7 @@ export default function Home() {
                     📝 Self-Register as New Member
                   </button>
                 </div>
+                <InstallHelp theme={themeColor} />
               </div>
             ) : (
               <div>
@@ -3279,8 +4055,9 @@ export default function Home() {
             ['MAIN', [['dashboard', '🏠 Dashboard'], ['profile', '👤 Profile'], ['attendance', '📅 Attendance (QR)']]],
             ['MY GIVING', [['giving', '💳 Give Online & My Records']]],
             ['COMMUNICATION', [['communication', '📢 Announcements']]],
-            ['EVENTS & MINISTRY', [['ministry', '⛪ Events, Duty Roster & Leaders']]],
-            ['SPIRITUAL CORNER', [['spiritual', '🎬 Sermons & Videos'], ['prayer', '🙏 Prayer Requests']]]
+            ['EVENTS & MINISTRY', [['ministry', '⛪ Events, Duty Roster & Leaders'], ['volunteer', '🙋 I Can Serve (Volunteer)']]],
+            ['SPIRITUAL CORNER', [['spiritual', '🎬 Sermons & Videos'], ['prayer', '🙏 Prayer Requests']]],
+            ['SUPPORT', [['welfare', '🤝 Welfare Request']]]
           ];
           return (
             <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, zIndex: 50 }}>
@@ -3463,18 +4240,7 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-                {memberPage === 'spiritual' && V.length > 0 && (
-                  <div style={card}>
-                    <h3 style={h3s}>Sermons &amp; Videos</h3>
-                    {V.slice(0, 8).map((v, i) => (
-                      <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                        <div style={{ fontWeight: '600', color: '#0f172a' }}>{v.title}{v.video_date ? <span style={{ fontWeight: 'normal', fontSize: '0.8rem', color: '#64748b' }}>  ({v.video_date})</span> : null}</div>
-                        {v.speaker ? <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{v.speaker}</div> : null}
-                        <a href={v.video_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '0.3rem', backgroundColor: themeColor, color: '#ffffff', textDecoration: 'none', padding: '0.35rem 0.8rem', borderRadius: '0.35rem', fontSize: '0.85rem', fontWeight: '600' }}>▶ Watch</a>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {memberPage === 'spiritual' && <MemberSermons videos={V} user={user} theme={themeColor} />}
               </div>
             );
           })()}
@@ -3534,21 +4300,19 @@ export default function Home() {
                     </div>
                   )) : <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>No announcements right now.</p>}
                 </div>
-                <div style={{ display: memberPage === 'ministry' ? 'block' : 'none', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.75rem 0' }}>Church Events</h3>
-                  {evs.length > 0 ? evs.slice(0, 10).map((ev, i) => (
-                    <div key={i} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: '#0f172a' }}><span>{ev.title}</span><span style={{ fontSize: '0.8rem', color: '#64748b' }}>{ev.date}</span></div>
-                      {ev.description ? <div style={{ fontSize: '0.9rem', color: '#334155' }}>{ev.description}</div> : null}
-                    </div>
-                  )) : <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>No upcoming events right now.</p>}
-                </div>
+                {memberPage === 'ministry' && <MemberEvents events={evs} user={user} member={currentMemberRecord} theme={themeColor} />}
               </div>
             );
           })()}
 
           {memberPage === 'prayer' && (
             <MemberPrayer user={user} member={currentMemberRecord} theme={themeColor} />
+          )}
+          {memberPage === 'welfare' && (
+            <MemberWelfare user={user} member={currentMemberRecord} theme={themeColor} />
+          )}
+          {memberPage === 'volunteer' && (
+            <MemberVolunteer user={user} member={currentMemberRecord} theme={themeColor} />
           )}
 
           <div style={{ display: memberPage === 'giving' ? 'block' : 'none' }}>
@@ -3692,10 +4456,10 @@ export default function Home() {
         {(() => {
           const groups = [
             { id: 'home', label: '🏠 Home', tabs: [['dashboard', 'Dashboard', true]] },
-            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')], ['followup', 'Follow-up', can('record_visitors') || can('record_new_converts')], ['fellowships', 'House Fellowship', can('manage_fellowships')]] },
+            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')], ['followup', 'Follow-up', can('record_visitors') || can('record_new_converts')], ['fellowships', 'House Fellowship', can('manage_fellowships')], ['groups', 'Groups & Classes', can('manage_fellowships')]] },
             { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')], ['branches', 'Branches', can('manage_fellowships')]] },
-            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['checkin', 'QR Check-in', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')]] },
-            { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')], ['pledges', 'Pledges', can('access_finance')]] },
+            { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['checkin', 'QR Check-in', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')], ['volunteers', 'Volunteers', can('manage_rotas')], ['rsvps', 'Event RSVPs', can('register_events')], ['absentees', 'Absentees', can('record_attendance')]] },
+            { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')], ['pledges', 'Pledges', can('access_finance')], ['welfare', 'Welfare Requests', can('manage_welfare')]] },
             { id: 'facilities', label: '🏢 Facilities', tabs: [['facilities', 'Facilities', can('manage_facilities')]] },
             { id: 'communication', label: '📢 Communication', tabs: [['announcements', 'Announcements', can('post_announcements')], ['messages', 'Messages', can('send_messages')], ['prayer', 'Prayer Requests', can('manage_prayer')], ['reports', 'Reports', can('view_reports')]] },
             { id: 'media', label: '🎬 Videos', tabs: [['videos', 'Sermons & Videos', can('manage_videos')]] },
@@ -3738,6 +4502,22 @@ export default function Home() {
         {/* Prayer requests */}
         {activeTab === 'prayer' && can('manage_prayer') && (
           <PrayerAdmin members={members} theme={themeColor} isSuper={role === 'super_admin'} />
+        )}
+
+        {activeTab === 'groups' && can('manage_fellowships') && (
+          <GroupsTab items={groupsList} onChange={setGroupsList} members={members} theme={themeColor} canDelete={role === 'super_admin'} />
+        )}
+        {activeTab === 'absentees' && can('record_attendance') && (
+          <AbsenteeTab members={members} theme={themeColor} churchName={churchName} canSms={can('send_messages')} />
+        )}
+        {activeTab === 'rsvps' && can('register_events') && (
+          <RsvpAdmin events={eventsList} theme={themeColor} openPrint={openPrintWindow} churchName={churchName} />
+        )}
+        {activeTab === 'volunteers' && can('manage_rotas') && (
+          <VolunteerAdmin members={members} rotas={rotasList} theme={themeColor} />
+        )}
+        {activeTab === 'welfare' && can('manage_welfare') && (
+          <WelfareAdmin members={members} theme={themeColor} isSuper={role === 'super_admin'} onRecordExpense={can('access_finance') ? ((d, amt) => setExpenses([{ description: d, amount: String(amt), date: todayISO(), department: 'Welfare' }, ...expenses])) : null} />
         )}
 
         {/* Admin Permissions Tab (Super Admin Only) */}
@@ -4168,6 +4948,12 @@ export default function Home() {
                       </div>
                     </>
                   )}
+                  {can('access_finance') && (
+                  <div onClick={() => setFinanceView('deptbudget')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🎯</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: themeColor }}>Budget vs Actual</div>
+                  </div>
+                  )}
                   {can('view_balance_sheet') && (
                   <div onClick={() => setFinanceView('reports')} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💳</div>
@@ -4270,7 +5056,7 @@ export default function Home() {
                       setExpenses([expenseForm, ...expenses]);
                       alert('Expense recorded successfully!');
                     }
-                    setExpenseForm({ description: '', amount: '', date: '' });
+                    setExpenseForm({ description: '', amount: '', date: '', department: '' });
                   }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Expense Description</label>
@@ -4284,6 +5070,13 @@ export default function Home() {
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Date</label>
                       <input type="date" required value={expenseForm.date} onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Department (for Budget vs Actual)</label>
+                      <select value={expenseForm.department || ''} onChange={(e) => setExpenseForm({...expenseForm, department: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff' }}>
+                        <option value="">-- Not chosen --</option>
+                        {BUDGET_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
                     <button type="submit" style={{ backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
                       {editingExpenseIndex !== null ? 'Update Expense' : 'Save Expense Entry'}
                     </button>
@@ -4292,7 +5085,7 @@ export default function Home() {
                 <h4 style={{ color: '#0f172a' }}>Recorded Expenses ({expenses.length})</h4>
                 {expenses.map((exp, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{exp.description}</strong> ({exp.date}) - <strong style={{ color: '#dc2626' }}>GHS {parseFloat(exp.amount || 0).toFixed(2)}</strong></span>
+                    <span><strong>{exp.description}</strong> ({exp.date}){exp.department ? <span style={{ color: '#64748b', fontSize: '0.8rem' }}> [{exp.department}]</span> : null} - <strong style={{ color: '#dc2626' }}>GHS {parseFloat(exp.amount || 0).toFixed(2)}</strong></span>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button type="button" onClick={() => { setExpenseForm(exp); setEditingExpenseIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
                       <button type="button" onClick={() => setExpenses(expenses.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
@@ -4443,6 +5236,15 @@ export default function Home() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {financeView === 'deptbudget' && can('access_finance') && (
+              <div>
+                <button type="button" onClick={() => setFinanceView('hub')} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
+                  ← Back to Finance Hub
+                </button>
+                <BudgetVsActual deptBudgets={deptBudgets} onChange={setDeptBudgets} expenses={expenses} theme={themeColor} canEdit={role === 'super_admin'} openPrint={openPrintWindow} />
               </div>
             )}
 
@@ -5027,6 +5829,9 @@ export default function Home() {
               { key: 'video_url', label: 'Video link (YouTube, Facebook...)', type: 'url', required: true },
               { key: 'video_date', label: 'Date', type: 'date' },
               { key: 'speaker', label: 'Speaker / Minister' },
+              { key: 'series', label: 'Series (e.g. Faith Series) - optional' },
+              { key: 'topic', label: 'Topic / key scripture - optional' },
+              { key: 'notes', label: 'Summary / key points (members see this)', type: 'textarea' },
               { key: 'description', label: 'Description', type: 'textarea' }
             ]}
           />
