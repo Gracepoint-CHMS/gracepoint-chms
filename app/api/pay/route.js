@@ -1,104 +1,135 @@
-// app/api/pay/route.js  -  Flutterwave online giving for Gracepoint CHMS
-// Runs ONLY on the server. The secret keys live in Vercel Environment Variables, never in the app screen.
+// app/api/pay/route.js  -  Hubtel online giving for Gracepoint CHMS
+// Runs ONLY on the server. The Hubtel keys live in Vercel Environment Variables, never in the app screen.
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
-const FLW = 'https://api.flutterwave.com/v3';
+const INIT_URL = 'https://payproxyapi.hubtel.com/items/initiate';
+const STATUS_URL = 'https://api-txnstatus.hubtel.com/transactions/';
 const TYPES = ['Tithe', 'Offering', 'Seed Offering', 'Thanksgiving', 'Welfare', 'Building Fund', 'Missions', 'Pledge', 'Other'];
 
 const json = (body, status = 200) => NextResponse.json(body, { status });
 const db = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-const ready = () => !!(process.env.FLUTTERWAVE_SECRET_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_URL);
+const ready = () => !!(process.env.HUBTEL_API_ID && process.env.HUBTEL_API_KEY && process.env.HUBTEL_MERCHANT_NUMBER && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_URL);
+const basic = () => 'Basic ' + Buffer.from(process.env.HUBTEL_API_ID + ':' + process.env.HUBTEL_API_KEY).toString('base64');
 
-// ---- Step 1: a signed-in member asks for a payment link ----
+// ---- Step 1: a signed-in member asks for a payment link. (Hubtel's own callback also arrives here as a POST.) ----
 export async function POST(req) {
-  const hook = req.headers.get('verif-hash');
-  if (hook) return webhook(req, hook);
+  const body = await req.json().catch(() => ({}));
+  if (body && body.Data && body.Data.ClientReference) return webhook(body);
 
-  if (!ready()) return json({ error: 'Online giving is not switched on yet. The church admin must add the Flutterwave keys in Vercel.' }, 503);
+  if (!ready()) return json({ error: 'Online giving is not switched on yet. The church admin must add the Hubtel keys in Vercel.' }, 503);
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const sb = db();
   const { data: u } = await sb.auth.getUser(token);
   const email = u && u.user && u.user.email ? u.user.email.trim().toLowerCase() : '';
   if (!email) return json({ error: 'Please sign in again.' }, 401);
 
-  const body = await req.json().catch(() => ({}));
   const amount = Math.round(parseFloat(body.amount) * 100) / 100;
   const type = TYPES.includes(body.type) ? body.type : 'Offering';
   if (!amount || amount < 1 || amount > 100000) return json({ error: 'Enter an amount between GHS 1 and GHS 100,000.' }, 400);
 
-  const { data: member } = await sb.from('members').select('id, first_name, last_name, email, phone').eq('email', email).maybeSingle();
+  const { data: member } = await sb.from('members').select('id, title, first_name, last_name, email, phone').eq('email', email).maybeSingle();
   if (!member) return json({ error: 'Your member record was not found.' }, 404);
+  const name = [member.title, member.first_name, member.last_name].filter(Boolean).join(' ');
 
   const origin = new URL(req.url).origin;
-  const tx_ref = 'GPC-' + member.id + '-' + Date.now();
-  const res = await fetch(FLW + '/payments', {
+  const tx_ref = 'GP' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); // under 32 characters
+  const saved = await sb.from('online_payments').insert({ tx_ref, member_id: String(member.id), member_email: email, member_name: name, amount, currency: 'GHS', type, status: 'pending', recorded: false });
+  if (saved.error) return json({ error: 'Could not prepare the payment: ' + saved.error.message + ' (has supabase-payments.sql been run?)' }, 500);
+
+  const res = await fetch(INIT_URL, {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + process.env.FLUTTERWAVE_SECRET_KEY, 'Content-Type': 'application/json' },
+    headers: { Authorization: basic(), 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
-      tx_ref, amount, currency: 'GHS',
-      redirect_url: origin + '/',
-      payment_options: 'mobilemoneyghana,card',
-      customer: { email, name: [member.first_name, member.last_name].filter(Boolean).join(' '), phonenumber: member.phone || undefined },
-      meta: { member_id: String(member.id), type },
-      customizations: { title: 'Gracepoint Prophetic Church', description: type, logo: origin + '/icon-512.png' }
+      totalAmount: amount,
+      description: type + ' - Gracepoint Prophetic Church',
+      callbackUrl: origin + '/api/pay',
+      returnUrl: origin + '/?hp=' + tx_ref,
+      cancellationUrl: origin + '/?hp=' + tx_ref + '&cancelled=1',
+      merchantAccountNumber: process.env.HUBTEL_MERCHANT_NUMBER,
+      clientReference: tx_ref,
+      PayeeName: name || undefined,
+      PayeeMobileNumber: member.phone || undefined,
+      PayeeEmail: email
     })
   });
   const out = await res.json().catch(() => ({}));
-  if (!res.ok || !out.data || !out.data.link) return json({ error: (out && out.message) || 'Could not start the payment.' }, 502);
-  return json({ link: out.data.link, tx_ref });
+  const link = out && out.data && out.data.checkoutUrl;
+  if (!res.ok || !link) {
+    await sb.from('online_payments').update({ status: 'failed' }).eq('tx_ref', tx_ref);
+    return json({ error: (out && (out.message || (out.data && out.data.message))) || 'Hubtel could not start the payment.' }, 502);
+  }
+  return json({ link, tx_ref });
 }
 
-// ---- Step 2: the member comes back from Flutterwave; confirm the payment with Flutterwave and record it ----
+// ---- Step 2: the member comes back from Hubtel; check the payment and record it ----
 export async function GET(req) {
   if (!ready()) return json({ error: 'Online giving is not set up.' }, 503);
-  const sp = new URL(req.url).searchParams;
-  const id = sp.get('transaction_id');
-  if (!id) return json({ error: 'Missing transaction.' }, 400);
-  const r = await settle(id, sp.get('tx_ref'));
-  return json(r.body, r.status);
-}
-
-// ---- Step 3 (backup): Flutterwave tells us directly, even if the member closed the page ----
-async function webhook(req, hash) {
-  if (!process.env.FLUTTERWAVE_SECRET_HASH || hash !== process.env.FLUTTERWAVE_SECRET_HASH) return json({ error: 'Bad signature.' }, 401);
-  if (!ready()) return json({ error: 'Not set up.' }, 503);
-  const evt = await req.json().catch(() => ({}));
-  const d = evt && evt.data;
-  if (!d || !d.id) return json({ ok: true });
-  const r = await settle(String(d.id), d.tx_ref);
-  return json(r.body, r.status === 200 ? 200 : 202);
-}
-
-async function settle(id, txRefHint) {
-  const vr = await fetch(FLW + '/transactions/' + encodeURIComponent(id) + '/verify', { headers: { Authorization: 'Bearer ' + process.env.FLUTTERWAVE_SECRET_KEY } });
-  const v = await vr.json().catch(() => ({}));
-  const d = v && v.data;
-  if (!vr.ok || !d) return { status: 502, body: { error: 'Could not confirm the payment with Flutterwave.' } };
-  if (d.status !== 'successful') return { status: 200, body: { ok: false, message: 'Payment status: ' + d.status + '. Nothing was recorded.' } };
-  const txRef = String(d.tx_ref || '');
-  if (!txRef.startsWith('GPC-') || d.currency !== 'GHS' || (txRefHint && txRefHint !== txRef)) return { status: 400, body: { error: 'This payment does not belong to the church app.' } };
-
-  const meta = (d.meta && typeof d.meta === 'object') ? d.meta : {};
-  const memberId = String(meta.member_id || txRef.slice(4, txRef.lastIndexOf('-')));
-  const type = TYPES.includes(meta.type) ? meta.type : 'Other';
-  const amount = Number(d.amount);
+  const ref = new URL(req.url).searchParams.get('ref') || '';
+  if (!/^GP[a-z0-9]{6,30}$/.test(ref)) return json({ error: 'Missing payment reference.' }, 400);
   const sb = db();
+  const { data: row } = await sb.from('online_payments').select('*').eq('tx_ref', ref).maybeSingle();
+  if (!row) return json({ error: 'Payment not found.' }, 404);
+  const done = (already) => ({ ok: true, already, amount: Number(row.amount), type: row.type, message: already ? 'This payment was already recorded.' : 'Payment received. Thank you!' });
+  if (row.recorded) return json(done(true));
 
-  const { data: member } = await sb.from('members').select('id, title, first_name, last_name, email').eq('id', memberId).maybeSingle();
-  const name = member ? [member.title, member.first_name, member.last_name].filter(Boolean).join(' ') : (d.customer && d.customer.name) || 'Member';
-  const email = (member && member.email ? member.email : (d.customer && d.customer.email) || '').trim().toLowerCase();
-
-  // Remember the payment once (tx_ref is unique, so refreshing the page can never double count)
-  const ins = await sb.from('online_payments').insert({ tx_ref: txRef, flw_id: String(d.id), member_id: memberId, member_email: email, member_name: name, amount, currency: d.currency, type, status: 'successful', recorded: false });
-  if (ins.error && ins.error.code === '23505') {
-    const { data: old } = await sb.from('online_payments').select('recorded').eq('tx_ref', txRef).maybeSingle();
-    if (old && old.recorded) return { status: 200, body: { ok: true, already: true, amount, type, message: 'This payment was already recorded.' } };
-  } else if (ins.error) {
-    return { status: 500, body: { error: 'Payment confirmed but could not be saved: ' + ins.error.message + ' (has supabase-payments.sql been run?)' } };
+  // The callback from Hubtel usually arrives first. If it has not, ask Hubtel directly (a few tries).
+  for (let i = 0; i < 4; i++) {
+    const paid = await askHubtel(ref);
+    if (paid === true) { const r = await settle(row, null); return json(r.body, r.status); }
+    if (paid === false) return json({ ok: false, message: 'The payment was not completed. Nothing was recorded.' });
+    await new Promise(r => setTimeout(r, 1500));
+    const { data: again } = await sb.from('online_payments').select('recorded').eq('tx_ref', ref).maybeSingle();
+    if (again && again.recorded) return json(done(true));
   }
+  return json({ ok: false, pending: true, message: 'We are still waiting for Hubtel to confirm your payment. It will appear in your records automatically once it is confirmed.' });
+}
+
+// Hubtel's Status Check. Returns true (paid), false (failed/unpaid), or null (cannot tell).
+async function askHubtel(ref) {
+  try {
+    const r = await fetch(STATUS_URL + encodeURIComponent(process.env.HUBTEL_MERCHANT_NUMBER) + '/status?clientReference=' + encodeURIComponent(ref), { headers: { Authorization: basic() } });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => ({}));
+    const st = String((j && j.data && j.data.status) || '').toLowerCase();
+    if (st === 'paid' || st === 'success' || st === 'successful') return true;
+    if (st === 'unpaid' || st === 'failed' || st === 'refunded') return false;
+    return null;
+  } catch (e) { return null; }
+}
+
+// ---- Step 3: Hubtel tells us directly, even if the member closed the page ----
+async function webhook(evt) {
+  if (!ready()) return json({ error: 'Not set up.' }, 503);
+  const d = evt.Data || {};
+  const ref = String(d.ClientReference || '');
+  if (!/^GP[a-z0-9]{6,30}$/.test(ref)) return json({ ok: true });
+  const sb = db();
+  const { data: row } = await sb.from('online_payments').select('*').eq('tx_ref', ref).maybeSingle();
+  if (!row) return json({ ok: true }); // not one of ours
+  const good = String(evt.ResponseCode) === '0000' && String(d.Status || evt.Status).toLowerCase() === 'success';
+  if (!good) { if (!row.recorded) await sb.from('online_payments').update({ status: 'failed' }).eq('tx_ref', ref); return json({ ok: true }); }
+  // The amount Hubtel says was paid must cover what we asked for
+  if (Number(d.Amount) + 0.009 < Number(row.amount)) return json({ ok: true, note: 'Amount mismatch.' });
+  // Where we can, double check with Hubtel before recording
+  const check = await askHubtel(ref);
+  if (check === false) return json({ ok: true });
+  const r = await settle(row, String(d.CheckoutId || d.SalesInvoiceId || ''));
+  return json(r.body, 200);
+}
+
+async function settle(row, hubtelId) {
+  const txRef = row.tx_ref;
+  const memberId = String(row.member_id);
+  const type = TYPES.includes(row.type) ? row.type : 'Other';
+  const amount = Number(row.amount);
+  const name = row.member_name || 'Member';
+  const email = String(row.member_email || '').trim().toLowerCase();
+  if (row.recorded) return { status: 200, body: { ok: true, already: true, amount, type, message: 'This payment was already recorded.' } };
+  const sb = db();
+  await sb.from('online_payments').update({ status: 'successful', flw_id: hubtelId || row.flw_id || null }).eq('tx_ref', txRef);
 
   const date = new Date().toISOString().slice(0, 10);
   const isTithe = type === 'Tithe';
