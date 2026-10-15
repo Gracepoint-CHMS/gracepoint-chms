@@ -754,6 +754,7 @@ function MessagesTab({ members, theme, churchName }) {
   const [subject, setSubject] = useState('');
   const [msg, setMsg] = useState('');
   const [copied, setCopied] = useState('');
+  const [smsSign, setSmsSign] = useState(true);
   const inGroup = (m) => {
     if (audience === 'all') return true;
     if (audience === 'admins') return !!(m.role && m.role !== 'member');
@@ -774,10 +775,26 @@ function MessagesTab({ members, theme, churchName }) {
   const btn = (bg) => ({ display: 'inline-block', backgroundColor: bg, color: '#ffffff', textDecoration: 'none', border: 'none', padding: '0.65rem 0.9rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '0.88rem', cursor: 'pointer' });
   const copy = async (text, what) => { try { await navigator.clipboard.writeText(text); setCopied(what + ' copied'); } catch (e) { prompt('Copy:', text); } };
   const body = msg || '';
+  const [smsBusy, setSmsBusy] = useState(false);
+  const [smsMsg, setSmsMsg] = useState('');
+  const sendBulkSms = async () => {
+    if (!body.trim() || !phones.length) return;
+    const full = body.trim() + (smsSign ? ' - ' + churchName : '');
+    if (!window.confirm('Send this SMS to ' + phones.length + ' people now? Hubtel will charge your SMS credit.')) return;
+    setSmsBusy(true); setSmsMsg('Sending...');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: JSON.stringify({ message: full, phones }) });
+      const out = await res.json().catch(() => ({}));
+      if (res.ok && out.sent) setSmsMsg('Sent to ' + out.sent + ' of ' + out.total + ' people.' + (out.failed ? ' ' + out.failed + ' could not be sent' + (out.error ? ' (' + out.error + ')' : '') + '.' : ''));
+      else setSmsMsg('Could not send: ' + (out.error || 'please try again.'));
+    } catch (e) { setSmsMsg('Could not send: ' + e.message); }
+    setSmsBusy(false);
+  };
   return (
     <div>
       <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Messages</h3>
-      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Write one message, pick who gets it, then send it with your phone's SMS, email or WhatsApp. (The church's phone credit or data is used. For bulk SMS from the app itself, a paid SMS service would be needed.)</p>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Write one message, pick who gets it, then send it with your phone's SMS, email or WhatsApp. Use <b>Send SMS from app</b> to text everyone at once through Hubtel (uses your Hubtel SMS credit), or use the buttons below to send with your own phone.</p>
 
       <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
         <label style={lab}>Send to</label>
@@ -796,6 +813,10 @@ function MessagesTab({ members, theme, churchName }) {
         <input style={{ ...box, marginBottom: '0.75rem' }} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={churchName} />
         <label style={lab}>Message</label>
         <textarea style={{ ...box, minHeight: '7rem' }} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Type your message here..." />
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: '#475569', marginTop: '0.6rem' }}><input type="checkbox" checked={smsSign} onChange={(e) => setSmsSign(e.target.checked)} /> Add "- {churchName}" at the end of the SMS</label>
+        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>{body.length} characters (one SMS is 160; longer messages use more credit)</div>
+        <button type="button" disabled={smsBusy || !phones.length || !body.trim()} onClick={sendBulkSms} style={{ ...btn(smsBusy || !phones.length || !body.trim() ? '#94a3b8' : '#f5a623'), width: '100%', marginTop: '0.7rem', padding: '0.8rem' }}>{smsBusy ? 'Sending...' : '📲 Send SMS from app to ' + phones.length + ' people'}</button>
+        {smsMsg && <div style={{ marginTop: '0.6rem', padding: '0.6rem', borderRadius: '0.4rem', fontSize: '0.88rem', backgroundColor: /^Could not/.test(smsMsg) ? '#fee2e2' : '#dcfce7', color: /^Could not/.test(smsMsg) ? '#991b1b' : '#166534' }}>{smsMsg}</div>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.9rem' }}>
           <a href={phones.length && body ? 'sms:' + phones.join(',') + '?body=' + encodeURIComponent(body) : undefined} style={btn(phones.length && body ? '#2563eb' : '#94a3b8')}>💬 SMS</a>
           <a href={emails.length && body ? 'mailto:?bcc=' + encodeURIComponent(emails.join(',')) + '&subject=' + encodeURIComponent(subject || churchName) + '&body=' + encodeURIComponent(body) : undefined} style={btn(emails.length && body ? '#7c3aed' : '#94a3b8')}>✉️ Email</a>
@@ -2272,7 +2293,7 @@ export default function Home() {
     const amt = parseFloat(payForm.amount);
     if (!amt || amt < 1) { setPayMsg('Please enter an amount of at least GHS 1.'); return; }
     setPayBusy(true);
-    setPayMsg('Opening the secure Flutterwave checkout...');
+    setPayMsg('Opening the secure Hubtel checkout...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/pay', {
@@ -2289,19 +2310,19 @@ export default function Home() {
     }
   };
 
-  // When Flutterwave sends the member back to the app, confirm the payment and refresh their records
+  // When Hubtel sends the member back to the app, confirm the payment and refresh their records
   useEffect(() => {
     if (!user || typeof window === 'undefined') return;
     const p = new URLSearchParams(window.location.search);
-    const txRef = p.get('tx_ref'), txId = p.get('transaction_id'), st = p.get('status');
-    if (!txRef || !String(txRef).startsWith('GPC-')) return;
+    const txRef = p.get('hp'), cancelled = p.get('cancelled');
+    if (!txRef || !/^GP[a-z0-9]{6,30}$/.test(txRef)) return;
     window.history.replaceState({}, '', window.location.pathname);
     const tell = (m) => { setPayMsg(m); setMemberPage('giving'); try { alert(m); } catch (e) {} };
-    if (st === 'cancelled' || !txId) { tell('The payment was not completed. Nothing was charged.'); return; }
+    if (cancelled) { tell('The payment was not completed. Nothing was charged.'); return; }
     setPayMsg('Confirming your payment...');
     (async () => {
       try {
-        const res = await fetch('/api/pay?transaction_id=' + encodeURIComponent(txId) + '&tx_ref=' + encodeURIComponent(txRef));
+        const res = await fetch('/api/pay?ref=' + encodeURIComponent(txRef));
         const out = await res.json().catch(() => ({}));
         if (res.ok && out.ok) { tell('Payment of GHS ' + Number(out.amount).toFixed(2) + ' (' + out.type + ') received. Thank you and God bless you!'); await loadMemberData(user.email); }
         else tell(out.error || out.message || 'We could not confirm the payment yet. If money left your account, please tell the church admin.');
@@ -3533,7 +3554,7 @@ export default function Home() {
           <div style={{ display: memberPage === 'giving' ? 'block' : 'none' }}>
           <div style={{ backgroundColor: '#ffffff', border: '2px solid ' + themeColor, borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.4rem 0' }}>💳 Give Online</h3>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Pay securely with MTN MoMo, Vodafone Cash, AirtelTigo Money or a bank card through Flutterwave. Your gift is added to your records automatically.</p>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Pay securely with MTN MoMo, Vodafone Cash, AirtelTigo Money or a bank card through Hubtel. Your gift is added to your records automatically.</p>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>What are you giving?</label>
             <select value={payForm.type} onChange={(e) => setPayForm({ ...payForm, type: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff', marginBottom: '0.7rem' }}>
               {['Tithe', 'Offering', 'Seed Offering', 'Thanksgiving', 'Welfare', 'Building Fund', 'Missions', 'Pledge', 'Other'].map(t => <option key={t} value={t}>{t}</option>)}
@@ -3543,7 +3564,7 @@ export default function Home() {
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.8rem' }}>
               {[20, 50, 100, 200, 500].map(a => <button key={a} type="button" onClick={() => setPayForm({ ...payForm, amount: String(a) })} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '2rem', padding: '0.3rem 0.8rem', cursor: 'pointer', fontSize: '0.85rem' }}>{a}</button>)}
             </div>
-            <button type="button" disabled={payBusy} onClick={startPayment} style={{ width: '100%', backgroundColor: payBusy ? '#94a3b8' : '#f5a623', color: '#ffffff', border: 'none', padding: '0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>{payBusy ? 'Please wait...' : 'Pay with Flutterwave'}</button>
+            <button type="button" disabled={payBusy} onClick={startPayment} style={{ width: '100%', backgroundColor: payBusy ? '#94a3b8' : '#f5a623', color: '#ffffff', border: 'none', padding: '0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>{payBusy ? 'Please wait...' : 'Give with Hubtel'}</button>
             {payMsg && <div style={{ marginTop: '0.7rem', padding: '0.7rem', borderRadius: '0.5rem', fontSize: '0.88rem', backgroundColor: /^(Could not|The payment was not|We could not)/.test(payMsg) ? '#fee2e2' : '#dcfce7', color: /^(Could not|The payment was not|We could not)/.test(payMsg) ? '#991b1b' : '#166534' }}>{payMsg}</div>}
           </div>
 
