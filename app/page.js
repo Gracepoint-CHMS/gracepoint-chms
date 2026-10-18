@@ -2751,6 +2751,30 @@ function CheckinTab({ members, serviceOptions, date, setDate, service, setServic
   );
 }
 
+// Member photos are kept inside the members table, so a photo that is too big makes the whole list slow.
+// This shrinks any picture to a small, sharp JPEG (about 40 to 80 KB) before it is saved.
+const PHOTO_AUTOLOAD_LIMIT = 150000; // photos bigger than this are not loaded into the list (shrink them first)
+function shrinkImageDataUrl(src, maxSide = 480, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      try { resolve(canvas.toDataURL('image/jpeg', quality)); } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('Could not read the picture'));
+    img.src = src;
+  });
+}
+
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('member');
@@ -2768,6 +2792,10 @@ export default function Home() {
   
   const [members, setMembers] = useState([]);
   const [memberLoadError, setMemberLoadError] = useState('');
+  const [shrinking, setShrinking] = useState(false);
+  const [shrinkMsg, setShrinkMsg] = useState('');
+  const memberColsRef = useRef(null);
+  const photoRunRef = useRef(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState(null);
@@ -2941,6 +2969,8 @@ export default function Home() {
 
         if (memberData) {
           if (memberData.role) setRole(memberData.role);
+          // remember every column except the (large) photo, so the members list can load without photos
+          memberColsRef.current = Object.keys(memberData).filter((k) => k !== 'photo_url').join(',');
         }
         const isAdminRole = !!(memberData && memberData.role && memberData.role !== 'member');
         await loadSettings();
@@ -3348,19 +3378,56 @@ export default function Home() {
       .then(({ data }) => setMyCheckins(data || []));
   }, [memberPage, members, user]);
 
+  // Photos are loaded separately, a few at a time, so one heavy photo can never block the members list.
+  async function loadMemberPhotos(list) {
+    const token = ++photoRunRef.current;
+    const ids = list
+      .filter((m) => typeof m.photo_size === 'number' && m.photo_size > 0 && m.photo_size <= PHOTO_AUTOLOAD_LIMIT)
+      .map((m) => m.id);
+    for (let i = 0; i < ids.length; i += 5) {
+      if (token !== photoRunRef.current) return;
+      try {
+        const { data } = await supabase.from('members').select('id, photo_url').in('id', ids.slice(i, i + 5));
+        if (data && data.length && token === photoRunRef.current) {
+          const map = {};
+          data.forEach((r) => { map[r.id] = r.photo_url; });
+          setMembers((prev) => prev.map((m) => (map[m.id] !== undefined ? { ...m, photo_url: map[m.id] } : m)));
+        }
+      } catch (e) { /* skip this batch */ }
+    }
+  }
+
+  async function getMemberColumns() {
+    if (memberColsRef.current) return memberColsRef.current;
+    try {
+      const { data } = await supabase.from('members').select('*').limit(1);
+      if (data && data[0]) {
+        memberColsRef.current = Object.keys(data[0]).filter((k) => k !== 'photo_url').join(',');
+        return memberColsRef.current;
+      }
+    } catch (e) { /* fall back to all columns */ }
+    return '*';
+  }
+
   async function fetchMembers() {
     // Try up to 3 times. An empty answer or an error can come from an expired session or a slow
     // connection, so we renew the session and wait a moment between tries.
     let lastMessage = '';
     for (let attempt = 1; attempt <= 3; attempt++) {
+      const cols = await getMemberColumns();
       const { data: allMembers, error } = await supabase
         .from('members')
-        .select('*')
+        .select(cols)
         .limit(5000);
 
       if (!error && allMembers && allMembers.length > 0) {
-        setMembers(allMembers);
+        setMembers((prev) => {
+          const keep = {};
+          prev.forEach((p) => { if (p.photo_url) keep[p.id] = p.photo_url; });
+          return allMembers.map((m) => (keep[m.id] && m.photo_size !== 0 ? { ...m, photo_url: keep[m.id] } : m));
+        });
         setMemberLoadError('');
+        loadMemberPhotos(allMembers);
         return;
       }
       lastMessage = error && error.message ? error.message : 'The list came back empty';
@@ -3405,11 +3472,39 @@ export default function Home() {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, photo_url: reader.result });
+      reader.onloadend = async () => {
+        let result = reader.result;
+        // shrink the picture so it never slows the members list down
+        try { result = await shrinkImageDataUrl(result); } catch (err) { /* keep the original if it can't be shrunk */ }
+        setFormData((prev) => ({ ...prev, photo_url: result }));
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // One-time tidy-up: shrinks the big photos that were saved before photos were limited in size.
+  const shrinkMemberPhotos = async () => {
+    if (role !== 'super_admin' || shrinking) return;
+    const big = members.filter((m) => typeof m.photo_size === 'number' && m.photo_size > PHOTO_AUTOLOAD_LIMIT);
+    if (big.length === 0) return;
+    setShrinking(true);
+    let done = 0;
+    let failed = 0;
+    for (let i = 0; i < big.length; i++) {
+      setShrinkMsg('Shrinking photo ' + (i + 1) + ' of ' + big.length + '. Please keep this page open...');
+      try {
+        const { data, error } = await supabase.from('members').select('photo_url').eq('id', big[i].id).single();
+        if (error || !data || !data.photo_url || String(data.photo_url).indexOf('data:image') !== 0) throw new Error('skip');
+        const small = await shrinkImageDataUrl(data.photo_url);
+        if (small.length >= data.photo_url.length) throw new Error('already small');
+        const { error: upErr } = await supabase.from('members').update({ photo_url: small }).eq('id', big[i].id);
+        if (upErr) throw upErr;
+        done++;
+      } catch (err) { failed++; }
+    }
+    setShrinking(false);
+    setShrinkMsg('Finished: ' + done + ' photo(s) shrunk' + (failed ? ', ' + failed + ' could not be shrunk' : '') + '.');
+    fetchMembers();
   };
 
   const handleSaveMember = async (e) => {
@@ -3508,7 +3603,15 @@ export default function Home() {
     }
   };
 
-  const handleStartEditMember = (m) => {
+  const handleStartEditMember = async (m) => {
+    // If this member's photo was not loaded into the list yet, fetch it now so saving can never erase it.
+    let photoNow = m.photo_url;
+    if (photoNow === undefined) {
+      try {
+        const { data } = await supabase.from('members').select('photo_url').eq('id', m.id).single();
+        photoNow = (data && data.photo_url) || '';
+      } catch (e) { photoNow = ''; }
+    }
     setEditingMemberId(m.id);
     let subs = [];
     if (m.sub_departments) {
@@ -3531,7 +3634,7 @@ export default function Home() {
       date_joined: m.date_joined || '',
       home_address: m.home_address || '',
       home_town: m.home_town || '',
-      photo_url: m.photo_url || '',
+      photo_url: photoNow || '',
       gender: m.gender || '',
       marital_status: m.marital_status || '',
       occupation: m.occupation || '',
@@ -4649,6 +4752,14 @@ export default function Home() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.9rem', fontSize: '0.85rem', color: '#475569' }}>
                   <span>Showing {filteredMembers.length} of {members.length} members</span>
+                  {role === 'super_admin' && (shrinkMsg || members.some((m) => typeof m.photo_size === 'number' && m.photo_size > PHOTO_AUTOLOAD_LIMIT)) && (
+                    <span style={{ flexBasis: '100%', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', fontWeight: 600 }}>
+                      {shrinkMsg ? shrinkMsg + ' ' : (members.filter((m) => typeof m.photo_size === 'number' && m.photo_size > PHOTO_AUTOLOAD_LIMIT).length + ' member photo(s) are very large and are hidden to keep the list fast. ')}
+                      {!shrinking && members.some((m) => typeof m.photo_size === 'number' && m.photo_size > PHOTO_AUTOLOAD_LIMIT) && (
+                        <button type="button" onClick={shrinkMemberPhotos} style={{ background: 'none', border: 'none', color: '#92400e', fontWeight: 'bold', textDecoration: 'underline', cursor: 'pointer' }}>Tap to shrink photos</button>
+                      )}
+                    </span>
+                  )}
                   {memberLoadError && members.length === 0 && (
                     <span style={{ flexBasis: '100%', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', fontWeight: 600 }}>
                       Couldn't load the members list ({memberLoadError}). Your members are safe.{' '}
