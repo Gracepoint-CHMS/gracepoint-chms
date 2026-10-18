@@ -2767,6 +2767,7 @@ export default function Home() {
   const [financeView, setFinanceView] = useState('hub');
   
   const [members, setMembers] = useState([]);
+  const [memberLoadError, setMemberLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState(null);
@@ -3348,13 +3349,27 @@ export default function Home() {
   }, [memberPage, members, user]);
 
   async function fetchMembers() {
-    const { data: allMembers } = await supabase
-      .from('members')
-      .select('*');
+    // Try up to 3 times. An empty answer or an error can come from an expired session or a slow
+    // connection, so we renew the session and wait a moment between tries.
+    let lastMessage = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const { data: allMembers, error } = await supabase
+        .from('members')
+        .select('*')
+        .limit(5000);
 
-    if (allMembers) {
-      setMembers(allMembers);
+      if (!error && allMembers && allMembers.length > 0) {
+        setMembers(allMembers);
+        setMemberLoadError('');
+        return;
+      }
+      lastMessage = error && error.message ? error.message : 'The list came back empty';
+      if (attempt < 3) {
+        try { await supabase.auth.refreshSession(); } catch (e) { /* ignore */ }
+        await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
+      }
     }
+    setMemberLoadError(lastMessage);
   }
 
   const handleLogin = async (e) => {
@@ -4634,6 +4649,12 @@ export default function Home() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.9rem', fontSize: '0.85rem', color: '#475569' }}>
                   <span>Showing {filteredMembers.length} of {members.length} members</span>
+                  {memberLoadError && members.length === 0 && (
+                    <span style={{ flexBasis: '100%', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', fontWeight: 600 }}>
+                      Couldn't load the members list ({memberLoadError}). Your members are safe.{' '}
+                      <button type="button" onClick={() => fetchMembers()} style={{ background: 'none', border: 'none', color: '#991b1b', fontWeight: 'bold', textDecoration: 'underline', cursor: 'pointer' }}>Tap to try again</button>
+                    </span>
+                  )}
                   <span style={{ display: 'flex', gap: '0.5rem' }}>
                     {(fDept || fSub || fGender || fMarital || searchQuery) && <button type="button" onClick={() => { setFDept(''); setFSub(''); setFGender(''); setFMarital(''); setSearchQuery(''); }} style={{ background: 'none', border: 'none', color: themeColor, fontWeight: 'bold', cursor: 'pointer' }}>Clear filters</button>}
                     {can('register_members') && <button type="button" onClick={() => printIdCards(filteredMembers)} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.35rem 0.7rem', borderRadius: '0.4rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.82rem' }}>🪪 Print ID cards</button>}
