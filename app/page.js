@@ -2795,6 +2795,7 @@ export default function Home() {
   const [shrinking, setShrinking] = useState(false);
   const [shrinkMsg, setShrinkMsg] = useState('');
   const memberColsRef = useRef(null);
+  const [myRecord, setMyRecord] = useState(null);
   const photoRunRef = useRef(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegisterForm, setShowRegisterForm] = useState(false);
@@ -2964,11 +2965,12 @@ export default function Home() {
         const { data: memberData } = await supabase
           .from('members')
           .select('*')
-          .eq('email', session.user.email)
+          .ilike('email', String(session.user.email || '').trim().replace(/[\\%_]/g, '\\$&'))
           .limit(1)
           .maybeSingle();
 
         if (memberData) {
+          setMyRecord(memberData);
           if (memberData.role) setRole(memberData.role);
           // remember every column except the (large) photo, so the members list can load without photos
           memberColsRef.current = Object.keys(memberData).filter((k) => k !== 'photo_url').join(',');
@@ -4137,7 +4139,7 @@ export default function Home() {
 
   // Regular Member Dashboard View
   if (role === 'member' || viewAsMember) {
-    const currentMemberRecord = members.find(m => String(m.email || '').toLowerCase() === String(user.email || '').toLowerCase()) || {};
+    const currentMemberRecord = members.find(m => String(m.email || '').trim().toLowerCase() === String(user.email || '').trim().toLowerCase()) || myRecord || {};
     // Members read their saved records. Admins viewing their own portal use the records already loaded.
     const myId = String(currentMemberRecord.id || '');
     const mf = role === 'member'
