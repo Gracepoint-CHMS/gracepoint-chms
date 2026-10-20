@@ -2965,7 +2965,8 @@ export default function Home() {
           .from('members')
           .select('*')
           .eq('email', session.user.email)
-          .single();
+          .limit(1)
+          .maybeSingle();
 
         if (memberData) {
           if (memberData.role) setRole(memberData.role);
@@ -3040,13 +3041,28 @@ export default function Home() {
 
   // Members read their own record plus the shared events and announcements
   async function loadMemberData(email) {
-    const { data, error } = await supabase
+    // A member may have more than one saved row (e.g. a duplicate member entry with the same email), so read them all and merge
+    const { data: mfRows, error } = await supabase
       .from('member_finance')
       .select('data')
-      .eq('member_email', String(email || '').trim().toLowerCase())
-      .maybeSingle();
+      .eq('member_email', String(email || '').trim().toLowerCase());
     if (error) setSaveError('Could not load your records: ' + error.message);
-    setMemberFinance((data && data.data) || { tithes: [], contributions: [], incomes: [], welfare: {} });
+    const merged = { tithes: [], contributions: [], incomes: [], welfare: {} };
+    const seen = { tithes: new Set(), contributions: new Set(), incomes: new Set() };
+    (mfRows || []).forEach((r) => {
+      const d = (r && r.data) || {};
+      ['tithes', 'contributions', 'incomes'].forEach((k) => {
+        (d[k] || []).forEach((item) => {
+          const sig = JSON.stringify(item);
+          if (!seen[k].has(sig)) { seen[k].add(sig); merged[k].push(item); }
+        });
+      });
+      Object.entries(d.welfare || {}).forEach(([month, weeks]) => {
+        const sum = (a) => (a || []).reduce((x, y) => x + (Number(y) || 0), 0);
+        if (!merged.welfare[month] || sum(weeks) > sum(merged.welfare[month])) merged.welfare[month] = weeks;
+      });
+    });
+    setMemberFinance(merged);
     const { data: rows } = await supabase.from('app_data').select('key, data').in('key', ['events', 'announcements', 'leaders', 'rotas', 'videos', 'fellowships']);
     const get = (k, f) => { const r = (rows || []).find(x => x.key === k); return (r && r.data && r.data[f]) || []; };
     setBoard({ events: get('events', 'eventsList'), announcements: get('announcements', 'announcementsList'), leaders: get('leaders', 'leadersList'), rotas: get('rotas', 'rotasList'), videos: get('videos', 'videosList'), fellowships: get('fellowships', 'fellowshipsList') });
