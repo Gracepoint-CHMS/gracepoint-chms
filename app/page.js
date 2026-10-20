@@ -2962,12 +2962,14 @@ export default function Home() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session && session.user) {
         setUser(session.user);
-        const { data: memberData } = await supabase
+        const { data: memberRows } = await supabase
           .from('members')
           .select('*')
           .ilike('email', String(session.user.email || '').trim().replace(/[\\%_]/g, '\\$&'))
-          .limit(1)
-          .maybeSingle();
+          .limit(10);
+        // If a person has more than one row, use the most complete one
+        const filledCount = (r) => Object.keys(r).filter((k) => r[k] !== null && r[k] !== '').length;
+        const memberData = (memberRows || []).slice().sort((a, b) => filledCount(b) - filledCount(a))[0] || null;
 
         if (memberData) {
           setMyRecord(memberData);
@@ -4139,7 +4141,9 @@ export default function Home() {
 
   // Regular Member Dashboard View
   if (role === 'member' || viewAsMember) {
-    const currentMemberRecord = members.find(m => String(m.email || '').trim().toLowerCase() === String(user.email || '').trim().toLowerCase()) || myRecord || {};
+    const _myRows = members.filter(m => String(m.email || '').trim().toLowerCase() === String(user.email || '').trim().toLowerCase());
+    const _filled = (r) => Object.keys(r).filter((k) => r[k] !== null && r[k] !== '').length;
+    const currentMemberRecord = _myRows.slice().sort((a, b) => _filled(b) - _filled(a))[0] || myRecord || {};
     // Members read their saved records. Admins viewing their own portal use the records already loaded.
     const myId = String(currentMemberRecord.id || '');
     const mf = role === 'member'
