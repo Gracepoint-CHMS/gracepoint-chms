@@ -3289,6 +3289,27 @@ export default function Home() {
   };
 
 
+
+  // Shared professional letterhead for every printed report
+  const letterheadCss = () => `
+      .lh{text-align:center;padding:4px 0 0}
+      .lh-top{display:flex;align-items:center;justify-content:space-between;gap:14px}
+      .lh-top img{width:84px;height:84px;object-fit:contain;flex:none}
+      .lh-mid{flex:1}
+      .lh-name{font-family:Georgia,'Times New Roman',serif;font-size:25px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${themeColor};margin:0;line-height:1.15}
+      .lh-tag{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:14px;color:#b45309;margin:3px 0 0}
+      .lh-contact{font-size:11px;color:#475569;margin-top:6px;line-height:1.5}
+      .lh-rule{height:0;border-top:4px solid ${themeColor};border-bottom:1.5px solid #d4a017;padding-top:2px;margin:10px 0 8px}
+      .lh-title{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#475569;margin-bottom:12px}
+      .lh-title b{background:${themeColor};color:#fff;padding:4px 14px;border-radius:3px;font-size:12px;letter-spacing:1.2px;text-transform:uppercase}
+  `;
+  const letterheadHtml = (title) => {
+    const esc2 = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
+    const bits = [settings.address, settings.phone && ('Tel: ' + settings.phone), settings.email, settings.website].filter(Boolean).map(esc2);
+    return `<div class="lh"><div class="lh-top"><img src="${logo}" alt="" /><div class="lh-mid"><h1 class="lh-name">${esc2(churchName)}</h1>${churchTagline ? `<div class="lh-tag">${esc2(churchTagline)}</div>` : ''}${bits.length ? `<div class="lh-contact">${bits.join(' &nbsp;•&nbsp; ')}</div>` : ''}</div><img src="${logo}" alt="" /></div><div class="lh-rule"></div><div class="lh-title"><span>${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}</span><b>${esc2(title)}</b><span></span></div></div>`;
+  };
+
   // Opens a branded print window (used by the Reports screens)
   const openPrintWindow = (title, bodyHtml) => {
     const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
@@ -3302,11 +3323,12 @@ export default function Home() {
       .sub{color:#64748b;font-size:13px} table{width:100%;border-collapse:collapse;font-size:12px}
       th,td{border:1px solid #cbd5e1;padding:6px;text-align:left} th{background:#f1f5f9} .tot{margin-top:12px;font-weight:bold}
       @page{size:A4;margin:12mm} body{padding:0}
+      ${letterheadCss()}
       table.wrap{border-collapse:collapse;width:100%} table.wrap>thead>tr>td,table.wrap>tbody>tr>td{border:0;padding:0}
       table.wrap>thead{display:table-header-group} tr{page-break-inside:avoid}
     </style></head><body>
       <table class="wrap"><thead><tr><td>
-        <div class="head"><img src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>${esc(title.toUpperCase())}</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+        ${letterheadHtml(title.toUpperCase())}
       </td></tr></thead><tbody><tr><td>
       ${bodyHtml}
       </td></tr></tbody></table>
@@ -3330,11 +3352,12 @@ export default function Home() {
       table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #cbd5e1;padding:6px;text-align:left}
       th{background:#f1f5f9} .tot{margin-top:12px;font-weight:bold}
       @page{size:A4;margin:12mm} body{padding:0}
+      ${letterheadCss()}
       table.wrap{border-collapse:collapse;width:100%} table.wrap>thead>tr>td,table.wrap>tbody>tr>td{border:0;padding:0}
       table.wrap>thead{display:table-header-group} tr{page-break-inside:avoid}
     </style></head><body>
       <table class="wrap"><thead><tr><td>
-        <div class="head"><img id="lg" src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>FACILITIES &amp; ASSET REGISTER</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+        ${letterheadHtml('FACILITIES & ASSET REGISTER')}
       </td></tr></thead><tbody><tr><td>
       <table><thead><tr><th>Tag</th><th>Item</th><th>Category</th><th>Qty</th><th>Condition</th><th>Location</th><th>Out on loan</th><th>Total value (GHS)</th></tr></thead><tbody>${rows || '<tr><td colspan="8">No items</td></tr>'}</tbody></table>
       <div class="tot">Estimated total value: GHS ${totalValue.toFixed(2)}</div>
@@ -3806,6 +3829,7 @@ export default function Home() {
               border-radius: 0.25rem;
             }
             @page { size: A4; margin: 12mm; }
+            ${letterheadCss()}
             table.wrap { border-collapse: collapse; width: 100%; }
             table.wrap > thead > tr > td, table.wrap > tbody > tr > td { padding: 0; border: 0; }
             table.wrap > thead { display: table-header-group; }
@@ -3814,17 +3838,7 @@ export default function Home() {
         </head>
         <body>
           <table class="wrap"><thead><tr><td>
-          <div class="header">
-            <img src="${logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc}" alt="Church Logo" class="logo" />
-            <div class="header-text">
-              <h2 class="church-name">${churchName.toUpperCase()}</h2>
-              <div class="subtitle">${churchTagline}</div>
-              <span class="report-title-badge">${title}</span>
-            </div>
-            <div class="meta-date">
-              <strong>Date:</strong> ${new Date().toLocaleDateString()}
-            </div>
-          </div>
+          ${letterheadHtml(title)}
           </td></tr></thead><tbody><tr><td>
           <div>
             <div class="row"><span>Opening Balance:</span><strong>GHS ${openingBalance.toFixed(2)}</strong></div>
