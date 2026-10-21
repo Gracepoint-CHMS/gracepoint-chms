@@ -3301,9 +3301,15 @@ export default function Home() {
       .head img{width:70px;height:70px;object-fit:contain} h2{margin:0;color:${themeColor}} h3{color:${themeColor};margin:18px 0 6px}
       .sub{color:#64748b;font-size:13px} table{width:100%;border-collapse:collapse;font-size:12px}
       th,td{border:1px solid #cbd5e1;padding:6px;text-align:left} th{background:#f1f5f9} .tot{margin-top:12px;font-weight:bold}
+      @page{size:A4;margin:12mm} body{padding:0}
+      table.wrap{border-collapse:collapse;width:100%} table.wrap>thead>tr>td,table.wrap>tbody>tr>td{border:0;padding:0}
+      table.wrap>thead{display:table-header-group} tr{page-break-inside:avoid}
     </style></head><body>
-      <div class="head"><img src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>${esc(title.toUpperCase())}</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+      <table class="wrap"><thead><tr><td>
+        <div class="head"><img src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>${esc(title.toUpperCase())}</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+      </td></tr></thead><tbody><tr><td>
       ${bodyHtml}
+      </td></tr></tbody></table>
       <script>window.onload = function() { window.print(); };</script>
     </body></html>`);
     w.document.close();
@@ -3323,10 +3329,16 @@ export default function Home() {
       h2{margin:0;color:${themeColor}} .sub{color:#64748b;font-size:13px}
       table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #cbd5e1;padding:6px;text-align:left}
       th{background:#f1f5f9} .tot{margin-top:12px;font-weight:bold}
+      @page{size:A4;margin:12mm} body{padding:0}
+      table.wrap{border-collapse:collapse;width:100%} table.wrap>thead>tr>td,table.wrap>tbody>tr>td{border:0;padding:0}
+      table.wrap>thead{display:table-header-group} tr{page-break-inside:avoid}
     </style></head><body>
-      <div class="head"><img id="lg" src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>FACILITIES &amp; ASSET REGISTER</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+      <table class="wrap"><thead><tr><td>
+        <div class="head"><img id="lg" src="${logo}" alt="Logo" /><div><h2>${esc(churchName)}</h2><div class="sub">${esc(churchTagline)}</div><div class="sub"><strong>FACILITIES &amp; ASSET REGISTER</strong> - ${new Date().toLocaleDateString()}</div></div></div>
+      </td></tr></thead><tbody><tr><td>
       <table><thead><tr><th>Tag</th><th>Item</th><th>Category</th><th>Qty</th><th>Condition</th><th>Location</th><th>Out on loan</th><th>Total value (GHS)</th></tr></thead><tbody>${rows || '<tr><td colspan="8">No items</td></tr>'}</tbody></table>
       <div class="tot">Estimated total value: GHS ${totalValue.toFixed(2)}</div>
+      </td></tr></tbody></table>
       <script>window.onload = function() { window.print(); };</script>
     </body></html>`);
     w.document.close();
@@ -3793,9 +3805,15 @@ export default function Home() {
               border-left: 4px solid #2563eb;
               border-radius: 0.25rem;
             }
+            @page { size: A4; margin: 12mm; }
+            table.wrap { border-collapse: collapse; width: 100%; }
+            table.wrap > thead > tr > td, table.wrap > tbody > tr > td { padding: 0; border: 0; }
+            table.wrap > thead { display: table-header-group; }
+            .row { page-break-inside: avoid; }
           </style>
         </head>
         <body>
+          <table class="wrap"><thead><tr><td>
           <div class="header">
             <img src="${logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc}" alt="Church Logo" class="logo" />
             <div class="header-text">
@@ -3807,6 +3825,7 @@ export default function Home() {
               <strong>Date:</strong> ${new Date().toLocaleDateString()}
             </div>
           </div>
+          </td></tr></thead><tbody><tr><td>
           <div>
             <div class="row"><span>Opening Balance:</span><strong>GHS ${openingBalance.toFixed(2)}</strong></div>
             <div class="row"><span>Total General Incomes:</span><strong style="color: #16a34a;">+ GHS ${totalIncomeSum.toFixed(2)}</strong></div>
@@ -3825,6 +3844,7 @@ export default function Home() {
             <strong>Official Notes & Remarks:</strong>
             <p style="margin: 0.5rem 0 0 0;">${title.includes('Balance') ? balanceSheetNotes : accountReportNotes}</p>
           </div>
+          </td></tr></tbody></table>
           <script>window.onload = function() { window.print(); };</script>
         </body>
       </html>
