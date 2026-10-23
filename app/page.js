@@ -3956,37 +3956,54 @@ export default function Home() {
     openPrintWindow('Giving Statement ' + year, html);
   };
 
-  // One-page receipt for a single tithe, contribution, pledge payment or welfare support
+  // One-page receipt / voucher for tithes, contributions, income, pledges, welfare, expenses and budgets
   const printReceipt = (kind, row) => {
     const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const n2 = (v) => (parseFloat(v) || 0).toFixed(2);
     const amtNum = parseFloat(row.amount) || 0;
     const amt = amtNum.toFixed(2);
-    let who = '', purpose = '', title = 'Official Receipt', fromLabel = 'Received from', extra = '', sign1 = 'Received by (Finance)', thanks = 'Thank you for your faithful giving. God bless you.';
+    const cell = 'border:0;padding:8px 0';
+    const line = (label, value, style) => '<tr><td style="' + cell + ';width:36%;color:#475569">' + label + '</td><td style="' + cell + (style ? ';' + style : '') + '">' + value + '</td></tr>';
+    let title = 'Official Receipt', prefix = 'RCT-', numLabel = 'Receipt', who = '', whoLabel = 'Received from', purpose = '', thanks = 'Thank you for your faithful giving. God bless you.';
+    let sign1 = 'Received by (Finance)', sign2 = 'Church stamp', amountLabel = 'Amount', extra = '', showWords = true;
     if (kind === 'Tithe') { who = row.member_name; purpose = 'Tithe'; }
     else if (kind === 'Contribution') { who = row.contributor; purpose = row.type || 'Contribution'; }
-    else if (kind === 'Pledge') {
+    else if (kind === 'Income') {
+      who = row.member_name || row.source; purpose = row.source || 'General income';
+    } else if (kind === 'Pledge') {
       who = row.member_name; purpose = 'Pledge payment - ' + (row.project || 'General');
-      extra = '<tr><td style="border:0;padding:8px 0;color:#475569">Pledge position</td><td style="border:0;padding:8px 0;font-size:13px">Pledged GHS ' + (parseFloat(row.pledged) || 0).toFixed(2) + ' &middot; paid to date GHS ' + (parseFloat(row.paidToDate) || 0).toFixed(2) + ' &middot; balance GHS ' + Math.max(0, (parseFloat(row.pledged) || 0) - (parseFloat(row.paidToDate) || 0)).toFixed(2) + '</td></tr>';
+      extra = line('Pledge position', 'Pledged GHS ' + n2(row.pledged) + ' &middot; paid to date GHS ' + n2(row.paidToDate) + ' &middot; balance GHS ' + Math.max(0, (parseFloat(row.pledged) || 0) - (parseFloat(row.paidToDate) || 0)).toFixed(2), 'font-size:13px');
     } else if (kind === 'Welfare') {
-      title = 'Welfare Support Voucher'; fromLabel = 'Paid to'; who = row.member_name; purpose = 'Welfare support - ' + (row.category || 'Support');
-      sign1 = 'Authorised by (Church office)'; thanks = 'This support was given in love by the church family. We are praying with you. God bless you.';
+      title = 'Welfare Support Voucher'; prefix = 'WSV-'; numLabel = 'Voucher'; whoLabel = 'Paid to'; who = row.member_name; purpose = 'Welfare support - ' + (row.category || 'Support');
+      sign1 = 'Authorised by (Church office)'; sign2 = 'Received by (Member)'; thanks = 'This support was given in love by the church family. We are praying with you. God bless you.';
+    } else if (kind === 'WelfareContrib') {
+      title = 'Welfare Contribution Receipt'; who = row.member_name; purpose = 'Welfare contributions (' + esc(row.period || '') + ')'; amountLabel = 'Total contributed';
+      const rowsHtml = (row.months || []).filter(m => m[2] > 0).map(m => '<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">' + esc(m[0]) + '</td>' + m[1].map(w => '<td style="border:1px solid #cbd5e1;padding:4px 8px;text-align:right">' + (w ? n2(w) : '-') + '</td>').join('') + '<td style="border:1px solid #cbd5e1;padding:4px 8px;text-align:right"><strong>' + n2(m[2]) + '</strong></td></tr>').join('');
+      extra = '<tr><td colspan="2" style="' + cell + '"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f1f5f9"><th style="border:1px solid #cbd5e1;padding:4px 8px;text-align:left">Month</th><th style="border:1px solid #cbd5e1;padding:4px 8px">Wk 1</th><th style="border:1px solid #cbd5e1;padding:4px 8px">Wk 2</th><th style="border:1px solid #cbd5e1;padding:4px 8px">Wk 3</th><th style="border:1px solid #cbd5e1;padding:4px 8px">Wk 4</th><th style="border:1px solid #cbd5e1;padding:4px 8px">Total</th></tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="6" style="border:1px solid #cbd5e1;padding:6px">No contributions recorded yet.</td></tr>') + '</tbody></table></td></tr>';
+      thanks = 'Thank you for your faithful welfare contributions. God bless you.';
+    } else if (kind === 'Expense') {
+      title = 'Payment Voucher'; prefix = 'PV-'; numLabel = 'Voucher'; whoLabel = 'Paid for'; who = row.description; purpose = row.department ? 'Department: ' + row.department : 'General expense';
+      sign1 = 'Prepared by (Finance)'; sign2 = 'Approved by (Pastor / Board)'; thanks = 'Payment made on behalf of ' + churchName + '. Please attach the supplier receipt or invoice to this voucher.';
+      amountLabel = 'Amount paid';
+    } else if (kind === 'Budget') {
+      title = 'Budget Approval Sheet'; prefix = 'BUD-'; numLabel = 'Reference'; whoLabel = 'Budget item'; who = row.item; purpose = 'Status: ' + (row.status || 'Pending') + (row.approved_on ? ' (approved ' + row.approved_on + ')' : '');
+      amountLabel = 'Estimated cost'; sign1 = 'Prepared by'; sign2 = 'Approved by (Pastor / Board)'; thanks = 'This budget is recorded in the church accounts. Spending must stay within the approved amount.';
     }
     const seed = [kind, row.member_id || who || '', row.date || '', amt].join('|');
     let h = 0; for (let k = 0; k < seed.length; k++) { h = (h * 31 + seed.charCodeAt(k)) % 1000000; }
-    const ref = (kind === 'Welfare' ? 'WSV-' : 'RCT-') + String(row.date || '').replace(/-/g, '') + '-' + String(h).padStart(6, '0');
-    const cell = 'border:0;padding:8px 0';
+    const ref = prefix + String(row.date || '').replace(/-/g, '') + '-' + String(h).padStart(6, '0');
     const html = '<div style="max-width:640px;margin:10px auto;border:2px solid ' + themeColor + ';border-radius:8px;padding:22px">'
-      + '<p style="text-align:right;margin:0 0 14px;font-size:12px;color:#475569">' + (kind === 'Welfare' ? 'Voucher' : 'Receipt') + ' No: <strong>' + esc(ref) + '</strong></p>'
+      + '<p style="text-align:right;margin:0 0 14px;font-size:12px;color:#475569">' + numLabel + ' No: <strong>' + esc(ref) + '</strong></p>'
       + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
-      + '<tr><td style="' + cell + ';width:36%;color:#475569">' + fromLabel + '</td><td style="' + cell + '"><strong>' + esc(who || '') + '</strong></td></tr>'
-      + '<tr><td style="' + cell + ';color:#475569">Purpose</td><td style="' + cell + '">' + esc(purpose) + '</td></tr>'
-      + '<tr><td style="' + cell + ';color:#475569">Date</td><td style="' + cell + '">' + esc(row.date || '') + '</td></tr>'
-      + '<tr><td style="' + cell + ';color:#475569">Amount</td><td style="' + cell + ';font-size:20px"><strong>GHS ' + amt + '</strong></td></tr>'
-      + '<tr><td style="' + cell + ';color:#475569">Amount in words</td><td style="' + cell + ';font-style:italic">' + esc(amountInWords(amtNum)) + '</td></tr>'
+      + line(whoLabel, '<strong>' + esc(who || '') + '</strong>')
+      + line('Purpose', kind === 'WelfareContrib' ? purpose : esc(purpose))
+      + line('Date', esc(row.date || ''))
+      + line(amountLabel, '<strong>GHS ' + amt + '</strong>', 'font-size:20px')
+      + (showWords ? line('Amount in words', esc(amountInWords(amtNum)), 'font-style:italic') : '')
       + extra
       + '</table>'
       + '<p style="margin:26px 0 4px;font-size:13px;color:#334155">' + esc(thanks) + '</p>'
-      + '<div style="display:flex;justify-content:space-between;margin-top:42px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + esc(sign1) + '</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + (kind === 'Welfare' ? 'Received by (Member)' : 'Church stamp') + '</span></div>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:42px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + esc(sign1) + '</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + esc(sign2) + '</span></div>'
       + '<p style="margin:22px 0 0;padding-top:8px;border-top:1px solid #e2e8f0;text-align:center;font-size:10.5px;color:#64748b">' + esc(churchName) + ' LBG &middot; Registration No. ' + RECEIPT_REG_NO + '</p>'
       + '</div>';
     openPrintWindow(title, html);
@@ -5280,7 +5297,7 @@ export default function Home() {
                 <h4 style={{ color: '#0f172a' }}>Recorded Incomes ({incomes.length})</h4>
                 {incomes.map((inc, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{inc.source}</strong> ({inc.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(inc.amount || 0).toFixed(2)}</strong></span>
+                    <span><strong>{inc.source}</strong> ({inc.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(inc.amount || 0).toFixed(2)}</strong> <button type="button" onClick={() => printReceipt('Income', inc)} style={{ marginLeft: '0.4rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Receipt</button></span>
                     {role === 'super_admin' && (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => { setIncomeForm(inc); setEditingIncomeIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
@@ -5340,7 +5357,7 @@ export default function Home() {
                 <h4 style={{ color: '#0f172a' }}>Recorded Expenses ({expenses.length})</h4>
                 {expenses.map((exp, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{exp.description}</strong> ({exp.date}){exp.department ? <span style={{ color: '#64748b', fontSize: '0.8rem' }}> [{exp.department}]</span> : null} - <strong style={{ color: '#dc2626' }}>GHS {parseFloat(exp.amount || 0).toFixed(2)}</strong></span>
+                    <span><strong>{exp.description}</strong> ({exp.date}){exp.department ? <span style={{ color: '#64748b', fontSize: '0.8rem' }}> [{exp.department}]</span> : null} - <strong style={{ color: '#dc2626' }}>GHS {parseFloat(exp.amount || 0).toFixed(2)}</strong> <button type="button" onClick={() => printReceipt('Expense', exp)} style={{ marginLeft: '0.4rem', backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #93c5fd', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Voucher</button></span>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button type="button" onClick={() => { setExpenseForm(exp); setEditingExpenseIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
                       <button type="button" onClick={() => setExpenses(expenses.filter((_, idx) => idx !== i))} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
@@ -5532,7 +5549,7 @@ export default function Home() {
                 {budgets.map((b, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span><strong>{b.item}</strong> (GHS {parseFloat(b.estimated || 0).toFixed(2)}){b.date ? <span style={{ color: '#64748b', fontSize: '0.8rem' }}> - {b.date}</span> : null}{b.approved_on ? <span style={{ color: '#16a34a', fontSize: '0.8rem' }}> - approved {b.approved_on}</span> : null}</span>
-                    <span style={{ fontWeight: 'bold', color: b.status === 'Approved' ? '#16a34a' : '#d97706' }}>{b.status}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><button type="button" onClick={() => printReceipt('Budget', { item: b.item, amount: b.estimated, date: b.date, status: b.status, approved_on: b.approved_on })} style={{ marginLeft: '0.4rem', backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #93c5fd', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Print</button><span style={{ fontWeight: 'bold', color: b.status === 'Approved' ? '#16a34a' : '#d97706' }}>{b.status}</span></span>
                   </div>
                 ))}
               </div>
@@ -5556,7 +5573,8 @@ export default function Home() {
                           <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#0f172a' }}>{b.item}</div>
                           <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Amount: GHS {parseFloat(b.estimated || 0).toFixed(2)}{b.date ? ' - Date: ' + b.date : ''}{b.approved_on ? ' - Approved: ' + b.approved_on : ''}</div>
                         </div>
-                        <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <button type="button" onClick={() => printReceipt('Budget', { item: b.item, amount: b.estimated, date: b.date, status: b.status, approved_on: b.approved_on })} style={{ marginLeft: '0.4rem', backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #93c5fd', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Print</button>
                           {b.status === 'Pending' ? (
                             <button 
                               type="button" 
@@ -5674,7 +5692,16 @@ export default function Home() {
                       </table>
                     </div>
 
-                    <button type="button" onClick={() => { alert('Welfare records saved successfully!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
+                    <button type="button" onClick={() => {
+                      const rec = welfareRecords[selectedMemberForWelfare.id || 'default'] || {};
+                      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(mo => { const wk = (rec[mo] || [0, 0, 0, 0]).map(v => parseFloat(v) || 0); return [mo, wk, wk.reduce((a, b) => a + b, 0)]; });
+                      const grand = months.reduce((a, m) => a + m[2], 0);
+                      printReceipt('WelfareContrib', { member_id: selectedMemberForWelfare.id, member_name: displayName(selectedMemberForWelfare).trim() || selectedMemberForWelfare.email, months, amount: grand, date: todayStr(), period: String(new Date().getFullYear()) });
+                    }} style={{ width: '100%', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.7rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}>
+                      🧾 Print Welfare Receipt
+                    </button>
+
+                    <button type="button" onClick={() => { alert('Welfare records saved successfully!'); setFinanceView('hub'); setSelectedMemberForWelfare(null); }} style={{ width: '100%', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', marginTop: '0.6rem', cursor: 'pointer' }}>
                       Save Welfare Records
                     </button>
                   </div>
