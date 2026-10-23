@@ -1754,6 +1754,28 @@ function BudgetVsActual({ deptBudgets, onChange, expenses, theme, canEdit, openP
     const tr = rows.map(r => '<tr><td>' + r.dept + '</td><td style="text-align:right">' + money(r.budget) + '</td><td style="text-align:right">' + money(r.spent) + '</td><td style="text-align:right">' + money(r.left) + '</td><td style="text-align:right">' + (r.pct > 900 ? 'no budget' : r.pct.toFixed(0) + '%') + '</td></tr>').join('');
     openPrint('Budget vs Actual ' + year, '<h2>Budget vs Actual Spending - ' + year + '</h2><table><tr><th>Department</th><th>Budget</th><th>Spent</th><th>Left</th><th>Used</th></tr>' + tr + '<tr><th>Total</th><th style="text-align:right">' + money(totBudget) + '</th><th style="text-align:right">' + money(totSpent) + '</th><th style="text-align:right">' + money(totBudget - totSpent) + '</th><th></th></tr></table>' + (unassigned > 0 ? '<p>Expenses with no department chosen: ' + money(unassigned) + '</p>' : ''));
   };
+  // One-department budget sheet with its expense list and signature lines
+  const printDept = (r) => {
+    const e2 = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const items = (expenses || []).filter(x => x.department === r.dept && String(x.date || '').slice(0, 4) === year).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    const itemRows = items.map(x => '<tr><td>' + e2(x.date) + '</td><td>' + e2(x.description) + '</td><td style="text-align:right">' + money(x.amount) + '</td></tr>').join('');
+    const usedTxt = r.pct > 900 ? 'No budget set' : r.pct.toFixed(0) + '% used';
+    const html = '<div style="border:2px solid ' + theme + ';border-radius:8px;padding:18px;max-width:680px;margin:6px auto">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
+      + '<tr><td style="border:0;padding:6px 0;width:34%;color:#475569">Department</td><td style="border:0;padding:6px 0"><strong>' + e2(r.dept) + '</strong></td></tr>'
+      + '<tr><td style="border:0;padding:6px 0;color:#475569">Budget year</td><td style="border:0;padding:6px 0">' + e2(year) + '</td></tr>'
+      + '<tr><td style="border:0;padding:6px 0;color:#475569">Approved budget</td><td style="border:0;padding:6px 0"><strong>' + money(r.budget) + '</strong></td></tr>'
+      + '<tr><td style="border:0;padding:6px 0;color:#475569">In words</td><td style="border:0;padding:6px 0;font-style:italic">' + e2(amountInWords(r.budget)) + '</td></tr>'
+      + '<tr><td style="border:0;padding:6px 0;color:#475569">Spent so far</td><td style="border:0;padding:6px 0">' + money(r.spent) + ' (' + e2(usedTxt) + ')</td></tr>'
+      + '<tr><td style="border:0;padding:6px 0;color:#475569">' + (r.left >= 0 ? 'Balance left' : 'Over budget by') + '</td><td style="border:0;padding:6px 0"><strong style="color:' + (r.left >= 0 ? '#166534' : '#b91c1c') + '">' + money(Math.abs(r.left)) + '</strong></td></tr>'
+      + '</table>'
+      + '<h3 style="margin:16px 0 6px">Expenses charged to this department</h3>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + (itemRows || '<tr><td colspan="3">No expenses recorded for this department in ' + e2(year) + '.</td></tr>') + '</tbody></table>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:44px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:190px;text-align:center">Department head</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:190px;text-align:center">Approved by (Pastor / Board)</span></div>'
+      + '<p style="margin:20px 0 0;padding-top:8px;border-top:1px solid #e2e8f0;text-align:center;font-size:10.5px;color:#64748b">Gracepoint Prophetic Church LBG &middot; Registration No. ' + RECEIPT_REG_NO + '</p>'
+      + '</div>';
+    openPrint('Department Budget Sheet - ' + r.dept + ' ' + year, html);
+  };
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
@@ -1781,7 +1803,10 @@ function BudgetVsActual({ deptBudgets, onChange, expenses, theme, canEdit, openP
         <div key={r.dept} style={cardBox}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontWeight: 'bold', color: '#0f172a' }}>
             <span>{r.dept}{r.pct >= 100 ? ' ⚠️ over budget' : r.pct >= 80 ? ' ⚠️ nearly used' : ''}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <button type="button" onClick={() => printDept(r)} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #93c5fd', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Print</button>
             {canEdit && <button type="button" onClick={() => { if (confirm('Remove the ' + year + ' budget for ' + r.dept + '?')) onChange((deptBudgets || []).filter(b => !(String(b.year) === year && b.dept === r.dept))); }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.8rem' }}>Remove</button>}
+            </span>
           </div>
           <div style={{ height: '0.6rem', backgroundColor: '#e2e8f0', borderRadius: '1rem', margin: '0.5rem 0', overflow: 'hidden' }}>
             <div style={{ width: Math.min(100, r.pct) + '%', height: '100%', backgroundColor: colorFor(r.pct) }} />
