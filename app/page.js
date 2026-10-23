@@ -861,6 +861,36 @@ const SUB_DEPARTMENTS = [
 // ---------- Shared helpers for the newer screens ----------
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Amount in words for receipts, e.g. 50 -> "Fifty Ghana Cedis only"
+const amountInWords = (value) => {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const below1000 = (x) => {
+    let out = '';
+    if (x >= 100) { out += ones[Math.floor(x / 100)] + ' Hundred'; x %= 100; if (x) out += ' and '; }
+    if (x >= 20) { out += tens[Math.floor(x / 10)]; if (x % 10) out += '-' + ones[x % 10]; }
+    else if (x > 0) out += ones[x];
+    return out;
+  };
+  const words = (n) => {
+    if (n === 0) return 'Zero';
+    const scales = [[1e9, 'Billion'], [1e6, 'Million'], [1e3, 'Thousand']];
+    let out = '';
+    for (const [size, name] of scales) {
+      if (n >= size) { out += (out ? ' ' : '') + below1000(Math.floor(n / size)) + ' ' + name; n %= size; }
+    }
+    if (n > 0) { const rest = below1000(n); out += (out ? (n < 100 ? ' and ' : ' ') : '') + rest; }
+    return out;
+  };
+  const total = Math.round((parseFloat(value) || 0) * 100);
+  const cedis = Math.floor(total / 100), pesewas = total % 100;
+  let text = '';
+  if (cedis > 0 || pesewas === 0) text = words(cedis) + (cedis === 1 ? ' Ghana Cedi' : ' Ghana Cedis');
+  if (pesewas > 0) text += (text ? ' and ' : '') + words(pesewas) + (pesewas === 1 ? ' Pesewa' : ' Pesewas');
+  return text + ' only';
+};
+const RECEIPT_REG_NO = 'CG043590523';
 const waNumber = (phone) => {
   const d = String(phone || '').replace(/[^0-9]/g, '');
   if (!d) return '';
@@ -1087,7 +1117,7 @@ function FollowUpTab({ visitors, converts, setVisitors, setConverts, theme }) {
 }
 
 // ---------- Pledges and giving goals ----------
-function PledgesTab({ items, onChange, members, theme, isSuper }) {
+function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt }) {
   const blank = { project: '', member_id: '', member_name: '', amount: '', due_date: '', goal: '', payments: [] };
   const [show, setShow] = useState(false);
   const [form, setForm] = useState(blank);
@@ -1179,7 +1209,7 @@ function PledgesTab({ items, onChange, members, theme, isSuper }) {
             </div>
             {bar(paid, total)}
             <div style={{ fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between' }}><span>Paid GHS {paid.toFixed(2)} of {total.toFixed(2)}</span><strong style={{ color: paid >= total ? '#16a34a' : '#b45309' }}>{paid >= total ? 'Completed' : 'Balance ' + (total - paid).toFixed(2)}</strong></div>
-            {(p.payments || []).length > 0 && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>{(p.payments || []).map(x => x.date + ': GHS ' + num(x.amount).toFixed(2)).join('  |  ')}</div>}
+            {(p.payments || []).length > 0 && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem 0.9rem' }}>{(p.payments || []).map((x, j) => <span key={j}>{x.date}: GHS {num(x.amount).toFixed(2)} {onReceipt ? <button type="button" onClick={() => onReceipt('Pledge', { member_id: p.member_id, member_name: p.member_name, project: p.project, amount: x.amount, date: x.date, pledged: p.amount, paidToDate: (p.payments || []).slice(0, j + 1).reduce((a, y) => a + num(y.amount), 0) })} style={{ marginLeft: '0.2rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.72rem' }}>Receipt</button> : null}</span>)}</div>}
             {paid < total && (
               <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
                 <input type="number" min="0" step="0.01" placeholder="Amount paid" value={(pay[i] || {}).amount || ''} onChange={(e) => setPay({ ...pay, [i]: { ...(pay[i] || {}), amount: e.target.value } })} style={{ ...formBox, flex: 1, minWidth: '6rem', width: 'auto' }} />
@@ -1610,7 +1640,7 @@ function MemberWelfare({ user, member, theme }) {
   );
 }
 
-function WelfareAdmin({ members, theme, isSuper, onRecordExpense }) {
+function WelfareAdmin({ members, theme, isSuper, onRecordExpense, onReceipt }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState('');
   const [filter, setFilter] = useState('open');
@@ -1676,6 +1706,7 @@ function WelfareAdmin({ members, theme, isSuper, onRecordExpense }) {
               }} style={smallBtn('#dcfce7', '#166534')}>Mark helped</button>}
               {r.status !== 'declined' && r.status !== 'paid' && <button type="button" onClick={() => patch(r.id, { status: 'declined', admin_note: e.note })} style={smallBtn('#fee2e2', '#991b1b')}>Decline</button>}
               <button type="button" onClick={() => patch(r.id, { admin_note: e.note })} style={smallBtn()}>Save note</button>
+              {onReceipt && r.status === 'paid' && Number(r.amount_given) > 0 ? <button type="button" onClick={() => onReceipt('Welfare', { member_id: r.member_id, member_name: r.member_name || r.member_email, category: r.category, amount: r.amount_given, date: String(r.updated_at || r.created_at || '').slice(0, 10) })} style={smallBtn('#ecfdf5', '#166534')}>🧾 Voucher</button> : null}
               {phone ? <a href={'tel:' + phone} style={smallBtn('#eff6ff', '#1d4ed8')}>📞 Call</a> : null}
               {phone ? <a href={'https://wa.me/' + waNumber(phone)} target="_blank" rel="noopener noreferrer" style={smallBtn('#dcfce7', '#166534')}>🟢 WhatsApp</a> : null}
               {isSuper && <button type="button" onClick={() => remove(r.id)} style={smallBtn('#fee2e2', '#dc2626')}>🗑️</button>}
@@ -3925,27 +3956,40 @@ export default function Home() {
     openPrintWindow('Giving Statement ' + year, html);
   };
 
-  // One-page receipt for a single tithe or contribution
+  // One-page receipt for a single tithe, contribution, pledge payment or welfare support
   const printReceipt = (kind, row) => {
     const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const amt = (parseFloat(row.amount) || 0).toFixed(2);
-    const who = kind === 'Tithe' ? row.member_name : row.contributor;
-    const purpose = kind === 'Tithe' ? 'Tithe' : (row.type || 'Contribution');
+    const amtNum = parseFloat(row.amount) || 0;
+    const amt = amtNum.toFixed(2);
+    let who = '', purpose = '', title = 'Official Receipt', fromLabel = 'Received from', extra = '', sign1 = 'Received by (Finance)', thanks = 'Thank you for your faithful giving. God bless you.';
+    if (kind === 'Tithe') { who = row.member_name; purpose = 'Tithe'; }
+    else if (kind === 'Contribution') { who = row.contributor; purpose = row.type || 'Contribution'; }
+    else if (kind === 'Pledge') {
+      who = row.member_name; purpose = 'Pledge payment - ' + (row.project || 'General');
+      extra = '<tr><td style="border:0;padding:8px 0;color:#475569">Pledge position</td><td style="border:0;padding:8px 0;font-size:13px">Pledged GHS ' + (parseFloat(row.pledged) || 0).toFixed(2) + ' &middot; paid to date GHS ' + (parseFloat(row.paidToDate) || 0).toFixed(2) + ' &middot; balance GHS ' + Math.max(0, (parseFloat(row.pledged) || 0) - (parseFloat(row.paidToDate) || 0)).toFixed(2) + '</td></tr>';
+    } else if (kind === 'Welfare') {
+      title = 'Welfare Support Voucher'; fromLabel = 'Paid to'; who = row.member_name; purpose = 'Welfare support - ' + (row.category || 'Support');
+      sign1 = 'Authorised by (Church office)'; thanks = 'This support was given in love by the church family. We are praying with you. God bless you.';
+    }
     const seed = [kind, row.member_id || who || '', row.date || '', amt].join('|');
     let h = 0; for (let k = 0; k < seed.length; k++) { h = (h * 31 + seed.charCodeAt(k)) % 1000000; }
-    const ref = 'RCT-' + String(row.date || '').replace(/-/g, '') + '-' + String(h).padStart(6, '0');
+    const ref = (kind === 'Welfare' ? 'WSV-' : 'RCT-') + String(row.date || '').replace(/-/g, '') + '-' + String(h).padStart(6, '0');
+    const cell = 'border:0;padding:8px 0';
     const html = '<div style="max-width:640px;margin:10px auto;border:2px solid ' + themeColor + ';border-radius:8px;padding:22px">'
-      + '<p style="text-align:right;margin:0 0 14px;font-size:12px;color:#475569">Receipt No: <strong>' + esc(ref) + '</strong></p>'
+      + '<p style="text-align:right;margin:0 0 14px;font-size:12px;color:#475569">' + (kind === 'Welfare' ? 'Voucher' : 'Receipt') + ' No: <strong>' + esc(ref) + '</strong></p>'
       + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
-      + '<tr><td style="border:0;padding:8px 0;width:36%;color:#475569">Received from</td><td style="border:0;padding:8px 0"><strong>' + esc(who || '') + '</strong></td></tr>'
-      + '<tr><td style="border:0;padding:8px 0;color:#475569">Purpose</td><td style="border:0;padding:8px 0">' + esc(purpose) + '</td></tr>'
-      + '<tr><td style="border:0;padding:8px 0;color:#475569">Date</td><td style="border:0;padding:8px 0">' + esc(row.date || '') + '</td></tr>'
-      + '<tr><td style="border:0;padding:8px 0;color:#475569">Amount</td><td style="border:0;padding:8px 0;font-size:20px"><strong>GHS ' + amt + '</strong></td></tr>'
+      + '<tr><td style="' + cell + ';width:36%;color:#475569">' + fromLabel + '</td><td style="' + cell + '"><strong>' + esc(who || '') + '</strong></td></tr>'
+      + '<tr><td style="' + cell + ';color:#475569">Purpose</td><td style="' + cell + '">' + esc(purpose) + '</td></tr>'
+      + '<tr><td style="' + cell + ';color:#475569">Date</td><td style="' + cell + '">' + esc(row.date || '') + '</td></tr>'
+      + '<tr><td style="' + cell + ';color:#475569">Amount</td><td style="' + cell + ';font-size:20px"><strong>GHS ' + amt + '</strong></td></tr>'
+      + '<tr><td style="' + cell + ';color:#475569">Amount in words</td><td style="' + cell + ';font-style:italic">' + esc(amountInWords(amtNum)) + '</td></tr>'
+      + extra
       + '</table>'
-      + '<p style="margin:26px 0 4px;font-size:13px;color:#334155">Thank you for your faithful giving. God bless you.</p>'
-      + '<div style="display:flex;justify-content:space-between;margin-top:42px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">Received by (Finance)</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">Church stamp</span></div>'
+      + '<p style="margin:26px 0 4px;font-size:13px;color:#334155">' + esc(thanks) + '</p>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:42px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + esc(sign1) + '</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + (kind === 'Welfare' ? 'Received by (Member)' : 'Church stamp') + '</span></div>'
+      + '<p style="margin:22px 0 0;padding-top:8px;border-top:1px solid #e2e8f0;text-align:center;font-size:10.5px;color:#64748b">' + esc(churchName) + ' LBG &middot; Registration No. ' + RECEIPT_REG_NO + '</p>'
       + '</div>';
-    openPrintWindow('Official Receipt', html);
+    openPrintWindow(title, html);
   };
 
   const downloadBackupExcel = () => {
@@ -4714,7 +4758,7 @@ export default function Home() {
           <VolunteerAdmin members={members} rotas={rotasList} theme={themeColor} />
         )}
         {activeTab === 'welfare' && can('manage_welfare') && (
-          <WelfareAdmin members={members} theme={themeColor} isSuper={role === 'super_admin'} onRecordExpense={can('access_finance') ? ((d, amt) => setExpenses([{ description: d, amount: String(amt), date: todayISO(), department: 'Welfare' }, ...expenses])) : null} />
+          <WelfareAdmin members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={can('access_finance') ? printReceipt : null} onRecordExpense={can('access_finance') ? ((d, amt) => setExpenses([{ description: d, amount: String(amt), date: todayISO(), department: 'Welfare' }, ...expenses])) : null} />
         )}
 
         {/* Admin Permissions Tab (Super Admin Only) */}
@@ -5981,7 +6025,7 @@ export default function Home() {
 
         {/* Pledges */}
         {activeTab === 'pledges' && can('access_finance') && (
-          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} />
+          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} />
         )}
 
         {/* Activity Log */}
