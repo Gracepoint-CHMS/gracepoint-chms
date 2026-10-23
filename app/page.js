@@ -3925,6 +3925,29 @@ export default function Home() {
     openPrintWindow('Giving Statement ' + year, html);
   };
 
+  // One-page receipt for a single tithe or contribution
+  const printReceipt = (kind, row) => {
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const amt = (parseFloat(row.amount) || 0).toFixed(2);
+    const who = kind === 'Tithe' ? row.member_name : row.contributor;
+    const purpose = kind === 'Tithe' ? 'Tithe' : (row.type || 'Contribution');
+    const seed = [kind, row.member_id || who || '', row.date || '', amt].join('|');
+    let h = 0; for (let k = 0; k < seed.length; k++) { h = (h * 31 + seed.charCodeAt(k)) % 1000000; }
+    const ref = 'RCT-' + String(row.date || '').replace(/-/g, '') + '-' + String(h).padStart(6, '0');
+    const html = '<div style="max-width:640px;margin:10px auto;border:2px solid ' + themeColor + ';border-radius:8px;padding:22px">'
+      + '<p style="text-align:right;margin:0 0 14px;font-size:12px;color:#475569">Receipt No: <strong>' + esc(ref) + '</strong></p>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
+      + '<tr><td style="border:0;padding:8px 0;width:36%;color:#475569">Received from</td><td style="border:0;padding:8px 0"><strong>' + esc(who || '') + '</strong></td></tr>'
+      + '<tr><td style="border:0;padding:8px 0;color:#475569">Purpose</td><td style="border:0;padding:8px 0">' + esc(purpose) + '</td></tr>'
+      + '<tr><td style="border:0;padding:8px 0;color:#475569">Date</td><td style="border:0;padding:8px 0">' + esc(row.date || '') + '</td></tr>'
+      + '<tr><td style="border:0;padding:8px 0;color:#475569">Amount</td><td style="border:0;padding:8px 0;font-size:20px"><strong>GHS ' + amt + '</strong></td></tr>'
+      + '</table>'
+      + '<p style="margin:26px 0 4px;font-size:13px;color:#334155">Thank you for your faithful giving. God bless you.</p>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:42px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">Received by (Finance)</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">Church stamp</span></div>'
+      + '</div>';
+    openPrintWindow('Official Receipt', html);
+  };
+
   const downloadBackupExcel = () => {
     const nameOf = (id) => { const m = members.find(x => String(x.id) === String(id)); return m ? displayName(m) : ''; };
     const sheets = [
@@ -5338,7 +5361,7 @@ export default function Home() {
                 <h4 style={{ color: '#0f172a' }}>Recorded Tithes ({tithes.length})</h4>
                 {tithes.map((t, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{t.member_name}</strong> ({t.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong></span>
+                    <span><strong>{t.member_name}</strong> ({t.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(t.amount || 0).toFixed(2)}</strong> <button type="button" onClick={() => printReceipt('Tithe', t)} style={{ marginLeft: '0.4rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Receipt</button></span>
                     {role === 'super_admin' && (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => { setTitheForm(t); setEditingTitheIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
@@ -5415,7 +5438,7 @@ export default function Home() {
                 <h4 style={{ color: '#0f172a' }}>Recorded Contributions ({contributions.length}) - Total: GHS {totalContribSum.toFixed(2)}</h4>
                 {contributions.map((c, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{c.contributor}</strong> - {c.type} ({c.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong></span>
+                    <span><strong>{c.contributor}</strong> - {c.type} ({c.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong> <button type="button" onClick={() => printReceipt('Contribution', c)} style={{ marginLeft: '0.4rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Receipt</button></span>
                     {role === 'super_admin' && (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => { setContribForm(c); setEditingContribIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
