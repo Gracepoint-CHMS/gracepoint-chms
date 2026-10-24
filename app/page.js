@@ -3939,6 +3939,8 @@ export default function Home() {
     if (!list.length) { alert('There are no members to print.'); return; }
     const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
+    const cardPhone = (settings && settings.phone) || '0244254429';
+    const cardAddr = (settings && settings.address) || 'Techiman, Ghana';
     const cards = list.map(m => {
       let qr = '';
       try { qr = qrSvgString('GPC:' + m.id, 86); } catch (e) { qr = ''; }
@@ -3946,7 +3948,7 @@ export default function Home() {
       const photo = m.photo_url ? '<img class="ph" src="' + esc(m.photo_url) + '" />' : '<div class="ph ini">' + ini + '</div>';
       return '<div class="card"><div class="top"><img src="' + esc(logo) + '" /><div><b>' + esc(churchName) + '</b><br/><small>MEMBER ID CARD</small></div></div>'
         + '<div class="mid">' + photo + '<div class="info"><div class="nm">' + esc(displayName(m)) + '</div><div>' + esc(m.core_department || '') + '</div><div class="sm">' + esc(m.sub_departments || '') + '</div><div class="sm">No: ' + esc(memberNo(m)) + '</div>' + (m.phone ? '<div class="sm">Tel: ' + esc(m.phone) + '</div>' : '') + '</div><div class="qr">' + qr + '</div></div>'
-        + '<div class="bot">' + esc(churchTagline || churchName) + '</div></div>';
+        + '<div class="bot"><b>PROPERTY OF ' + esc(String(churchName).toUpperCase()) + '. Not transferable.</b><br/>If found, please return it to the church or call ' + esc(cardPhone) + (cardAddr ? ' · ' + esc(cardAddr) : '') + '</div></div>';
     }).join('');
     const w = window.open('', '_blank');
     if (!w) { alert('Please allow pop-ups for this site to print.'); return; }
@@ -3957,7 +3959,7 @@ export default function Home() {
       + '.top{background:' + themeColor + ';color:#fff;display:flex;align-items:center;gap:2.5mm;padding:1.8mm 3mm;font-size:9pt}.top img{width:9mm;height:9mm;object-fit:contain;background:#fff;border-radius:50%}.top small{font-size:6.5pt;letter-spacing:.6px}'
       + '.mid{flex:1;display:flex;align-items:center;gap:2.5mm;padding:2mm 3mm}.ph{width:19mm;height:23mm;object-fit:cover;border-radius:1.5mm;border:1px solid #cbd5e1;flex:none}.ini{display:flex;align-items:center;justify-content:center;background:#e2e8f0;font-weight:bold;font-size:14pt;color:#334155}'
       + '.info{flex:1;font-size:7.5pt;min-width:0}.nm{font-weight:bold;font-size:9.5pt;margin-bottom:.6mm;color:' + themeColor + '}.sm{color:#475569;font-size:6.5pt}.qr{flex:none}'
-      + '.bot{background:#f1f5f9;text-align:center;font-size:6pt;color:#475569;padding:1mm}'
+      + '.bot{background:#f1f5f9;text-align:center;font-size:5.6pt;line-height:1.3;color:#334155;padding:1mm 2mm;border-top:1px solid #cbd5e1}'
       + '</style></head><body><div class="sheet">' + cards + '</div><script>window.onload=function(){window.print();};<\/script></body></html>');
     w.document.close();
   };
