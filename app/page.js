@@ -3941,25 +3941,55 @@ export default function Home() {
     const logo = logoSrc.startsWith('http') ? logoSrc : window.location.origin + logoSrc;
     const cardPhone = (settings && settings.phone) || '0244254429';
     const cardAddr = (settings && settings.address) || 'Techiman, Ghana';
+    const tag = churchTagline || churchName;
     const cards = list.map(m => {
       let qr = '';
-      try { qr = qrSvgString('GPC:' + m.id, 86); } catch (e) { qr = ''; }
+      try { qr = qrSvgString('GPC:' + m.id, 78); } catch (e) { qr = ''; }
       const ini = esc((((m.first_name || '') + ' ' + (m.last_name || '')).trim() || '?').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2));
       const photo = m.photo_url ? '<img class="ph" src="' + esc(m.photo_url) + '" />' : '<div class="ph ini">' + ini + '</div>';
-      return '<div class="card"><div class="top"><img src="' + esc(logo) + '" /><div><b>' + esc(churchName) + '</b><br/><small>MEMBER ID CARD</small></div></div>'
-        + '<div class="mid">' + photo + '<div class="info"><div class="nm">' + esc(displayName(m)) + '</div><div>' + esc(m.core_department || '') + '</div><div class="sm">' + esc(m.sub_departments || '') + '</div><div class="sm">No: ' + esc(memberNo(m)) + '</div>' + (m.phone ? '<div class="sm">Tel: ' + esc(m.phone) + '</div>' : '') + '</div><div class="qr">' + qr + '</div></div>'
-        + '<div class="bot"><b>PROPERTY OF ' + esc(String(churchName).toUpperCase()) + '. Not transferable.</b><br/>If found, please return it to the church or call ' + esc(cardPhone) + (cardAddr ? ' · ' + esc(cardAddr) : '') + '</div></div>';
+      const subs = String(m.sub_departments || '').split(',').map(s => s.trim()).filter(Boolean);
+      const front = '<div class="card front">'
+        + '<div class="hd"><img src="' + esc(logo) + '" /><div class="hn"><b>' + esc(churchName) + '</b><span>' + esc(tag) + '</span></div><div class="ty">MEMBER<br/>ID</div></div>'
+        + '<div class="gold"></div>'
+        + '<div class="bd">' + photo
+        + '<div class="info"><div class="nm">' + esc(displayName(m)) + '</div>'
+        + (m.core_department ? '<div class="role">' + esc(m.core_department) + '</div>' : '')
+        + (subs.length ? '<div class="sm">' + esc(subs.join(' · ')) + '</div>' : '')
+        + '<div class="no">' + esc(memberNo(m)) + '</div></div>'
+        + '<div class="qr">' + qr + '</div></div>'
+        + '<div class="ft">' + (m.phone ? 'Tel: ' + esc(m.phone) : '&nbsp;') + '</div></div>';
+      const back = '<div class="card back">'
+        + '<div class="hd bk"><img src="' + esc(logo) + '" /><div class="hn"><b>' + esc(churchName) + '</b><span>' + esc(tag) + '</span></div></div>'
+        + '<div class="gold"></div>'
+        + '<div class="bb"><div class="prop">PROPERTY OF ' + esc(String(churchName).toUpperCase()) + '</div>'
+        + '<p>This card is not transferable. If found, please return it to the church or call:</p>'
+        + '<div class="ph2">' + esc(cardPhone) + '</div><p class="ad">' + esc(cardAddr) + '</p></div>'
+        + '<div class="sg"><div class="ln"></div><span>Authorised signature</span></div></div>';
+      return front + back;
     }).join('');
     const w = window.open('', '_blank');
     if (!w) { alert('Please allow pop-ups for this site to print.'); return; }
-    w.document.write('<html><head><title>Member ID Cards</title><style>'
-      + '@page{size:A4;margin:10mm} body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:#0f172a}'
-      + '.sheet{display:grid;grid-template-columns:repeat(2,86mm);gap:6mm;justify-content:center}'
-      + '.card{width:86mm;height:54mm;border:1px solid #94a3b8;border-radius:3mm;overflow:hidden;display:flex;flex-direction:column;page-break-inside:avoid;background:#fff}'
-      + '.top{background:' + themeColor + ';color:#fff;display:flex;align-items:center;gap:2.5mm;padding:1.8mm 3mm;font-size:9pt}.top img{width:9mm;height:9mm;object-fit:contain;background:#fff;border-radius:50%}.top small{font-size:6.5pt;letter-spacing:.6px}'
-      + '.mid{flex:1;display:flex;align-items:center;gap:2.5mm;padding:2mm 3mm}.ph{width:19mm;height:23mm;object-fit:cover;border-radius:1.5mm;border:1px solid #cbd5e1;flex:none}.ini{display:flex;align-items:center;justify-content:center;background:#e2e8f0;font-weight:bold;font-size:14pt;color:#334155}'
-      + '.info{flex:1;font-size:7.5pt;min-width:0}.nm{font-weight:bold;font-size:9.5pt;margin-bottom:.6mm;color:' + themeColor + '}.sm{color:#475569;font-size:6.5pt}.qr{flex:none}'
-      + '.bot{background:#f1f5f9;text-align:center;font-size:5.6pt;line-height:1.3;color:#334155;padding:1mm 2mm;border-top:1px solid #cbd5e1}'
+    const c = themeColor;
+    w.document.write('<html><head><title>Member ID Cards</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>'
+      + '@page{size:A4;margin:10mm} *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact} body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:#0f172a}'
+      + '.sheet{display:grid;grid-template-columns:repeat(2,85.6mm);gap:5mm;justify-content:center}'
+      + '.card{width:85.6mm;height:54mm;border:.3mm solid #cbd5e1;border-radius:3.2mm;overflow:hidden;display:flex;flex-direction:column;page-break-inside:avoid;background:#fff;position:relative}'
+      + '.hd{background:linear-gradient(135deg,' + c + ' 0%,#0b1f55 100%);color:#fff;display:flex;align-items:center;gap:2.4mm;padding:2mm 3.2mm;height:12.5mm}'
+      + '.hd img{width:9.5mm;height:9.5mm;object-fit:contain;background:#fff;border-radius:50%;padding:.4mm;flex:none}'
+      + '.hn{flex:1;min-width:0;line-height:1.15}.hn b{display:block;font-size:8.6pt;letter-spacing:.2px}.hn span{display:block;font-size:5.8pt;opacity:.85;margin-top:.4mm}'
+      + '.ty{font-size:5.4pt;letter-spacing:1.2px;text-align:right;font-weight:bold;color:#fcd34d;line-height:1.3;flex:none}'
+      + '.gold{height:1mm;background:linear-gradient(90deg,#b45309,#fcd34d,#b45309);flex:none}'
+      + '.bd{flex:1;display:flex;align-items:center;gap:3mm;padding:1.5mm 3.2mm}'
+      + '.ph{width:19mm;height:24mm;object-fit:cover;border-radius:1.6mm;border:.5mm solid ' + c + ';flex:none}.ini{display:flex;align-items:center;justify-content:center;background:#e2e8f0;font-weight:bold;font-size:14pt;color:#334155}'
+      + '.info{flex:1;min-width:0}.nm{font-weight:700;font-size:9.4pt;line-height:1.15;color:' + c + ';margin-bottom:1mm}'
+      + '.role{display:inline-block;background:' + c + ';color:#fff;font-size:5.8pt;font-weight:bold;letter-spacing:.8px;padding:.5mm 2mm;border-radius:2mm;margin-bottom:1mm;text-transform:uppercase}'
+      + '.sm{color:#475569;font-size:6.2pt;line-height:1.25;margin-bottom:1mm}'
+      + '.no{font-family:Consolas,Menlo,monospace;font-size:7.6pt;font-weight:bold;color:#0f172a;letter-spacing:.6px;border-top:.2mm solid #e2e8f0;padding-top:.8mm}'
+      + '.qr{flex:none;padding:1mm;border:.3mm solid #e2e8f0;border-radius:1.5mm;background:#fff;line-height:0}'
+      + '.ft{background:#f1f5f9;border-top:.3mm solid #e2e8f0;text-align:center;font-size:6.2pt;color:#334155;padding:1mm;letter-spacing:.3px;flex:none}'
+      + '.bk{height:12.5mm}.bb{flex:1;text-align:center;padding:2.2mm 5mm 0}.prop{font-size:7.2pt;font-weight:800;color:' + c + ';letter-spacing:.5px;margin-bottom:1.2mm}'
+      + '.bb p{margin:0 0 1mm;font-size:6.4pt;color:#475569;line-height:1.3}.ph2{font-size:11pt;font-weight:800;color:#0f172a;letter-spacing:.5px;margin:.6mm 0}.bb .ad{font-size:5.9pt}'
+      + '.sg{padding:0 8mm 2.2mm;text-align:center;flex:none}.ln{border-top:.25mm solid #94a3b8;margin-bottom:.5mm}.sg span{font-size:5.4pt;color:#64748b;letter-spacing:.5px}'
       + '</style></head><body><div class="sheet">' + cards + '</div><script>window.onload=function(){window.print();};<\/script></body></html>');
     w.document.close();
   };
