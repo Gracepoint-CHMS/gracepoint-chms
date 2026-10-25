@@ -436,23 +436,24 @@ const SECTION_DEFS = {
   rotas: ['rotasList'],
   videos: ['videosList'],
   fellowships: ['fellowshipsList', 'branchesList', 'groupsList'],
-  pledges: ['pledgesList']
+  pledges: ['pledgesList'],
+  outreach: ['outreachList', 'disciplesList']
 };
 const SECTION_WRITE_PERM = {
   finance: 'access_finance', attendance: 'record_attendance', events: 'register_events',
   announcements: 'post_announcements', services: 'register_services', visitors: 'record_visitors',
   converts: 'record_new_converts', assets: 'manage_facilities',
   leaders: 'manage_leaders', rotas: 'manage_rotas', videos: 'manage_videos',
-  fellowships: 'manage_fellowships', pledges: 'access_finance'
+  fellowships: 'manage_fellowships', pledges: 'access_finance', outreach: 'manage_outreach'
 };
-const SECTION_LABELS = { finance: 'Finance', attendance: 'Attendance', events: 'Events', announcements: 'Announcements', services: 'Services', visitors: 'Visitors', converts: 'New Converts', assets: 'Facilities', leaders: 'Leaders', rotas: 'Duty Rotas', videos: 'Videos', fellowships: 'Fellowships', pledges: 'Pledges' };
+const SECTION_LABELS = { finance: 'Finance', attendance: 'Attendance', events: 'Events', announcements: 'Announcements', services: 'Services', visitors: 'Visitors', converts: 'New Converts', assets: 'Facilities', leaders: 'Leaders', rotas: 'Duty Rotas', videos: 'Videos', fellowships: 'Fellowships', pledges: 'Pledges', outreach: 'Outreach' };
 const FIELD_DEFAULTS = {
   incomes: [], expenses: [], tithes: [], budgets: [], contributions: [],
   welfareRecords: {}, welfareDates: {}, openingBalance: 2484.32,
   accountReportNotes: DEFAULT_ACCOUNT_NOTES, balanceSheetNotes: DEFAULT_BALANCE_NOTES,
   attendanceLogs: [], eventsList: [], announcementsList: [], servicesList: [],
   visitorsList: [], convertsList: [], assetsList: [], leadersList: [], rotasList: [], videosList: [],
-  fellowshipsList: [], branchesList: [], pledgesList: [], deptBudgets: [], groupsList: []
+  fellowshipsList: [], branchesList: [], pledgesList: [], deptBudgets: [], groupsList: [], outreachList: [], disciplesList: []
 };
 
 const pickSection = (vals, key) => {
@@ -1110,6 +1111,302 @@ function FollowUpTab({ visitors, converts, setVisitors, setConverts, theme }) {
         <div style={{ marginTop: '0.75rem' }}>
           {visitors && vDone.map(({ v, i }) => rowCard('vd' + i, v.visitor_name, 'Visitor - ' + (v.date_visited || ''), v.phone, v.followed_up, null, v.follow_note))}
           {converts && cDone.map(({ c, i }) => rowCard('cd' + i, c.convert_name, 'New convert - ' + (c.follow_up || ''), c.phone, c.followed_up || 'earlier', null, c.follow_note))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Outreach: house-to-house evangelism contacts, follow-up and reports ----------
+const OUTREACH_RESPONSES = ['Not yet contacted', 'Accepted Christ', 'Interested', 'Wants a visit', 'Wants prayer', 'Not now', 'No answer'];
+const OUTREACH_COLORS = { 'Not yet contacted': '#64748b', 'Accepted Christ': '#16a34a', 'Interested': '#2563eb', 'Wants a visit': '#7c3aed', 'Wants prayer': '#d97706', 'Not now': '#94a3b8', 'No answer': '#dc2626' };
+// First list brought from the field (handwritten page). Numbers marked "check" were hard to read.
+const OUTREACH_FIRST_LIST = [
+  ['Ricky', '0555005675'], ['Ako Sua', '0552177432', 'check'], ['Sis Comfort', '0541408154'], ['Sandra', '0557884970'],
+  ['Sis Constance', '0599447351'], ['Linda', '0558005679'], ['Sis Joyce', '0550206617'], ['Nana Hemaa', '0241300101'],
+  ['Rebecca', '0257311407', 'check'], ['Bro Joe', '0543982622', 'check'], ['Dada John', '0202628320'], ['Eliza', '0248104039'],
+  ['Richmon', '0543706101', 'check'], ['O.P.K', '0245011178']
+];
+function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, theme, onPrint, canDelete, onMoveVisitor, onMoveConvert, churchName }) {
+  const today = todayISO();
+  const uid = () => 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const [view, setView] = useState('due');
+  const [search, setSearch] = useState('');
+  const [fDisciple, setFDisciple] = useState('');
+  const [fResponse, setFResponse] = useState('');
+  const blank = { name: '', phone: '', area: '', disciple: '', date_reached: today, response: 'Not yet contacted', next_followup: '', notes: '' };
+  const [form, setForm] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [logId, setLogId] = useState(null);
+  const [logForm, setLogForm] = useState({ response: 'Interested', note: '', next: '' });
+  const [msg, setMsg] = useState('');
+  const [newDisc, setNewDisc] = useState('');
+  const [pickMember, setPickMember] = useState('');
+  const [imp, setImp] = useState({ disciple: '', date: today, area: '' });
+  const [rFrom, setRFrom] = useState('');
+  const [rTo, setRTo] = useState('');
+  const [rDisc, setRDisc] = useState('');
+  const list = contacts || [];
+  const discs = disciples || [];
+  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 4000); };
+  const badPhone = (p) => { const d = String(p || '').replace(/[^0-9]/g, ''); return !!p && !(d.length === 10 && d.startsWith('0')) && !(d.length === 12 && d.startsWith('233')); };
+  const addDisciple = (nameIn) => {
+    const name = String(nameIn || '').trim();
+    if (!name) return '';
+    const ex = discs.find(d => d.name.toLowerCase() === name.toLowerCase());
+    if (ex) return ex.name;
+    setDisciples([...discs, { id: uid(), name }]);
+    return name;
+  };
+  const saveForm = () => {
+    if (!form.name.trim()) { flash('Please enter the name.'); return; }
+    const item = { ...form, name: form.name.trim(), phone: String(form.phone || '').trim() };
+    if (editId) setContacts(list.map(c => c.id === editId ? { ...c, ...item } : c));
+    else setContacts([{ id: uid(), history: [], ...item }, ...list]);
+    setForm(null); setEditId(null);
+    flash(editId ? 'Contact updated.' : 'Contact saved.');
+  };
+  const saveLog = (c) => {
+    const entry = { date: today, by: c.disciple || '', response: logForm.response, note: logForm.note.trim() };
+    setContacts(list.map(x => x.id === c.id ? { ...x, response: logForm.response, next_followup: logForm.next || '', history: [...(x.history || []), entry] } : x));
+    setLogId(null);
+    flash('Follow-up recorded.');
+  };
+  const doImport = () => {
+    const who = imp.disciple === '__new__' ? '' : imp.disciple;
+    if (!who) { flash('Please choose the disciple who brought this list.'); return; }
+    const existing = new Set(list.map(c => String(c.phone).replace(/\s+/g, '')));
+    const add = OUTREACH_FIRST_LIST.filter(r => !existing.has(r[1])).map(r => ({
+      id: uid(), history: [], name: r[0], phone: r[1], area: imp.area.trim(), disciple: who, date_reached: imp.date,
+      response: 'Not yet contacted', next_followup: '', notes: r[2] === 'check' ? 'Number was hard to read on the handwritten page. Please confirm it.' : ''
+    }));
+    if (!add.length) { flash('These contacts are already in the list.'); return; }
+    setContacts([...add, ...list]);
+    flash(add.length + ' contacts added from the field list.');
+  };
+  const moveTo = (c, kind) => {
+    if (!window.confirm('Move ' + c.name + ' to ' + (kind === 'visitor' ? 'Visitors' : 'New Converts') + '? They stay in Outreach too, marked as moved.')) return;
+    const notes = 'From outreach' + (c.disciple ? ' by ' + c.disciple : '') + (c.notes ? '. ' + c.notes : '');
+    if (kind === 'visitor') onMoveVisitor({ visitor_name: c.name, phone: c.phone, date_visited: today, invited_by: c.disciple || '', address: c.area || '', notes });
+    else onMoveConvert({ convert_name: c.name, phone: c.phone, date_of_conversion: today, follow_up: 'New', address: c.area || '', notes });
+    setContacts(list.map(x => x.id === c.id ? { ...x, moved: (kind === 'visitor' ? 'Visitors' : 'New Converts') + ' on ' + today } : x));
+    flash(c.name + ' moved to ' + (kind === 'visitor' ? 'Visitors' : 'New Converts') + '.');
+  };
+  const isDue = (c) => !c.moved && ((c.next_followup && c.next_followup <= today) || (!c.next_followup && c.response === 'Not yet contacted' && !(c.history || []).length));
+  const shown = list.filter(c => {
+    const q = search.trim().toLowerCase();
+    if (q && !(String(c.name).toLowerCase().includes(q) || String(c.phone).replace(/\s+/g, '').includes(q.replace(/\s+/g, '')) || String(c.area || '').toLowerCase().includes(q))) return false;
+    if (fDisciple && c.disciple !== fDisciple) return false;
+    if (fResponse && c.response !== fResponse) return false;
+    if (view === 'due' && !isDue(c)) return false;
+    return true;
+  });
+  const dueCount = list.filter(isDue).length;
+  const chip = (t, color) => <span style={{ display: 'inline-block', backgroundColor: color, color: '#fff', fontSize: '0.72rem', fontWeight: 'bold', padding: '0.15rem 0.55rem', borderRadius: '1rem', marginRight: '0.35rem' }}>{t}</span>;
+  const btn = (bg, fg) => ({ backgroundColor: bg, color: fg, border: 'none', padding: '0.35rem 0.7rem', borderRadius: '0.4rem', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none' });
+
+  // ---- report figures (within the chosen dates and disciple) ----
+  const inRange = list.filter(c => (!rFrom || (c.date_reached || '') >= rFrom) && (!rTo || (c.date_reached || '') <= rTo) && (!rDisc || c.disciple === rDisc));
+  const countBy = (arr, fn) => { const o = {}; arr.forEach(c => { const k = fn(c) || 'Not stated'; o[k] = (o[k] || 0) + 1; }); return o; };
+  const byResp = countBy(inRange, c => c.response);
+  const byArea = countBy(inRange, c => c.area);
+  const discNames = Array.from(new Set([...(rDisc ? [rDisc] : discs.map(d => d.name)), ...inRange.map(c => c.disciple).filter(Boolean)]));
+  const rows = discNames.map(n => {
+    const mine = inRange.filter(c => c.disciple === n);
+    const fu = mine.reduce((a, c) => a + (c.history || []).length, 0);
+    return { n, total: mine.length, acc: mine.filter(c => c.response === 'Accepted Christ').length, int: mine.filter(c => c.response === 'Interested' || c.response === 'Wants a visit' || c.response === 'Wants prayer').length, fu, moved: mine.filter(c => c.moved).length };
+  }).filter(r => r.total > 0 || !rDisc);
+  const printReport = () => {
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const period = (rFrom || rTo) ? ((rFrom || 'start') + ' to ' + (rTo || 'today')) : 'All dates';
+    let h = '<div class="sub"><strong>Evangelism Outreach Report</strong><br/>Period: ' + esc(period) + (rDisc ? ' - Disciple: ' + esc(rDisc) : '') + '<br/>Prepared on ' + new Date().toLocaleDateString() + '</div>';
+    h += '<h3>Summary</h3><table><tbody><tr><td>People reached</td><td>' + inRange.length + '</td></tr><tr><td>Accepted Christ</td><td>' + (byResp['Accepted Christ'] || 0) + '</td></tr><tr><td>Follow-up visits and calls recorded</td><td>' + inRange.reduce((a, c) => a + (c.history || []).length, 0) + '</td></tr><tr><td>Moved to Visitors or New Converts</td><td>' + inRange.filter(c => c.moved).length + '</td></tr></tbody></table>';
+    h += '<h3>By disciple</h3><table><thead><tr><th>Disciple</th><th>Reached</th><th>Accepted Christ</th><th>Interested / wants visit or prayer</th><th>Follow-ups</th><th>Moved</th></tr></thead><tbody>' + rows.map(r => '<tr><td>' + esc(r.n) + '</td><td>' + r.total + '</td><td>' + r.acc + '</td><td>' + r.int + '</td><td>' + r.fu + '</td><td>' + r.moved + '</td></tr>').join('') + '</tbody></table>';
+    h += '<h3>By response</h3><table><tbody>' + Object.entries(byResp).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v + '</td></tr>').join('') + '</tbody></table>';
+    h += '<h3>By area</h3><table><tbody>' + Object.entries(byArea).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v + '</td></tr>').join('') + '</tbody></table>';
+    h += '<h3>Contact list</h3><table><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Area</th><th>Disciple</th><th>Date</th><th>Response</th><th>Next follow-up</th></tr></thead><tbody>' + inRange.map((c, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(c.name) + '</td><td>' + esc(c.phone) + '</td><td>' + esc(c.area) + '</td><td>' + esc(c.disciple) + '</td><td>' + esc(c.date_reached) + '</td><td>' + esc(c.response) + '</td><td>' + esc(c.next_followup) + '</td></tr>').join('') + '</tbody></table>';
+    onPrint('Outreach Report', h);
+  };
+  const printFieldSheet = () => {
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const todo = list.filter(isDue);
+    const h = '<div class="sub"><strong>Outreach follow-up sheet</strong><br/>Prepared on ' + new Date().toLocaleDateString() + ' - ' + todo.length + ' people to contact</div><table><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Area</th><th>Disciple</th><th>Outcome / note</th></tr></thead><tbody>' + todo.map((c, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(c.name) + '</td><td>' + esc(c.phone) + '</td><td>' + esc(c.area) + '</td><td>' + esc(c.disciple) + '</td><td style="width:35%">&nbsp;</td></tr>').join('') + '</tbody></table>';
+    onPrint('Outreach Follow-up Sheet', h);
+  };
+  const tabBtn = (id, label) => <button key={id} type="button" onClick={() => setView(id)} style={{ backgroundColor: view === id ? theme : '#f1f5f9', color: view === id ? '#fff' : '#334155', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>{label}</button>;
+  const firstListDone = OUTREACH_FIRST_LIST.every(r => list.some(c => String(c.phone).replace(/\s+/g, '') === r[1]));
+
+  return (
+    <div>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.25rem 0' }}>Evangelism Outreach</h3>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>People reached house to house. Record them, follow them up, and report. Only the Super Admin and approved disciples can see this page.</p>
+      {msg ? <div style={{ backgroundColor: '#ecfdf5', color: '#065f46', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>{msg}</div> : null}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.9rem' }}>
+        {tabBtn('due', 'To contact (' + dueCount + ')')}{tabBtn('all', 'All contacts (' + list.length + ')')}{tabBtn('reports', 'Reports')}{tabBtn('disciples', 'Disciples (' + discs.length + ')')}
+      </div>
+
+      {(view === 'due' || view === 'all') && (
+        <div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <button type="button" onClick={() => { setForm({ ...blank, disciple: fDisciple || '' }); setEditId(null); }} style={{ ...greenBtn }}>+ Add contact</button>
+            {view === 'due' && dueCount > 0 ? <button type="button" onClick={printFieldSheet} style={btn('#eff6ff', '#1d4ed8')}>🖨 Print follow-up sheet</button> : null}
+          </div>
+          {!firstListDone && (
+            <div style={{ ...cardBox, backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
+              <div style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '0.3rem' }}>Load the first list from the handwritten page</div>
+              <div style={{ fontSize: '0.82rem', color: '#78350f', marginBottom: '0.5rem' }}>14 people (Ricky to O.P.K). Choose who brought it, the date and the area. Four numbers were hard to read and will be flagged for checking. Contacts already saved are skipped.</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <select value={imp.disciple} onChange={e => setImp({ ...imp, disciple: e.target.value })} style={{ ...formBox, width: 'auto', minWidth: '10rem' }}>
+                  <option value="">Disciple...</option>
+                  {discs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+                <input type="date" value={imp.date} onChange={e => setImp({ ...imp, date: e.target.value })} style={{ ...formBox, width: 'auto' }} />
+                <input placeholder="Area (optional)" value={imp.area} onChange={e => setImp({ ...imp, area: e.target.value })} style={{ ...formBox, width: 'auto' }} />
+                <button type="button" onClick={doImport} style={btn(theme, '#fff')}>Load 14 contacts</button>
+              </div>
+              {discs.length === 0 ? <div style={{ fontSize: '0.8rem', color: '#92400e', marginTop: '0.4rem' }}>Add the disciples first on the Disciples tab.</div> : null}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <input placeholder="Search name, phone or area" value={search} onChange={e => setSearch(e.target.value)} style={{ ...formBox, width: 'auto', flex: 1, minWidth: '10rem' }} />
+            <select value={fDisciple} onChange={e => setFDisciple(e.target.value)} style={{ ...formBox, width: 'auto' }}><option value="">All disciples</option>{discs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}</select>
+            <select value={fResponse} onChange={e => setFResponse(e.target.value)} style={{ ...formBox, width: 'auto' }}><option value="">All responses</option>{OUTREACH_RESPONSES.map(r => <option key={r} value={r}>{r}</option>)}</select>
+          </div>
+
+          {form && (
+            <div style={{ ...cardBox, borderColor: theme }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>{editId ? 'Edit contact' : 'New contact'}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(11rem,1fr))', gap: '0.6rem' }}>
+                <div><label style={formLab}>Name *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={formBox} /></div>
+                <div><label style={formLab}>Phone</label><input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} style={formBox} /></div>
+                <div><label style={formLab}>Area / house location</label><input value={form.area} onChange={e => setForm({ ...form, area: e.target.value })} style={formBox} /></div>
+                <div><label style={formLab}>Disciple who reached them</label>
+                  <select value={form.disciple} onChange={e => { if (e.target.value === '__new__') { const n = addDisciple(window.prompt('Name of the new disciple:', '')); setForm({ ...form, disciple: n }); } else setForm({ ...form, disciple: e.target.value }); }} style={formBox}>
+                    <option value="">Choose...</option>
+                    {discs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    <option value="__new__">+ Add a new disciple...</option>
+                  </select></div>
+                <div><label style={formLab}>Date reached</label><input type="date" value={form.date_reached} onChange={e => setForm({ ...form, date_reached: e.target.value })} style={formBox} /></div>
+                <div><label style={formLab}>Response</label><select value={form.response} onChange={e => setForm({ ...form, response: e.target.value })} style={formBox}>{OUTREACH_RESPONSES.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                <div><label style={formLab}>Next follow-up date</label><input type="date" value={form.next_followup} onChange={e => setForm({ ...form, next_followup: e.target.value })} style={formBox} /></div>
+              </div>
+              <div style={{ marginTop: '0.6rem' }}><label style={formLab}>Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ ...formBox, minHeight: '4rem' }} /></div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.7rem' }}>
+                <button type="button" onClick={saveForm} style={greenBtn}>Save</button>
+                <button type="button" onClick={() => { setForm(null); setEditId(null); }} style={btn('#f1f5f9', '#334155')}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {shown.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>{view === 'due' ? 'Nobody is waiting for a follow-up right now.' : 'No contacts to show.'}</p>}
+          {shown.map(c => (
+            <div key={c.id} style={cardBox}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{c.name}</div>
+                <div>{chip(c.response, OUTREACH_COLORS[c.response] || '#64748b')}{c.moved ? chip('Moved: ' + c.moved, '#0f766e') : null}</div>
+              </div>
+              <div style={{ fontSize: '0.84rem', color: '#475569', marginTop: '0.15rem' }}>
+                {c.phone || 'No phone'}{badPhone(c.phone) ? <span style={{ color: '#b45309', fontWeight: 'bold' }}> ⚠ check number</span> : null}
+                {c.area ? ' · ' + c.area : ''}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Reached {c.date_reached || '-'}{c.disciple ? ' by ' + c.disciple : ''}{c.next_followup ? ' · Next follow-up ' + c.next_followup : ''}</div>
+              {c.notes ? <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '0.25rem' }}>Note: {c.notes}</div> : null}
+              {(c.history || []).length > 0 && (
+                <div style={{ marginTop: '0.4rem', paddingLeft: '0.6rem', borderLeft: '3px solid #e2e8f0' }}>
+                  {(c.history || []).slice(-3).map((h, i) => <div key={i} style={{ fontSize: '0.78rem', color: '#475569' }}>{h.date} · {h.response}{h.by ? ' · ' + h.by : ''}{h.note ? ' · ' + h.note : ''}</div>)}
+                </div>
+              )}
+              {logId === c.id ? (
+                <div style={{ marginTop: '0.6rem', backgroundColor: '#f8fafc', padding: '0.7rem', borderRadius: '0.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(11rem,1fr))', gap: '0.5rem' }}>
+                    <div><label style={formLab}>Outcome</label><select value={logForm.response} onChange={e => setLogForm({ ...logForm, response: e.target.value })} style={formBox}>{OUTREACH_RESPONSES.filter(r => r !== 'Not yet contacted').map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                    <div><label style={formLab}>Next follow-up (optional)</label><input type="date" value={logForm.next} onChange={e => setLogForm({ ...logForm, next: e.target.value })} style={formBox} /></div>
+                  </div>
+                  <div style={{ marginTop: '0.5rem' }}><label style={formLab}>What happened?</label><input value={logForm.note} onChange={e => setLogForm({ ...logForm, note: e.target.value })} style={formBox} /></div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button type="button" onClick={() => saveLog(c)} style={btn(theme, '#fff')}>Save follow-up</button>
+                    <button type="button" onClick={() => setLogId(null)} style={btn('#f1f5f9', '#334155')}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+                  {c.phone ? <a href={'tel:' + String(c.phone).replace(/\s+/g, '')} style={btn('#eff6ff', '#1d4ed8')}>📞 Call</a> : null}
+                  {c.phone ? <a href={'https://wa.me/' + waNumber(c.phone)} target="_blank" rel="noopener noreferrer" style={btn('#dcfce7', '#166534')}>🟢 WhatsApp</a> : null}
+                  <button type="button" onClick={() => { setLogId(c.id); setLogForm({ response: c.response === 'Not yet contacted' ? 'Interested' : c.response, note: '', next: '' }); }} style={btn(theme, '#fff')}>✔ Log follow-up</button>
+                  <button type="button" onClick={() => { setForm({ ...blank, ...c }); setEditId(c.id); window.scrollTo && window.scrollTo(0, 0); }} style={btn('#f1f5f9', '#334155')}>Edit</button>
+                  {!c.moved && onMoveVisitor ? <button type="button" onClick={() => moveTo(c, 'visitor')} style={btn('#fef3c7', '#92400e')}>→ Visitors</button> : null}
+                  {!c.moved && onMoveConvert ? <button type="button" onClick={() => moveTo(c, 'convert')} style={btn('#ede9fe', '#5b21b6')}>→ New Convert</button> : null}
+                  {canDelete ? <button type="button" onClick={() => { if (window.confirm('Delete ' + c.name + ' from Outreach?')) setContacts(list.filter(x => x.id !== c.id)); }} style={btn('#fee2e2', '#991b1b')}>Delete</button> : null}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {view === 'reports' && (
+        <div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.8rem', alignItems: 'flex-end' }}>
+            <div><label style={formLab}>From</label><input type="date" value={rFrom} onChange={e => setRFrom(e.target.value)} style={{ ...formBox, width: 'auto' }} /></div>
+            <div><label style={formLab}>To</label><input type="date" value={rTo} onChange={e => setRTo(e.target.value)} style={{ ...formBox, width: 'auto' }} /></div>
+            <div><label style={formLab}>Disciple</label><select value={rDisc} onChange={e => setRDisc(e.target.value)} style={{ ...formBox, width: 'auto' }}><option value="">All disciples</option>{discs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}</select></div>
+            <button type="button" onClick={printReport} style={greenBtn}>🖨 Print / save PDF</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(9rem,1fr))', gap: '0.6rem', marginBottom: '0.9rem' }}>
+            {[['People reached', inRange.length], ['Accepted Christ', byResp['Accepted Christ'] || 0], ['Follow-ups done', inRange.reduce((a, c) => a + (c.history || []).length, 0)], ['Moved on', inRange.filter(c => c.moved).length]].map(([l, v]) => (
+              <div key={l} style={{ ...cardBox, marginBottom: 0, textAlign: 'center' }}><div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: theme }}>{v}</div><div style={{ fontSize: '0.78rem', color: '#64748b' }}>{l}</div></div>
+            ))}
+          </div>
+          <div style={cardBox}>
+            <div style={{ fontWeight: 'bold', marginBottom: '0.4rem' }}>By disciple</div>
+            {rows.length === 0 ? <div style={{ color: '#64748b', fontSize: '0.85rem' }}>No data for this selection.</div> : (
+              <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                <thead><tr style={{ textAlign: 'left', color: '#475569' }}><th style={{ padding: '0.3rem' }}>Disciple</th><th>Reached</th><th>Accepted</th><th>Interested</th><th>Follow-ups</th><th>Moved</th></tr></thead>
+                <tbody>{rows.map(r => <tr key={r.n} style={{ borderTop: '1px solid #e2e8f0' }}><td style={{ padding: '0.35rem 0.3rem' }}>{r.n}</td><td>{r.total}</td><td>{r.acc}</td><td>{r.int}</td><td>{r.fu}</td><td>{r.moved}</td></tr>)}</tbody>
+              </table></div>
+            )}
+          </div>
+          <div style={cardBox}>
+            <div style={{ fontWeight: 'bold', marginBottom: '0.4rem' }}>By response</div>
+            <ReportChart type="hbar" labels={Object.keys(byResp)} values={Object.values(byResp)} color={theme} />
+          </div>
+          <div style={cardBox}>
+            <div style={{ fontWeight: 'bold', marginBottom: '0.4rem' }}>By area</div>
+            <ReportChart type="hbar" labels={Object.keys(byArea)} values={Object.values(byArea)} color={theme} />
+          </div>
+        </div>
+      )}
+
+      {view === 'disciples' && (
+        <div>
+          <div style={cardBox}>
+            <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Add a disciple</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <input placeholder="Type the name" value={newDisc} onChange={e => setNewDisc(e.target.value)} style={{ ...formBox, width: 'auto', flex: 1, minWidth: '10rem' }} />
+              <button type="button" onClick={() => { if (!newDisc.trim()) return; addDisciple(newDisc); setNewDisc(''); flash('Disciple added.'); }} style={btn(theme, '#fff')}>Add</button>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.6rem 0 0.3rem' }}>Or choose a registered member:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <select value={pickMember} onChange={e => setPickMember(e.target.value)} style={{ ...formBox, width: 'auto', flex: 1, minWidth: '10rem' }}>
+                <option value="">Select member...</option>
+                {sortedMembers(members || []).map(m => <option key={m.id} value={displayName(m)}>{displayName(m)}</option>)}
+              </select>
+              <button type="button" onClick={() => { if (!pickMember) return; addDisciple(pickMember); setPickMember(''); flash('Disciple added.'); }} style={btn(theme, '#fff')}>Add member</button>
+            </div>
+          </div>
+          {discs.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No disciples yet.</p>}
+          {discs.map(d => {
+            const n = list.filter(c => c.disciple === d.name).length;
+            return (
+              <div key={d.id} style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <div><div style={{ fontWeight: 'bold' }}>{d.name}</div><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{n} contact{n === 1 ? '' : 's'} recorded</div></div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button type="button" onClick={() => { const nn = window.prompt('Correct the name:', d.name); if (nn && nn.trim() && nn.trim() !== d.name) { const t = nn.trim(); setDisciples(discs.map(x => x.id === d.id ? { ...x, name: t } : x)); setContacts(list.map(c => c.disciple === d.name ? { ...c, disciple: t } : c)); } }} style={btn('#f1f5f9', '#334155')}>Rename</button>
+                  {canDelete ? <button type="button" onClick={() => { if (window.confirm('Remove ' + d.name + ' from the list? Their recorded contacts stay.')) setDisciples(discs.filter(x => x.id !== d.id)); }} style={btn('#fee2e2', '#991b1b')}>Remove</button> : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -2907,6 +3204,8 @@ export default function Home() {
   const [servicesList, setServicesList] = useState([]);
   const [visitorsList, setVisitorsList] = useState([]);
   const [convertsList, setConvertsList] = useState([]);
+  const [outreachList, setOutreachList] = useState([]);
+  const [disciplesList, setDisciplesList] = useState([]);
   const [board, setBoard] = useState({ events: [], announcements: [], leaders: [], rotas: [], videos: [], fellowships: [] });
   const baseRef = useRef({});
 
@@ -2971,7 +3270,8 @@ export default function Home() {
     'User & Membership': [
       { key: 'register_members', label: 'Register & edit members' },
       { key: 'record_visitors', label: 'Record visitors' },
-      { key: 'record_new_converts', label: 'Record new converts' }
+      { key: 'record_new_converts', label: 'Record new converts' },
+      { key: 'manage_outreach', label: 'Evangelism outreach (record contacts, follow up, reports) - for approved disciples' }
     ],
     'Administration & Leadership': [
       { key: 'manage_leaders', label: 'Manage church leaders directory' },
@@ -3058,7 +3358,7 @@ export default function Home() {
     servicesList: setServicesList, visitorsList: setVisitorsList, convertsList: setConvertsList, assetsList: setAssetsList,
     leadersList: setLeadersList, rotasList: setRotasList, videosList: setVideosList,
     fellowshipsList: setFellowshipsList, branchesList: setBranchesList, pledgesList: setPledgesList,
-    deptBudgets: setDeptBudgets, groupsList: setGroupsList
+    deptBudgets: setDeptBudgets, groupsList: setGroupsList, outreachList: setOutreachList, disciplesList: setDisciplesList
   };
 
   const makeMemberRows = () => members
@@ -3227,7 +3527,7 @@ export default function Home() {
       incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance,
       accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList,
       servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList,
-      fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList
+      fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList, outreachList, disciplesList
     };
     const dirty = Object.keys(SECTION_DEFS).filter(key => {
       if (!canWriteSectionFn(key, isSuper, myPermissions)) return false;
@@ -3257,11 +3557,11 @@ export default function Home() {
       setSaveError(failed ? 'Could not save: ' + failed : '');
     }, 800);
     return () => clearTimeout(timer);
-  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList]);
+  }, [financeLoaded, user, role, myPermissions, members, incomes, expenses, tithes, budgets, contributions, welfareRecords, welfareDates, openingBalance, accountReportNotes, balanceSheetNotes, attendanceLogs, eventsList, announcementsList, servicesList, visitorsList, convertsList, assetsList, leadersList, rotasList, videosList, fellowshipsList, branchesList, pledgesList, deptBudgets, groupsList, outreachList, disciplesList]);
 
   // Pick up other admins' latest entries when a records screen is opened
   useEffect(() => {
-    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos', 'fellowships', 'branches', 'followup', 'pledges', 'dashboard', 'prayer'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
+    if (['contributions', 'attendance', 'events', 'announcements', 'services', 'visitors', 'new_converts', 'facilities', 'leaders', 'rotas', 'reports', 'messages', 'videos', 'fellowships', 'branches', 'followup', 'pledges', 'dashboard', 'prayer', 'outreach'].includes(activeTab) && financeLoaded && role !== 'member' && !pendingSaveRef.current) {
       loadSections(role === 'super_admin', myPermissions);
     }
   }, [activeTab]);
@@ -4771,7 +5071,7 @@ export default function Home() {
         {(() => {
           const groups = [
             { id: 'home', label: '🏠 Home', tabs: [['dashboard', 'Dashboard', true]] },
-            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')], ['followup', 'Follow-up', can('record_visitors') || can('record_new_converts')], ['fellowships', 'House Fellowship', can('manage_fellowships')], ['groups', 'Groups & Classes', can('manage_fellowships')]] },
+            { id: 'membership', label: '👥 Membership', tabs: [['members', 'Members', true], ['visitors', 'Visitors', can('record_visitors')], ['new_converts', 'New Converts', can('record_new_converts')], ['followup', 'Follow-up', can('record_visitors') || can('record_new_converts')], ['outreach', 'Outreach', can('manage_outreach')], ['fellowships', 'House Fellowship', can('manage_fellowships')], ['groups', 'Groups & Classes', can('manage_fellowships')]] },
             { id: 'leadership', label: '🏛 Leadership', tabs: [['leaders', 'Leaders', can('manage_leaders')], ['branches', 'Branches', can('manage_fellowships')]] },
             { id: 'meetings', label: '📅 Meetings', tabs: [['attendance', 'Attendance', can('record_attendance')], ['checkin', 'QR Check-in', can('record_attendance')], ['services', 'Services', can('register_services')], ['events', 'Events', can('register_events')], ['rotas', 'Duty Rotas', can('manage_rotas')], ['volunteers', 'Volunteers', can('manage_rotas')], ['rsvps', 'Event RSVPs', can('register_events')], ['absentees', 'Absentees', can('record_attendance')]] },
             { id: 'finance', label: '💰 Finance', tabs: [['contributions', 'Contributions', can('access_finance') || can('view_balance_sheet')], ['pledges', 'Pledges', can('access_finance')], ['welfare', 'Welfare Requests', can('manage_welfare')]] },
@@ -6241,6 +6541,23 @@ export default function Home() {
               { key: 'theme', label: 'Theme / Topic' },
               { key: 'notes', label: 'Notes', type: 'textarea' }
             ]}
+          />
+        )}
+
+        {/* Outreach Tab */}
+        {activeTab === 'outreach' && can('manage_outreach') && (
+          <OutreachTab
+            contacts={outreachList}
+            setContacts={setOutreachList}
+            disciples={disciplesList}
+            setDisciples={setDisciplesList}
+            members={members}
+            theme={themeColor}
+            onPrint={openPrintWindow}
+            canDelete={role === 'super_admin'}
+            churchName={churchName}
+            onMoveVisitor={can('record_visitors') ? ((item) => setVisitorsList([item, ...visitorsList])) : null}
+            onMoveConvert={can('record_new_converts') ? ((item) => setConvertsList([item, ...convertsList])) : null}
           />
         )}
 
