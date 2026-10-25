@@ -545,6 +545,7 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
   const [open, setOpen] = useState(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [deptSel, setDeptSel] = useState('ALL');
   const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const money = (n) => 'GHS ' + num(n).toFixed(2);
   const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.1rem 1.25rem', marginBottom: '1rem' };
@@ -668,6 +669,35 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
       table: tableFor('Pledges', ['Member', 'Project', 'Pledged', 'Paid', 'Balance', 'Due'], pledges.map(p => [p.member_name, p.project, money(p.amount), money(paidOf(p)), money(num(p.amount) - paidOf(p)), p.due_date])) };
   } });
 
+  // ---- Department members report: one section per department, downloadable as PDF or Excel ----
+  const subsOf = (m) => (Array.isArray(m.sub_departments) ? m.sub_departments : String(m.sub_departments || '').split(',')).map(x => String(x).trim()).filter(Boolean);
+  const byName = (a, b) => displayName(a).localeCompare(displayName(b));
+  const deptGroups = () => {
+    const core = CORE_DEPARTMENTS.map(d => ({ title: d + ' (core department)', short: d, list: members.filter(m => m.core_department === d).sort(byName) }));
+    const sub = SUB_DEPARTMENTS.map(d => ({ title: d, short: d, list: members.filter(m => subsOf(m).includes(d)).sort(byName) }));
+    if (deptSel === 'ALL') return [...core, ...sub].filter(g => g.list.length);
+    if (deptSel.startsWith('core:')) return core.filter(g => g.short === deptSel.slice(5));
+    return sub.filter(g => g.short === deptSel.slice(4));
+  };
+  const deptHead = ['No', 'Name', 'Phone', 'Gender', 'Marital status', 'Core department', 'Sub-departments'];
+  const deptRow = (m, i) => [i + 1, displayName(m), m.phone || '', m.gender || '', m.marital_status || '', m.core_department || '', subsOf(m).join(', ')];
+  const downloadDeptPdf = () => {
+    const gs = deptGroups();
+    if (!gs.length) { alert('No members found for this selection.'); return; }
+    let html = '<div class="sub"><strong>Department Members Report</strong><br/>Prepared on ' + new Date().toLocaleDateString() + '</div>';
+    if (gs.length > 1) html += '<h3>Summary</h3><table><thead><tr><th>Department</th><th>Members</th></tr></thead><tbody>' + gs.map(g => '<tr><td>' + esc(g.title) + '</td><td>' + g.list.length + '</td></tr>').join('') + '</tbody></table>';
+    gs.forEach(g => {
+      html += '<h3>' + esc(g.title) + ' - ' + g.list.length + ' member' + (g.list.length === 1 ? '' : 's') + '</h3><table><thead><tr>' + deptHead.map(x => '<th>' + esc(x) + '</th>').join('') + '</tr></thead><tbody>' + g.list.map((m, i) => '<tr>' + deptRow(m, i).map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+    });
+    openPrint(gs.length === 1 ? gs[0].short + ' Department Members' : 'Department Members Report', html);
+  };
+  const downloadDeptExcel = () => {
+    const gs = deptGroups();
+    if (!gs.length) { alert('No members found for this selection.'); return; }
+    const sheets = gs.map(g => ({ name: g.short, rows: g.list.map((m, i) => { const r = deptRow(m, i); const o = {}; deptHead.forEach((h, k) => { o[h] = r[k]; }); return o; }) }));
+    saveTextFile(buildWorkbookXml(sheets), 'Department-Members-' + new Date().toISOString().slice(0, 10) + '.xls', 'application/vnd.ms-excel');
+  };
+
   const printSummary = () => {
     let html = `<h3>Membership</h3><table><tbody><tr><td>Total members</td><td>${members.length}</td></tr><tr><td>Admins / Sub-admins</td><td>${members.filter(m => m.role && m.role !== 'member').length}</td></tr><tr><td>Joined this year</td><td>${members.filter(m => String(m.date_joined || '').startsWith(thisYear)).length}</td></tr><tr><td>Birthdays this month</td><td>${members.filter(m => m.date_of_birth && parseInt(String(m.date_of_birth).slice(5, 7), 10) === thisMonth).length}</td></tr></tbody></table>`;
     if (attendance) { const att = attendance.map(a => num(a.men_count) + num(a.women_count) + num(a.children_count)); const t = att.reduce((a, b) => a + b, 0); html += `<h3>Attendance</h3><table><tbody><tr><td>Services recorded</td><td>${att.length}</td></tr><tr><td>Total attendance</td><td>${t}</td></tr><tr><td>Average per service</td><td>${att.length ? (t / att.length).toFixed(1) : 0}</td></tr></tbody></table>`; }
@@ -703,6 +733,19 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
           </div>
         </div>
       )}
+      <div style={{ ...card, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
+        <h4 style={h}>🗂️ Department members report</h4>
+        <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 0.6rem 0' }}>Choose one department or all of them, then download the list of its members.</p>
+        <select value={deptSel} onChange={(e) => setDeptSel(e.target.value)} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', marginBottom: '0.6rem' }}>
+          <option value="ALL">All departments</option>
+          <optgroup label="Core departments">{CORE_DEPARTMENTS.map(d => <option key={d} value={'core:' + d}>{d} ({members.filter(m => m.core_department === d).length})</option>)}</optgroup>
+          <optgroup label="Sub-departments">{SUB_DEPARTMENTS.map(d => <option key={d} value={'sub:' + d}>{d} ({members.filter(m => subsOf(m).includes(d)).length})</option>)}</optgroup>
+        </select>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" onClick={downloadDeptPdf} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📥 PDF with logo</button>
+          <button type="button" onClick={downloadDeptExcel} style={{ backgroundColor: '#16a34a', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📊 Excel</button>
+        </div>
+      </div>
       {defs.map(d => (
         <button key={d.id} type="button" onClick={() => { setOpen(d.id); }} style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', width: '100%', textAlign: 'left', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.9rem', padding: '0.9rem 1rem', marginBottom: '0.7rem', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a' }}>
           <span style={{ width: '2.6rem', height: '2.6rem', borderRadius: '0.7rem', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>{d.icon}</span>
