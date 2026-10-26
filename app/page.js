@@ -1457,53 +1457,201 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
 }
 
 // ---------- Pledges and giving goals ----------
-function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, onPayment }) {
+function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contribs, setContribs, onPrint, churchName }) {
   const blank = { project: '', member_id: '', member_name: '', amount: '', due_date: '', goal: '', payments: [] };
   const [show, setShow] = useState(false);
   const [form, setForm] = useState(blank);
+  const [editIdx, setEditIdx] = useState(null);
   const [pay, setPay] = useState({});
+  const [editPay, setEditPay] = useState(null);
+  const [projEdit, setProjEdit] = useState(null);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('all');
+  const [note, setNote] = useState('');
   const sorted = sortedMembers(members);
   const num = (v) => parseFloat(v) || 0;
+  const uid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 4000); };
   const paidOf = (p) => (p.payments || []).reduce((a, x) => a + num(x.amount), 0);
+  const noteOf = (p) => 'Pledge payment - ' + (p.project || 'General');
+  // The contribution that was created automatically for a payment (new payments carry a ref; older ones are matched by their details)
+  const linkIdx = (cs, p, x) => cs.findIndex(c => (x.ref && c.pledge_ref === x.ref) || (!x.ref && x.in_finance && !c.pledge_ref && c.type === 'Pledge' && String(c.member_id) === String(p.member_id) && num(c.amount) === num(x.amount) && c.date === x.date && String(c.note || '') === noteOf(p)));
+  const cs0 = contribs || [];
   const projects = {};
   items.forEach(p => {
     const k = p.project || 'General';
-    if (!projects[k]) projects[k] = { pledged: 0, paid: 0, goal: 0 };
-    projects[k].pledged += num(p.amount); projects[k].paid += paidOf(p);
+    if (!projects[k]) projects[k] = { pledged: 0, paid: 0, goal: 0, count: 0 };
+    projects[k].pledged += num(p.amount); projects[k].paid += paidOf(p); projects[k].count += 1;
     if (num(p.goal) > projects[k].goal) projects[k].goal = num(p.goal);
   });
+  const totPledged = items.reduce((a, p) => a + num(p.amount), 0), totPaid = items.reduce((a, p) => a + paidOf(p), 0);
+  const overdueOf = (p) => !!(p.due_date && p.due_date < todayISO() && paidOf(p) < num(p.amount));
   const bar = (paid, total) => (
     <div style={{ height: '0.6rem', backgroundColor: '#e2e8f0', borderRadius: '0.4rem', overflow: 'hidden', margin: '0.3rem 0' }}>
       <div style={{ width: Math.min(100, total ? paid / total * 100 : 0) + '%', height: '100%', backgroundColor: paid >= total && total > 0 ? '#16a34a' : theme }} />
     </div>
   );
+  const sbtn = (bg, fg, bd) => ({ backgroundColor: bg, color: fg, border: '1px solid ' + (bd || bg), padding: '0.2rem 0.55rem', borderRadius: '0.3rem', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 'bold', textDecoration: 'none' });
+
   const addPayment = (i) => {
+    const p = items[i];
     const amt = num((pay[i] || {}).amount);
     if (amt <= 0) { alert('Enter the amount paid.'); return; }
-    const entry = { amount: String(amt), date: (pay[i] || {}).date || todayISO(), in_finance: true };
-    onChange(items.map((p, idx) => idx === i ? { ...p, payments: [...(p.payments || []), entry] } : p));
+    const bal = num(p.amount) - paidOf(p);
+    if (amt > bal + 0.001 && !window.confirm('This payment (GHS ' + amt.toFixed(2) + ') is more than the balance (GHS ' + Math.max(0, bal).toFixed(2) + '). Record it anyway?')) return;
+    const ref = uid();
+    const entry = { amount: String(amt), date: (pay[i] || {}).date || todayISO(), in_finance: true, ref };
+    onChange(items.map((q, idx) => idx === i ? { ...q, payments: [...(q.payments || []), entry] } : q));
     // The payment is also recorded as a 'Pledge' contribution, so it shows in the member's giving history and in the Account Report
-    if (onPayment) onPayment({ member_id: items[i].member_id, contributor: items[i].member_name || '', type: 'Pledge', amount: String(amt), date: entry.date, note: 'Pledge payment - ' + (items[i].project || 'General') });
+    if (setContribs) setContribs([{ member_id: p.member_id, contributor: p.member_name || '', type: 'Pledge', amount: String(amt), date: entry.date, note: noteOf(p), pledge_ref: ref }, ...cs0]);
     setPay({ ...pay, [i]: { amount: '', date: '' } });
   };
+  const savePaymentEdit = () => {
+    const { i, j, amount, date } = editPay;
+    const p = items[i], x = (p.payments || [])[j];
+    const amt = num(amount);
+    if (amt <= 0 || !date) { alert('Enter the amount and the date.'); return; }
+    const ref = x.ref || (x.in_finance ? uid() : undefined);
+    const k = linkIdx(cs0, p, x);
+    onChange(items.map((q, idx) => idx === i ? { ...q, payments: q.payments.map((y, jj) => jj === j ? { ...y, amount: String(amt), date, ...(ref ? { ref } : {}) } : y) } : q));
+    if (setContribs && k >= 0) setContribs(cs0.map((c, ci) => ci === k ? { ...c, amount: String(amt), date, pledge_ref: ref } : c));
+    setEditPay(null);
+    flash(k >= 0 ? 'Payment corrected here and in Contributions.' : 'Payment corrected. It had no matching entry in Contributions, so check that page if you recorded it there.');
+  };
+  const deletePayment = (i, j) => {
+    const p = items[i], x = (p.payments || [])[j];
+    const k = linkIdx(cs0, p, x);
+    if (!window.confirm('Delete this payment of GHS ' + num(x.amount).toFixed(2) + ' (' + x.date + ')?' + (k >= 0 ? ' It will also be removed from Contributions and the Account Report.' : ' It has no matching entry in Contributions, so nothing else changes.'))) return;
+    onChange(items.map((q, idx) => idx === i ? { ...q, payments: q.payments.filter((_, jj) => jj !== j) } : q));
+    if (setContribs && k >= 0) setContribs(cs0.filter((_, ci) => ci !== k));
+    flash('Payment deleted.');
+  };
+  const saveForm = (e) => {
+    e.preventDefault();
+    const m = members.find(x => String(x.id) === String(form.member_id));
+    const rec = { ...form, member_name: m ? displayName(m) : form.member_name };
+    if (editIdx === null) {
+      onChange([{ ...rec, recorded_on: todayISO() }, ...items]);
+    } else {
+      const old = items[editIdx];
+      onChange(items.map((q, idx) => idx === editIdx ? { ...q, ...rec } : q));
+      // keep the linked contributions in step with a changed member or project name
+      if (setContribs && (old.member_id !== rec.member_id || old.project !== rec.project)) {
+        const cs = cs0.slice();
+        (old.payments || []).forEach(x => { const k = linkIdx(cs, old, x); if (k >= 0) cs[k] = { ...cs[k], member_id: rec.member_id, contributor: rec.member_name || '', note: noteOf(rec) }; });
+        setContribs(cs);
+      }
+      flash('Pledge updated.');
+    }
+    setForm(blank); setEditIdx(null); setShow(false);
+  };
+  const deletePledge = (i) => {
+    const p = items[i];
+    const linked = (p.payments || []).filter(x => linkIdx(cs0, p, x) >= 0).length;
+    if (!window.confirm('Delete the pledge of ' + (p.member_name || 'this member') + ' for "' + (p.project || 'General') + '"?' + (linked ? ' Its ' + linked + ' payment(s) will also be removed from Contributions and the Account Report.' : ''))) return;
+    if (setContribs && linked) { const cs = cs0.slice(); const drop = new Set(); (p.payments || []).forEach(x => { const k = linkIdx(cs, p, x); if (k >= 0) drop.add(k); }); setContribs(cs.filter((_, ci) => !drop.has(ci))); }
+    onChange(items.filter((_, idx) => idx !== i));
+    flash('Pledge deleted.');
+  };
+  const saveProject = () => {
+    const nn = projEdit.name.trim();
+    if (!nn) { alert('Enter the project name.'); return; }
+    const goal = projEdit.goal === '' ? '' : String(num(projEdit.goal));
+    if (nn !== projEdit.old && items.some(p => (p.project || 'General') === nn) && !window.confirm('A project called "' + nn + '" already exists. Merge them?')) return;
+    const cs = cs0.slice();
+    const updated = items.map(p => {
+      if ((p.project || 'General') !== projEdit.old) return p;
+      const np = { ...p, project: nn, goal };
+      (p.payments || []).forEach(x => { const k = linkIdx(cs, p, x); if (k >= 0) cs[k] = { ...cs[k], note: noteOf(np) }; });
+      return np;
+    });
+    onChange(updated);
+    if (setContribs && nn !== projEdit.old) setContribs(cs);
+    setProjEdit(null);
+    flash('Project updated.');
+  };
+  const deleteProject = (name) => {
+    const group = items.filter(p => (p.project || 'General') === name);
+    const nPay = group.reduce((a, p) => a + (p.payments || []).length, 0);
+    if (!window.confirm('Delete the whole project "' + name + '"?\n\nThis removes ' + group.length + ' pledge(s) and ' + nPay + ' payment(s) from Pledges, and the matching entries from Contributions and the Account Report.\n\nThis cannot be undone.')) return;
+    const cs = cs0.slice(); const drop = new Set();
+    group.forEach(p => (p.payments || []).forEach(x => { const k = linkIdx(cs, p, x); if (k >= 0) drop.add(k); }));
+    if (setContribs && drop.size) setContribs(cs.filter((_, ci) => !drop.has(ci)));
+    onChange(items.filter(p => (p.project || 'General') !== name));
+    flash('Project deleted.');
+  };
+  const printProject = (name) => {
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const g = items.filter(p => (p.project || 'General') === name);
+    const v = projects[name];
+    const target = v.goal || v.pledged;
+    const st = (p) => paidOf(p) >= num(p.amount) ? 'Completed' : (overdueOf(p) ? 'Overdue' : 'In progress');
+    const html = '<div class="sub"><strong>Pledge report: ' + esc(name) + '</strong><br/>Prepared on ' + new Date().toLocaleDateString() + '</div>'
+      + '<table><tbody><tr><td>Total pledged</td><td>GHS ' + v.pledged.toFixed(2) + '</td></tr><tr><td>Total paid</td><td>GHS ' + v.paid.toFixed(2) + '</td></tr><tr><td>Balance</td><td>GHS ' + Math.max(0, v.pledged - v.paid).toFixed(2) + '</td></tr>' + (v.goal ? '<tr><td>Project goal</td><td>GHS ' + v.goal.toFixed(2) + ' (' + Math.min(100, v.paid / target * 100).toFixed(0) + '% raised)</td></tr>' : '') + '</tbody></table>'
+      + '<h3>Pledges (' + g.length + ')</h3><table><thead><tr><th>#</th><th>Member</th><th>Pledged</th><th>Paid</th><th>Balance</th><th>Due</th><th>Status</th></tr></thead><tbody>'
+      + g.map((p, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(p.member_name) + '</td><td>' + num(p.amount).toFixed(2) + '</td><td>' + paidOf(p).toFixed(2) + '</td><td>' + Math.max(0, num(p.amount) - paidOf(p)).toFixed(2) + '</td><td>' + esc(p.due_date) + '</td><td>' + st(p) + '</td></tr>').join('') + '</tbody></table>';
+    onPrint('Pledge Report - ' + name, html);
+  };
+  const reminderLink = (p) => {
+    const m = members.find(x => String(x.id) === String(p.member_id));
+    const phone = m && m.phone;
+    if (!phone) return null;
+    const bal = Math.max(0, num(p.amount) - paidOf(p));
+    const text = 'Dear ' + (p.member_name || 'member') + ', this is a friendly reminder of your pledge of GHS ' + num(p.amount).toFixed(2) + ' for ' + (p.project || 'the church project') + '. Paid so far: GHS ' + paidOf(p).toFixed(2) + '. Balance: GHS ' + bal.toFixed(2) + (p.due_date ? ' (due ' + p.due_date + ')' : '') + '. Thank you and God bless you. - ' + (churchName || 'The Church');
+    return 'https://wa.me/' + waNumber(phone) + '?text=' + encodeURIComponent(text);
+  };
+
+  const q = search.trim().toLowerCase();
+  const view = items.map((p, i) => ({ p, i })).filter(({ p }) => {
+    if (q && !(String(p.member_name || '').toLowerCase().includes(q) || String(p.project || '').toLowerCase().includes(q))) return false;
+    const done = paidOf(p) >= num(p.amount) && num(p.amount) > 0;
+    if (status === 'completed') return done;
+    if (status === 'outstanding') return !done;
+    if (status === 'overdue') return overdueOf(p);
+    return true;
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Pledges & Giving Goals</h3>
-        <button type="button" onClick={() => { setShow(!show); setForm(blank); }} style={greenBtn}>{show ? 'Cancel' : '+ Add Pledge'}</button>
+        <button type="button" onClick={() => { if (show) { setShow(false); setEditIdx(null); setForm(blank); } else { setShow(true); setEditIdx(null); setForm(blank); } }} style={greenBtn}>{show ? 'Cancel' : '+ Add Pledge'}</button>
       </div>
       <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 0 }}>A pledge is a promise, so it is not counted as income until it is paid. Each payment you add here is recorded automatically as a Pledge contribution, so it appears in the giving records of that member and in the Account Report. Do not record it again under Contributions.</p>
+      {note ? <div style={{ backgroundColor: '#ecfdf5', color: '#065f46', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>{note}</div> : null}
+
+      {items.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(8rem,1fr))', gap: '0.5rem', marginBottom: '0.9rem' }}>
+          {[['Pledged', 'GHS ' + totPledged.toFixed(2)], ['Paid', 'GHS ' + totPaid.toFixed(2)], ['Balance', 'GHS ' + Math.max(0, totPledged - totPaid).toFixed(2)], ['Overdue', items.filter(overdueOf).length]].map(([l, v]) => (
+            <div key={l} style={{ ...cardBox, marginBottom: 0, padding: '0.6rem 0.8rem', textAlign: 'center' }}><div style={{ fontWeight: 'bold', color: l === 'Overdue' && v > 0 ? '#dc2626' : theme }}>{v}</div><div style={{ fontSize: '0.74rem', color: '#64748b' }}>{l}</div></div>
+          ))}
+        </div>
+      )}
 
       {Object.keys(projects).length > 0 && (
         <div style={{ ...cardBox, backgroundColor: '#f8fafc' }}>
           <h4 style={{ margin: '0 0 0.5rem 0', color: theme }}>Projects</h4>
           {Object.entries(projects).map(([k, v]) => {
             const target = v.goal || v.pledged;
+            const editing = projEdit && projEdit.old === k;
             return (
-              <div key={k} style={{ marginBottom: '0.8rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}><strong>{k}</strong><span>GHS {v.paid.toFixed(2)} / {target.toFixed(2)}</span></div>
+              <div key={k} style={{ marginBottom: '0.9rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', gap: '0.5rem' }}><strong>{k}</strong><span>GHS {v.paid.toFixed(2)} / {target.toFixed(2)}</span></div>
                 {bar(v.paid, target)}
-                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Pledged GHS {v.pledged.toFixed(2)}{v.goal ? ' - Goal GHS ' + v.goal.toFixed(2) : ''} - {target ? Math.min(100, v.paid / target * 100).toFixed(0) : 0}% reached</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Pledged GHS {v.pledged.toFixed(2)}{v.goal ? ' - Goal GHS ' + v.goal.toFixed(2) : ''} - {target ? Math.min(100, v.paid / target * 100).toFixed(0) : 0}% reached - {v.count} pledge{v.count === 1 ? '' : 's'}</div>
+                {editing ? (
+                  <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.4rem' }}>
+                    <input style={formBox} value={projEdit.name} onChange={(e) => setProjEdit({ ...projEdit, name: e.target.value })} placeholder="Project name" />
+                    <input style={formBox} type="number" min="0" step="0.01" value={projEdit.goal} onChange={(e) => setProjEdit({ ...projEdit, goal: e.target.value })} placeholder="Project goal (GHS)" />
+                    <div style={{ display: 'flex', gap: '0.4rem' }}><button type="button" onClick={saveProject} style={sbtn(theme, '#fff')}>Save</button><button type="button" onClick={() => setProjEdit(null)} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>Cancel</button></div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                    {onPrint ? <button type="button" onClick={() => printProject(k)} style={sbtn('#eff6ff', '#1d4ed8', '#bfdbfe')}>🖨 Report</button> : null}
+                    {isSuper ? <button type="button" onClick={() => setProjEdit({ old: k, name: k, goal: v.goal ? String(v.goal) : '' })} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>✏️ Edit project</button> : null}
+                    {isSuper ? <button type="button" onClick={() => deleteProject(k)} style={sbtn('#fee2e2', '#991b1b', '#fecaca')}>🗑 Delete project</button> : null}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1511,12 +1659,8 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, onPay
       )}
 
       {show && (
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          const m = members.find(x => String(x.id) === String(form.member_id));
-          onChange([{ ...form, member_name: m ? displayName(m) : form.member_name, recorded_on: todayISO() }, ...items]);
-          setForm(blank); setShow(false);
-        }} style={{ ...cardBox, border: '1px solid #cbd5e1', padding: '1.25rem' }}>
+        <form onSubmit={saveForm} style={{ ...cardBox, border: '1px solid #cbd5e1', padding: '1.25rem' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '0.6rem' }}>{editIdx === null ? 'New pledge' : 'Edit pledge'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div><label style={formLab}>Project / purpose *</label><input style={formBox} required value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} placeholder="e.g. Church building" /></div>
             <div>
@@ -1531,15 +1675,26 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, onPay
               <div><label style={formLab}>Due date</label><input style={formBox} type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></div>
             </div>
             <div><label style={formLab}>Project goal, all members (GHS, optional)</label><input style={formBox} type="number" min="0" step="0.01" value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} /></div>
-            <button type="submit" style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>Save Pledge</button>
+            <button type="submit" style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer' }}>{editIdx === null ? 'Save Pledge' : 'Save changes'}</button>
           </div>
         </form>
       )}
 
+      {items.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.8rem' }}>
+          <input placeholder="Search member or project" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...formBox, flex: 1, minWidth: '9rem', width: 'auto' }} />
+          <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ ...formBox, width: 'auto' }}>
+            <option value="all">All</option><option value="outstanding">Outstanding</option><option value="overdue">Overdue</option><option value="completed">Completed</option>
+          </select>
+        </div>
+      )}
+
       {items.length === 0 && !show && <p style={{ color: '#64748b' }}>No pledges recorded yet.</p>}
-      {items.map((p, i) => {
+      {items.length > 0 && view.length === 0 && <p style={{ color: '#64748b' }}>No pledges match.</p>}
+      {view.map(({ p, i }) => {
         const paid = paidOf(p), total = num(p.amount);
-        const overdue = p.due_date && p.due_date < todayISO() && paid < total;
+        const overdue = overdueOf(p);
+        const rem = paid < total ? reminderLink(p) : null;
         return (
           <div key={i} style={cardBox}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
@@ -1547,11 +1702,38 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, onPay
                 <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{p.member_name || 'Member'}</div>
                 <div style={{ fontSize: '0.85rem', color: '#475569' }}>{p.project}{p.due_date ? ' - due ' + p.due_date : ''}{overdue ? ' (overdue)' : ''}</div>
               </div>
-              {isSuper && <button type="button" onClick={() => { if (confirm('Delete this pledge?')) onChange(items.filter((_, idx) => idx !== i)); }} style={{ backgroundColor: '#fee2e2', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '0.3rem', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', color: '#dc2626', alignSelf: 'flex-start' }}>🗑️</button>}
+              {isSuper && (
+                <div style={{ display: 'flex', gap: '0.3rem', alignSelf: 'flex-start' }}>
+                  <button type="button" onClick={() => { setForm({ ...blank, ...p, member_id: String(p.member_id || '') }); setEditIdx(i); setShow(true); window.scrollTo && window.scrollTo(0, 0); }} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>✏️</button>
+                  <button type="button" onClick={() => deletePledge(i)} style={sbtn('#fee2e2', '#dc2626', '#fecaca')}>🗑️</button>
+                </div>
+              )}
             </div>
             {bar(paid, total)}
             <div style={{ fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between' }}><span>Paid GHS {paid.toFixed(2)} of {total.toFixed(2)}</span><strong style={{ color: paid >= total ? '#16a34a' : '#b45309' }}>{paid >= total ? 'Completed' : 'Balance ' + (total - paid).toFixed(2)}</strong></div>
-            {(p.payments || []).length > 0 && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem 0.9rem' }}>{(p.payments || []).map((x, j) => <span key={j}>{x.date}: GHS {num(x.amount).toFixed(2)} {onReceipt ? <button type="button" onClick={() => onReceipt('Pledge', { member_id: p.member_id, member_name: p.member_name, project: p.project, amount: x.amount, date: x.date, pledged: p.amount, paidToDate: (p.payments || []).slice(0, j + 1).reduce((a, y) => a + num(y.amount), 0) })} style={{ marginLeft: '0.2rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.72rem' }}>Receipt</button> : null}</span>)}</div>}
+            {(p.payments || []).length > 0 && (
+              <div style={{ marginTop: '0.4rem' }}>
+                {(p.payments || []).map((x, j) => (
+                  editPay && editPay.i === i && editPay.j === j ? (
+                    <div key={j} style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', margin: '0.3rem 0' }}>
+                      <input type="number" min="0" step="0.01" value={editPay.amount} onChange={(e) => setEditPay({ ...editPay, amount: e.target.value })} style={{ ...formBox, flex: 1, minWidth: '6rem', width: 'auto' }} />
+                      <input type="date" value={editPay.date} onChange={(e) => setEditPay({ ...editPay, date: e.target.value })} style={{ ...formBox, flex: 1, minWidth: '8rem', width: 'auto' }} />
+                      <button type="button" onClick={savePaymentEdit} style={sbtn(theme, '#fff')}>Save</button>
+                      <button type="button" onClick={() => setEditPay(null)} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div key={j} style={{ fontSize: '0.8rem', color: '#475569', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', padding: '0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
+                      <span>{x.date}: GHS {num(x.amount).toFixed(2)}</span>
+                      <span style={{ display: 'flex', gap: '0.3rem' }}>
+                        {onReceipt ? <button type="button" onClick={() => onReceipt('Pledge', { member_id: p.member_id, member_name: p.member_name, project: p.project, amount: x.amount, date: x.date, pledged: p.amount, paidToDate: (p.payments || []).slice(0, j + 1).reduce((a, y) => a + num(y.amount), 0) })} style={sbtn('#ecfdf5', '#166534', '#86efac')}>Receipt</button> : null}
+                        {isSuper ? <button type="button" onClick={() => setEditPay({ i, j, amount: String(x.amount), date: x.date })} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>Edit</button> : null}
+                        {isSuper ? <button type="button" onClick={() => deletePayment(i, j)} style={sbtn('#fee2e2', '#991b1b', '#fecaca')}>Delete</button> : null}
+                      </span>
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
             {paid < total && (
               <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
                 <input type="number" min="0" step="0.01" placeholder="Amount paid" value={(pay[i] || {}).amount || ''} onChange={(e) => setPay({ ...pay, [i]: { ...(pay[i] || {}), amount: e.target.value } })} style={{ ...formBox, flex: 1, minWidth: '6rem', width: 'auto' }} />
@@ -1559,6 +1741,7 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, onPay
                 <button type="button" onClick={() => addPayment(i)} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.4rem', fontWeight: 'bold', cursor: 'pointer' }}>+ Payment</button>
               </div>
             )}
+            {rem ? <div style={{ marginTop: '0.5rem' }}><a href={rem} target="_blank" rel="noopener noreferrer" style={{ ...sbtn('#dcfce7', '#166534', '#86efac'), display: 'inline-block' }}>🟢 Send reminder on WhatsApp</a></div> : null}
           </div>
         );
       })}
@@ -6482,7 +6665,7 @@ export default function Home() {
 
         {/* Pledges */}
         {activeTab === 'pledges' && can('access_finance') && (
-          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} onPayment={(c) => setContributions([c, ...contributions])} />
+          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} contribs={contributions} setContribs={setContributions} onPrint={openPrintWindow} churchName={churchName} />
         )}
 
         {/* Activity Log */}
