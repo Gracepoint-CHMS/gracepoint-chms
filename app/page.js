@@ -1457,8 +1457,8 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
 }
 
 // ---------- Pledges and giving goals ----------
-function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contribs, setContribs, onPrint, churchName }) {
-  const blank = { project: '', member_id: '', member_name: '', amount: '', due_date: '', goal: '', payments: [] };
+function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contribs, setContribs, onPrint, churchName, visitors }) {
+  const blank = { project: '', member_id: '', member_name: '', phone: '', amount: '', due_date: '', goal: '', payments: [] };
   const [show, setShow] = useState(false);
   const [form, setForm] = useState(blank);
   const [editIdx, setEditIdx] = useState(null);
@@ -1528,8 +1528,10 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contr
   };
   const saveForm = (e) => {
     e.preventDefault();
-    const m = members.find(x => String(x.id) === String(form.member_id));
-    const rec = { ...form, member_name: m ? displayName(m) : form.member_name };
+    const isVis = form.member_id === '__visitor__';
+    if (isVis && !String(form.member_name || '').trim()) { alert('Enter the name of the visitor.'); return; }
+    const m = isVis ? null : members.find(x => String(x.id) === String(form.member_id));
+    const rec = isVis ? { ...form, member_id: '', visitor: true, member_name: String(form.member_name).trim(), phone: String(form.phone || '').trim() } : { ...form, visitor: false, member_name: m ? displayName(m) : form.member_name };
     if (editIdx === null) {
       onChange([{ ...rec, recorded_on: todayISO() }, ...items]);
     } else {
@@ -1593,8 +1595,8 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contr
     onPrint('Pledge Report - ' + name, html);
   };
   const reminderLink = (p) => {
-    const m = members.find(x => String(x.id) === String(p.member_id));
-    const phone = m && m.phone;
+    const m = p.visitor ? null : members.find(x => String(x.id) === String(p.member_id));
+    const phone = (m && m.phone) || p.phone;
     if (!phone) return null;
     const bal = Math.max(0, num(p.amount) - paidOf(p));
     const text = 'Dear ' + (p.member_name || 'member') + ', this is a friendly reminder of your pledge of GHS ' + num(p.amount).toFixed(2) + ' for ' + (p.project || 'the church project') + '. Paid so far: GHS ' + paidOf(p).toFixed(2) + '. Balance: GHS ' + bal.toFixed(2) + (p.due_date ? ' (due ' + p.due_date + ')' : '') + '. Thank you and God bless you. - ' + (churchName || 'The Church');
@@ -1647,6 +1649,7 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contr
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                    <button type="button" onClick={() => { setForm({ ...blank, project: k, goal: v.goal ? String(v.goal) : '' }); setEditIdx(null); setShow(true); window.scrollTo && window.scrollTo(0, 0); }} style={sbtn('#dcfce7', '#166534', '#86efac')}>+ Add another member</button>
                     {onPrint ? <button type="button" onClick={() => printProject(k)} style={sbtn('#eff6ff', '#1d4ed8', '#bfdbfe')}>🖨 Report</button> : null}
                     {isSuper ? <button type="button" onClick={() => setProjEdit({ old: k, name: k, goal: v.goal ? String(v.goal) : '' })} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>✏️ Edit project</button> : null}
                     {isSuper ? <button type="button" onClick={() => deleteProject(k)} style={sbtn('#fee2e2', '#991b1b', '#fecaca')}>🗑 Delete project</button> : null}
@@ -1662,14 +1665,28 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contr
         <form onSubmit={saveForm} style={{ ...cardBox, border: '1px solid #cbd5e1', padding: '1.25rem' }}>
           <div style={{ fontWeight: 'bold', marginBottom: '0.6rem' }}>{editIdx === null ? 'New pledge' : 'Edit pledge'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div><label style={formLab}>Project / purpose *</label><input style={formBox} required value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} placeholder="e.g. Church building" /></div>
+            <div><label style={formLab}>Project / purpose *</label><input style={formBox} required list="pledge-projects" value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} placeholder="e.g. Church building" /><datalist id="pledge-projects">{Object.keys(projects).map(k => <option key={k} value={k} />)}</datalist></div>
             <div>
               <label style={formLab}>Member *</label>
               <select style={formBox} required value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
                 <option value="">-- Select member --</option>
                 {sorted.map(m => <option key={m.id} value={m.id}>{displayName(m)}</option>)}
+                <option value="__visitor__">+ Visitor / not a member yet</option>
               </select>
             </div>
+            {form.member_id === '__visitor__' && (
+              <div style={{ display: 'grid', gap: '0.5rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                {(visitors || []).length > 0 && (
+                  <div><label style={formLab}>Pick a recorded visitor (optional)</label>
+                    <select style={formBox} value="" onChange={(e) => { const v = (visitors || [])[parseInt(e.target.value, 10)]; if (v) setForm({ ...form, member_name: v.visitor_name || '', phone: v.phone || '' }); }}>
+                      <option value="">-- Choose --</option>
+                      {(visitors || []).map((v, vi) => <option key={vi} value={vi}>{v.visitor_name}{v.phone ? ' (' + v.phone + ')' : ''}</option>)}
+                    </select></div>
+                )}
+                <div><label style={formLab}>Visitor name *</label><input style={formBox} value={form.member_name} onChange={(e) => setForm({ ...form, member_name: e.target.value })} /></div>
+                <div><label style={formLab}>Phone number</label><input style={formBox} type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               <div><label style={formLab}>Amount pledged (GHS) *</label><input style={formBox} type="number" min="1" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
               <div><label style={formLab}>Due date</label><input style={formBox} type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></div>
@@ -1699,12 +1716,12 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, contr
           <div key={i} style={cardBox}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
               <div>
-                <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{p.member_name || 'Member'}</div>
+                <div style={{ fontWeight: 'bold', color: '#0f172a' }}>{p.member_name || 'Member'}{p.visitor ? <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', backgroundColor: '#fef3c7', color: '#92400e', padding: '0.1rem 0.45rem', borderRadius: '1rem' }}>Visitor</span> : null}</div>
                 <div style={{ fontSize: '0.85rem', color: '#475569' }}>{p.project}{p.due_date ? ' - due ' + p.due_date : ''}{overdue ? ' (overdue)' : ''}</div>
               </div>
               {isSuper && (
                 <div style={{ display: 'flex', gap: '0.3rem', alignSelf: 'flex-start' }}>
-                  <button type="button" onClick={() => { setForm({ ...blank, ...p, member_id: String(p.member_id || '') }); setEditIdx(i); setShow(true); window.scrollTo && window.scrollTo(0, 0); }} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>✏️</button>
+                  <button type="button" onClick={() => { setForm({ ...blank, ...p, member_id: p.visitor ? '__visitor__' : String(p.member_id || '') }); setEditIdx(i); setShow(true); window.scrollTo && window.scrollTo(0, 0); }} style={sbtn('#f1f5f9', '#334155', '#cbd5e1')}>✏️</button>
                   <button type="button" onClick={() => deletePledge(i)} style={sbtn('#fee2e2', '#dc2626', '#fecaca')}>🗑️</button>
                 </div>
               )}
@@ -6665,7 +6682,7 @@ export default function Home() {
 
         {/* Pledges */}
         {activeTab === 'pledges' && can('access_finance') && (
-          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} contribs={contributions} setContribs={setContributions} onPrint={openPrintWindow} churchName={churchName} />
+          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} contribs={contributions} setContribs={setContributions} onPrint={openPrintWindow} churchName={churchName} visitors={visitorsList} />
         )}
 
         {/* Activity Log */}
