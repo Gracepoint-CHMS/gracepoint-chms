@@ -1457,7 +1457,7 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
 }
 
 // ---------- Pledges and giving goals ----------
-function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt }) {
+function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt, onPayment }) {
   const blank = { project: '', member_id: '', member_name: '', amount: '', due_date: '', goal: '', payments: [] };
   const [show, setShow] = useState(false);
   const [form, setForm] = useState(blank);
@@ -1480,8 +1480,10 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt }) {
   const addPayment = (i) => {
     const amt = num((pay[i] || {}).amount);
     if (amt <= 0) { alert('Enter the amount paid.'); return; }
-    const entry = { amount: String(amt), date: (pay[i] || {}).date || todayISO() };
+    const entry = { amount: String(amt), date: (pay[i] || {}).date || todayISO(), in_finance: true };
     onChange(items.map((p, idx) => idx === i ? { ...p, payments: [...(p.payments || []), entry] } : p));
+    // The payment is also recorded as a 'Pledge' contribution, so it shows in the member's giving history and in the Account Report
+    if (onPayment) onPayment({ member_id: items[i].member_id, contributor: items[i].member_name || '', type: 'Pledge', amount: String(amt), date: entry.date, note: 'Pledge payment - ' + (items[i].project || 'General') });
     setPay({ ...pay, [i]: { amount: '', date: '' } });
   };
   return (
@@ -1490,7 +1492,7 @@ function PledgesTab({ items, onChange, members, theme, isSuper, onReceipt }) {
         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Pledges & Giving Goals</h3>
         <button type="button" onClick={() => { setShow(!show); setForm(blank); }} style={greenBtn}>{show ? 'Cancel' : '+ Add Pledge'}</button>
       </div>
-      <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 0 }}>This screen only tracks promises and progress. When money is received, also record it under Finance so it appears in the Account Report.</p>
+      <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 0 }}>A pledge is a promise, so it is not counted as income until it is paid. Each payment you add here is recorded automatically as a Pledge contribution, so it appears in the giving records of that member and in the Account Report. Do not record it again under Contributions.</p>
 
       {Object.keys(projects).length > 0 && (
         <div style={{ ...cardBox, backgroundColor: '#f8fafc' }}>
@@ -3416,7 +3418,8 @@ export default function Home() {
           contributions: contributions.filter(c => String(c.member_id) === id),
           incomes: incomes.filter(i => i.member_id && String(i.member_id) === id),
           welfare: welfareRecords[id] || {},
-          welfare_updated: welfareDates[id] || null
+          welfare_updated: welfareDates[id] || null,
+          pledges: pledgesList.filter(p => p.member_id && String(p.member_id) === id)
         }
       };
     });
@@ -3450,11 +3453,11 @@ export default function Home() {
       .select('data')
       .eq('member_email', String(email || '').trim().toLowerCase());
     if (error) setSaveError('Could not load your records: ' + error.message);
-    const merged = { tithes: [], contributions: [], incomes: [], welfare: {} };
-    const seen = { tithes: new Set(), contributions: new Set(), incomes: new Set() };
+    const merged = { tithes: [], contributions: [], incomes: [], welfare: {}, pledges: [] };
+    const seen = { tithes: new Set(), contributions: new Set(), incomes: new Set(), pledges: new Set() };
     (mfRows || []).forEach((r) => {
       const d = (r && r.data) || {};
-      ['tithes', 'contributions', 'incomes'].forEach((k) => {
+      ['tithes', 'contributions', 'incomes', 'pledges'].forEach((k) => {
         (d[k] || []).forEach((item) => {
           const sig = JSON.stringify(item);
           if (!seen[k].has(sig)) { seen[k].add(sig); merged[k].push(item); }
@@ -4665,12 +4668,13 @@ export default function Home() {
     // Members read their saved records. Admins viewing their own portal use the records already loaded.
     const myId = String(currentMemberRecord.id || '');
     const mf = role === 'member'
-      ? (memberFinance || { tithes: [], contributions: [], incomes: [], welfare: {} })
+      ? (memberFinance || { tithes: [], contributions: [], incomes: [], welfare: {}, pledges: [] })
       : {
           tithes: tithes.filter(t => myId && String(t.member_id) === myId),
           contributions: contributions.filter(c => myId && String(c.member_id) === myId),
           incomes: incomes.filter(i => myId && i.member_id && String(i.member_id) === myId),
-          welfare: (myId && welfareRecords[myId]) || {}
+          welfare: (myId && welfareRecords[myId]) || {},
+          pledges: pledgesList.filter(p => myId && p.member_id && String(p.member_id) === myId)
         };
     const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
 
@@ -4996,6 +5000,32 @@ export default function Home() {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Contributions &amp; Income</span><strong>GHS {memberContribTotal.toFixed(2)}</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '0.25rem 0' }}><span>Total Welfare</span><strong>GHS {memberWelfareTotal.toFixed(2)}</strong></div>
           </div>
+
+          {(mf.pledges || []).length > 0 && (() => {
+            const pn = (v) => parseFloat(v) || 0;
+            const paidOf = (p) => (p.payments || []).reduce((a, x) => a + pn(x.amount), 0);
+            const totP = mf.pledges.reduce((a, p) => a + pn(p.amount), 0), totPaid = mf.pledges.reduce((a, p) => a + paidOf(p), 0);
+            return (
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.2rem 0' }}>🤝 My Pledges</h3>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Pledged GHS {totP.toFixed(2)} · Paid GHS {totPaid.toFixed(2)} · Balance GHS {Math.max(0, totP - totPaid).toFixed(2)}</p>
+                {mf.pledges.map((p, i) => {
+                  const paid = paidOf(p), total = pn(p.amount);
+                  const done = total > 0 && paid >= total;
+                  const overdue = p.due_date && p.due_date < todayStr() && !done;
+                  return (
+                    <div key={i} style={{ padding: '0.7rem 0', borderTop: i ? '1px dashed #e2e8f0' : 'none' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontWeight: '600', color: '#0f172a' }}><span>{p.project || 'Pledge'}</span><span style={{ color: done ? '#16a34a' : overdue ? '#dc2626' : '#b45309', fontSize: '0.85rem' }}>{done ? 'Completed' : overdue ? 'Overdue' : 'In progress'}</span></div>
+                      <div style={{ height: '0.55rem', backgroundColor: '#e2e8f0', borderRadius: '0.4rem', overflow: 'hidden', margin: '0.35rem 0' }}><div style={{ width: Math.min(100, total ? paid / total * 100 : 0) + '%', height: '100%', backgroundColor: done ? '#16a34a' : themeColor }} /></div>
+                      <div style={{ fontSize: '0.85rem', color: '#334155', display: 'flex', justifyContent: 'space-between' }}><span>Paid GHS {paid.toFixed(2)} of {total.toFixed(2)}</span><span>Balance GHS {Math.max(0, total - paid).toFixed(2)}</span></div>
+                      {p.due_date ? <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Due {p.due_date}</div> : null}
+                      {(p.payments || []).length > 0 && <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>{(p.payments || []).map((x, j) => <div key={j}>{x.date}: GHS {pn(x.amount).toFixed(2)}</div>)}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {(() => {
             const yrs = new Set([String(new Date().getFullYear())]);
@@ -6452,7 +6482,7 @@ export default function Home() {
 
         {/* Pledges */}
         {activeTab === 'pledges' && can('access_finance') && (
-          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} />
+          <PledgesTab items={pledgesList} onChange={setPledgesList} members={members} theme={themeColor} isSuper={role === 'super_admin'} onReceipt={printReceipt} onPayment={(c) => setContributions([c, ...contributions])} />
         )}
 
         {/* Activity Log */}
