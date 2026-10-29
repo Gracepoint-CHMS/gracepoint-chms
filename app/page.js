@@ -1282,7 +1282,7 @@ const OUTREACH_FIRST_LIST = [
   ['Rebecca', '0257311407', 'check'], ['Bro Joe', '0543982622', 'check'], ['Dada John', '0202628320'], ['Eliza', '0248104039'],
   ['Richmon', '0543706101', 'check'], ['O.P.K', '0245011178']
 ];
-function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, theme, onPrint, canDelete, onMoveVisitor, onMoveConvert, churchName }) {
+function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, theme, onPrint, canDelete, onMoveVisitor, onMoveConvert, churchName, idInfo }) {
   const today = todayISO();
   const uid = () => 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const [view, setView] = useState('due');
@@ -1387,6 +1387,71 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
     const todo = list.filter(isDue);
     const h = '<div class="sub"><strong>Outreach follow-up sheet</strong><br/>Prepared on ' + new Date().toLocaleDateString() + ' - ' + todo.length + ' people to contact</div><table><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Area</th><th>Disciple</th><th>Outcome / note</th></tr></thead><tbody>' + todo.map((c, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(c.name) + '</td><td>' + esc(c.phone) + '</td><td>' + esc(c.area) + '</td><td>' + esc(c.disciple) + '</td><td style="width:35%">&nbsp;</td></tr>').join('') + '</tbody></table>';
     onPrint('Outreach Follow-up Sheet', h);
+  };
+  // ---- Discipleship ID cards (evangelism team): front + back, 2 per row on A4 ----
+  const discMember = (d) => (members || []).find(m => displayName(m).trim().toLowerCase() === String(d.name || '').trim().toLowerCase());
+  const discNo = (d) => 'DSC-' + String(d.id || '').replace(/[^A-Za-z0-9]/g, '').slice(-5).toUpperCase();
+  const printDiscipleCards = (arr) => {
+    if (!arr.length) { alert('There are no disciples to print.'); return; }
+    const info = idInfo || {};
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const logoRaw = info.logo || '';
+    const logo = logoRaw.startsWith('http') ? logoRaw : window.location.origin + logoRaw;
+    const cPhone = info.phone || '0244254429';
+    const cAddr = info.address || 'Techiman, Ghana';
+    const c = info.color || theme;
+    const issued = new Date().toLocaleDateString();
+    const cards = arr.map(d => {
+      const m = discMember(d);
+      let qr = '';
+      try { qr = qrSvgString('GPC-DISCIPLE:' + d.id, 78); } catch (e) { qr = ''; }
+      const ini = esc(String(d.name || '?').trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().substring(0, 2));
+      const photo = d.photo_url || (m && m.photo_url) ? '<img class="ph" src="' + esc(d.photo_url || m.photo_url) + '" />' : '<div class="ph ini">' + ini + '</div>';
+      const phone = d.phone || (m && m.phone) || '';
+      const front = '<div class="card front">'
+        + '<div class="hd"><img src="' + esc(logo) + '" /><div class="hn"><b>' + esc(churchName) + '</b><span>Evangelism &amp; Discipleship Team</span></div><div class="ty">DISCIPLE<br/>ID</div></div>'
+        + '<div class="gold"></div>'
+        + '<div class="bd">' + photo
+        + '<div class="info"><div class="nm">' + esc(d.name) + '</div>'
+        + '<div class="role">Disciple - Evangelist</div>'
+        + '<div class="sm">House-to-house evangelism and follow-up</div>'
+        + '<div class="no">' + esc(discNo(d)) + (m ? ' &nbsp;|&nbsp; ' + esc(memberNo(m)) : '') + '</div></div>'
+        + '<div class="qr">' + qr + '</div></div>'
+        + '<div class="ft">' + (phone ? 'Tel: ' + esc(phone) + ' &nbsp;|&nbsp; ' : '') + 'Issued ' + esc(issued) + '</div></div>';
+      const back = '<div class="card back">'
+        + '<div class="hd bk"><img src="' + esc(logo) + '" /><div class="hn"><b>' + esc(churchName) + '</b><span>Evangelism &amp; Discipleship Team</span></div></div>'
+        + '<div class="gold"></div>'
+        + '<div class="bb"><div class="prop">AUTHORISED CHURCH EVANGELIST</div>'
+        + '<p>The bearer is a disciple of ' + esc(churchName) + ' sent out for house-to-house evangelism. Please receive and assist them kindly.</p>'
+        + '<p>To confirm, or if this card is found, please call:</p>'
+        + '<div class="ph2">' + esc(cPhone) + '</div><p class="ad">' + esc(cAddr) + '</p><p class="ad"><b>Property of the church. Not transferable.</b></p></div>'
+        + '<div class="sg"><div class="ln"></div><span>Pastor / authorised signature</span></div></div>';
+      return front + back;
+    }).join('');
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow pop-ups for this site to print.'); return; }
+    w.document.write('<html><head><title>Disciple ID Cards</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>'
+      + '@page{size:A4;margin:10mm} *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact} body{font-family:Segoe UI,Arial,sans-serif;margin:0;color:#0f172a}'
+      + '.sheet{display:grid;grid-template-columns:repeat(2,85.6mm);gap:5mm;justify-content:center}'
+      + '.card{width:85.6mm;height:54mm;border:.3mm solid #cbd5e1;border-radius:3.2mm;overflow:hidden;display:flex;flex-direction:column;page-break-inside:avoid;background:#fff;position:relative}'
+      + '.hd{background:linear-gradient(135deg,#065f46 0%,#064e3b 55%,' + c + ' 140%);color:#fff;display:flex;align-items:center;gap:2.4mm;padding:2mm 3.2mm;height:12.5mm}'
+      + '.hd img{width:9.5mm;height:9.5mm;object-fit:contain;background:#fff;border-radius:50%;padding:.4mm;flex:none}'
+      + '.hn{flex:1;min-width:0;line-height:1.15}.hn b{display:block;font-size:8.2pt;letter-spacing:.2px}.hn span{display:block;font-size:5.8pt;opacity:.9;margin-top:.4mm}'
+      + '.ty{font-size:5.6pt;letter-spacing:1.2px;text-align:right;font-weight:bold;color:#fcd34d;line-height:1.3;flex:none}'
+      + '.gold{height:1mm;background:linear-gradient(90deg,#b45309,#fcd34d,#b45309);flex:none}'
+      + '.bd{flex:1;display:flex;align-items:center;gap:3mm;padding:1.5mm 3.2mm}'
+      + '.ph{width:19mm;height:24mm;object-fit:cover;border-radius:1.6mm;border:.5mm solid #065f46;flex:none}.ini{display:flex;align-items:center;justify-content:center;background:#e2e8f0;font-weight:bold;font-size:14pt;color:#334155}'
+      + '.info{flex:1;min-width:0}.nm{font-weight:700;font-size:9.4pt;line-height:1.15;color:#064e3b;margin-bottom:1mm}'
+      + '.role{display:inline-block;background:#065f46;color:#fff;font-size:5.8pt;font-weight:bold;letter-spacing:.8px;padding:.5mm 2mm;border-radius:2mm;margin-bottom:1mm;text-transform:uppercase}'
+      + '.sm{color:#475569;font-size:6.2pt;line-height:1.25;margin-bottom:1mm}'
+      + '.no{font-family:Consolas,Menlo,monospace;font-size:7pt;font-weight:bold;color:#0f172a;letter-spacing:.5px;border-top:.2mm solid #e2e8f0;padding-top:.8mm}'
+      + '.qr{flex:none;padding:1mm;border:.3mm solid #e2e8f0;border-radius:1.5mm;background:#fff;line-height:0}'
+      + '.ft{background:#ecfdf5;border-top:.3mm solid #d1fae5;text-align:center;font-size:6.2pt;color:#065f46;padding:1mm;letter-spacing:.3px;flex:none}'
+      + '.bk{height:12.5mm}.bb{flex:1;text-align:center;padding:2mm 5mm 0}.prop{font-size:7.2pt;font-weight:800;color:#064e3b;letter-spacing:.5px;margin-bottom:1mm}'
+      + '.bb p{margin:0 0 .9mm;font-size:6.2pt;color:#475569;line-height:1.3}.ph2{font-size:11pt;font-weight:800;color:#0f172a;letter-spacing:.5px;margin:.4mm 0}.bb .ad{font-size:5.7pt;margin-bottom:.3mm}'
+      + '.sg{padding:0 8mm 2mm;text-align:center;flex:none}.ln{border-top:.25mm solid #94a3b8;margin-bottom:.5mm}.sg span{font-size:5.4pt;color:#64748b;letter-spacing:.5px}'
+      + '</style></head><body><div class="sheet">' + cards + '</div><script>window.onload=function(){window.print();};<\/script></body></html>');
+    w.document.close();
   };
   const tabBtn = (id, label) => <button key={id} type="button" onClick={() => setView(id)} style={{ backgroundColor: view === id ? theme : '#f1f5f9', color: view === id ? '#fff' : '#334155', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>{label}</button>;
   const firstListDone = OUTREACH_FIRST_LIST.every(r => list.some(c => String(c.phone).replace(/\s+/g, '') === r[1]));
@@ -1550,12 +1615,15 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
             </div>
           </div>
           {discs.length === 0 && <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No disciples yet.</p>}
+          {discs.length > 0 && <div style={{ marginBottom: '0.75rem' }}><button type="button" onClick={() => printDiscipleCards(discs)} style={btn('#065f46', '#fff')}>🪪 Print all disciple ID cards</button><div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem' }}>Front and back, ready to print and cut. A disciple who is a registered member gets their photo and phone on the card automatically.</div></div>}
           {discs.map(d => {
             const n = list.filter(c => c.disciple === d.name).length;
             return (
               <div key={d.id} style={{ ...cardBox, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <div><div style={{ fontWeight: 'bold' }}>{d.name}</div><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{n} contact{n === 1 ? '' : 's'} recorded</div></div>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <div><div style={{ fontWeight: 'bold' }}>{d.name}</div><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{n} contact{n === 1 ? '' : 's'} recorded{discMember(d) ? ' | registered member' : ''}</div></div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => printDiscipleCards([d])} style={btn('#ecfdf5', '#065f46')}>🪪 ID card</button>
+                  <button type="button" onClick={() => { const ph = window.prompt('Phone number for the ID card:', d.phone || (discMember(d) && discMember(d).phone) || ''); if (ph !== null) setDisciples(discs.map(x => x.id === d.id ? { ...x, phone: ph.trim() } : x)); }} style={btn('#f1f5f9', '#334155')}>Phone</button>
                   <button type="button" onClick={() => { const nn = window.prompt('Correct the name:', d.name); if (nn && nn.trim() && nn.trim() !== d.name) { const t = nn.trim(); setDisciples(discs.map(x => x.id === d.id ? { ...x, name: t } : x)); setContacts(list.map(c => c.disciple === d.name ? { ...c, disciple: t } : c)); } }} style={btn('#f1f5f9', '#334155')}>Rename</button>
                   {canDelete ? <button type="button" onClick={() => { if (window.confirm('Remove ' + d.name + ' from the list? Their recorded contacts stay.')) setDisciples(discs.filter(x => x.id !== d.id)); }} style={btn('#fee2e2', '#991b1b')}>Remove</button> : null}
                 </div>
@@ -6942,6 +7010,7 @@ export default function Home() {
             onPrint={openPrintWindow}
             canDelete={role === 'super_admin'}
             churchName={churchName}
+            idInfo={{ logo: logoSrc, phone: (settings && settings.phone) || '', address: (settings && settings.address) || '', color: themeColor }}
             onMoveVisitor={can('record_visitors') ? ((item) => setVisitorsList([item, ...visitorsList])) : null}
             onMoveConvert={can('record_new_converts') ? ((item) => setConvertsList([item, ...convertsList])) : null}
           />
