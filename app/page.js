@@ -537,7 +537,7 @@ function ReportChart({ type, labels, values, color }) {
   );
 }
 
-function ReportsTab({ members, fin, attendance, assets, visitors, converts, services, events, fellowships, branches, pledges, onBackupExcel, onBackupJson, theme, openPrint, churchName }) {
+function ReportsTab({ members, fin, attendance, assets, visitors, converts, services, events, fellowships, branches, pledges, welfare, onBackupExcel, onBackupJson, theme, openPrint, churchName }) {
   const num = (v) => parseFloat(v) || 0;
   const sum = (arr, f) => (arr || []).reduce((a, x) => a + num(x[f]), 0);
   const thisYear = String(new Date().getFullYear());
@@ -546,6 +546,9 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [deptSel, setDeptSel] = useState('ALL');
+  const [cType, setCType] = useState('ALL');
+  const [cFrom, setCFrom] = useState('');
+  const [cTo, setCTo] = useState('');
   const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const money = (n) => 'GHS ' + num(n).toFixed(2);
   const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.1rem 1.25rem', marginBottom: '1rem' };
@@ -698,6 +701,83 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
     saveTextFile(buildWorkbookXml(sheets), 'Department-Members-' + new Date().toISOString().slice(0, 10) + '.xls', 'application/vnd.ms-excel');
   };
 
+  // ---- Contributions report (Welfare, Building Fund, Thanksgiving, etc.): filter by type and dates, download PDF or Excel ----
+  const cTypeOf = (x) => String(x.type || 'General').trim() || 'General';
+  const cInRange = (d) => {
+    const s = String(d || '').slice(0, 10);
+    if (!cFrom && !cTo) return true;
+    if (!s) return false;
+    if (cFrom && s < cFrom) return false;
+    if (cTo && s > cTo) return false;
+    return true;
+  };
+  const trackerEntries = () => {
+    const out = [];
+    Object.entries(welfare || {}).forEach(([id, rec]) => {
+      let total = 0; const parts = [];
+      Object.entries(rec || {}).forEach(([mo, wks]) => {
+        const t = (Array.isArray(wks) ? wks : []).reduce((a, v) => a + num(v), 0);
+        if (t > 0) { total += t; parts.push(mo + ' ' + t.toFixed(2)); }
+      });
+      if (total > 0) {
+        const m = members.find(x => String(x.id) === String(id));
+        out.push({ date: '', name: m ? displayName(m).trim() : String(id), type: 'Welfare tracker', amount: total, note: parts.join(', ') });
+      }
+    });
+    return out;
+  };
+  const contribTypeList = () => {
+    const set = new Set((fin ? fin.contributions : []).map(cTypeOf));
+    if (welfare && trackerEntries().length) set.add('Welfare tracker');
+    return [...set].sort();
+  };
+  const contribEntries = () => {
+    if (!fin) return [];
+    let list = fin.contributions
+      .filter(x => (cType === 'ALL' || cType === cTypeOf(x)) && cInRange(x.date))
+      .map(x => ({ date: String(x.date || '').slice(0, 10), name: x.contributor || '', type: cTypeOf(x), amount: num(x.amount), note: x.note || '' }));
+    if (welfare && !cFrom && !cTo && (cType === 'ALL' || cType === 'Welfare tracker')) list = list.concat(trackerEntries());
+    return list.sort((a, b) => a.type.localeCompare(b.type) || String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name));
+  };
+  const contribSummary = (list) => {
+    const byType = {}, byMem = {};
+    list.forEach(e => {
+      byType[e.type] = byType[e.type] || { count: 0, total: 0 };
+      byType[e.type].count += 1; byType[e.type].total += e.amount;
+      const k = e.name || 'Not set';
+      byMem[k] = byMem[k] || { count: 0, total: 0 };
+      byMem[k].count += 1; byMem[k].total += e.amount;
+    });
+    return {
+      types: Object.entries(byType).sort((a, b) => b[1].total - a[1].total),
+      mems: Object.entries(byMem).sort((a, b) => b[1].total - a[1].total),
+      total: list.reduce((a, e) => a + e.amount, 0)
+    };
+  };
+  const contribLabel = () => (cType === 'ALL' ? 'All contribution types' : cType) + ' | ' + (cFrom || cTo ? 'Period: ' + (cFrom || 'beginning') + ' to ' + (cTo || 'today') : 'Period: all records');
+  const downloadContribPdf = () => {
+    const list = contribEntries();
+    if (!list.length) { alert('No contributions found for this selection.'); return; }
+    const s = contribSummary(list);
+    let html = '<div class="sub"><strong>Contributions Report</strong><br/>' + esc(contribLabel()) + '<br/>Prepared on ' + new Date().toLocaleDateString() + '</div>';
+    html += '<h3>Summary by type</h3><table><thead><tr><th>Type</th><th>Entries</th><th>Total</th></tr></thead><tbody>' + s.types.map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v.count + '</td><td>' + money(v.total) + '</td></tr>').join('') + '<tr><td><strong>Grand total</strong></td><td><strong>' + list.length + '</strong></td><td><strong>' + money(s.total) + '</strong></td></tr></tbody></table>';
+    html += '<h3>Total per member</h3><table><thead><tr><th>Member / contributor</th><th>Entries</th><th>Total</th></tr></thead><tbody>' + s.mems.map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v.count + '</td><td>' + money(v.total) + '</td></tr>').join('') + '</tbody></table>';
+    html += '<h3>All entries (' + list.length + ')</h3><table><thead><tr><th>No</th><th>Date</th><th>Member / contributor</th><th>Type</th><th>Amount</th><th>Note</th></tr></thead><tbody>' + list.map((e, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(e.date || 'Monthly tracker') + '</td><td>' + esc(e.name) + '</td><td>' + esc(e.type) + '</td><td>' + money(e.amount) + '</td><td>' + esc(e.note) + '</td></tr>').join('') + '</tbody></table>';
+    if ((cFrom || cTo) && welfare && (cType === 'ALL' || cType === 'Welfare tracker')) html += '<p style="font-size:12px;color:#64748b">Note: the monthly Welfare tracker has no exact dates, so it is left out when a date range is chosen.</p>';
+    openPrint((cType === 'ALL' ? 'Contributions' : cType + ' Contributions') + ' Report', html);
+  };
+  const downloadContribExcel = () => {
+    const list = contribEntries();
+    if (!list.length) { alert('No contributions found for this selection.'); return; }
+    const s = contribSummary(list);
+    const sheets = [
+      { name: 'Summary', rows: [...s.types.map(([k, v]) => ({ Type: k, Entries: v.count, Total: v.total.toFixed(2) })), { Type: 'GRAND TOTAL', Entries: list.length, Total: s.total.toFixed(2) }] },
+      { name: 'Per member', rows: s.mems.map(([k, v]) => ({ Member: k, Entries: v.count, Total: v.total.toFixed(2) })) },
+      { name: 'All entries', rows: list.map((e, i) => ({ No: i + 1, Date: e.date || 'Monthly tracker', Member: e.name, Type: e.type, Amount: e.amount.toFixed(2), Note: e.note })) }
+    ];
+    saveTextFile(buildWorkbookXml(sheets), 'Contributions-' + (cType === 'ALL' ? 'All' : cType.replace(/[^A-Za-z0-9]+/g, '-')) + '-' + new Date().toISOString().slice(0, 10) + '.xls', 'application/vnd.ms-excel');
+  };
+
   const printSummary = () => {
     let html = `<h3>Membership</h3><table><tbody><tr><td>Total members</td><td>${members.length}</td></tr><tr><td>Admins / Sub-admins</td><td>${members.filter(m => m.role && m.role !== 'member').length}</td></tr><tr><td>Joined this year</td><td>${members.filter(m => String(m.date_joined || '').startsWith(thisYear)).length}</td></tr><tr><td>Birthdays this month</td><td>${members.filter(m => m.date_of_birth && parseInt(String(m.date_of_birth).slice(5, 7), 10) === thisMonth).length}</td></tr></tbody></table>`;
     if (attendance) { const att = attendance.map(a => num(a.men_count) + num(a.women_count) + num(a.children_count)); const t = att.reduce((a, b) => a + b, 0); html += `<h3>Attendance</h3><table><tbody><tr><td>Services recorded</td><td>${att.length}</td></tr><tr><td>Total attendance</td><td>${t}</td></tr><tr><td>Average per service</td><td>${att.length ? (t / att.length).toFixed(1) : 0}</td></tr></tbody></table>`; }
@@ -733,6 +813,31 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
           </div>
         </div>
       )}
+      {fin && (() => {
+        const list = contribEntries();
+        const tot = list.reduce((a, e) => a + e.amount, 0);
+        const ib = { flex: 1, minWidth: 0, width: '100%', padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.9rem' };
+        return (
+          <div style={{ ...card, backgroundColor: '#fefce8', borderColor: '#fde68a' }}>
+            <h4 style={h}>🤝 Contributions report (Welfare and others)</h4>
+            <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 0.6rem 0' }}>Choose a type (Welfare, Building Fund, Thanksgiving, etc.) or all, set the dates if you want, then download the general report.</p>
+            <select value={cType} onChange={(e) => setCType(e.target.value)} style={{ ...ib, marginBottom: '0.6rem' }}>
+              <option value="ALL">All contribution types</option>
+              {contribTypeList().map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <div style={{ flex: 1 }}><div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.15rem' }}>From</div><input type="date" value={cFrom} onChange={(e) => setCFrom(e.target.value)} style={ib} /></div>
+              <div style={{ flex: 1 }}><div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.15rem' }}>To</div><input type="date" value={cTo} onChange={(e) => setCTo(e.target.value)} style={ib} /></div>
+            </div>
+            {(cFrom || cTo) && <button type="button" onClick={() => { setCFrom(''); setCTo(''); }} style={{ background: 'none', border: 'none', color: theme, fontWeight: 'bold', cursor: 'pointer', marginBottom: '0.5rem', padding: 0 }}>Clear dates</button>}
+            <div style={{ fontSize: '0.92rem', marginBottom: '0.6rem' }}><strong>{list.length}</strong> entr{list.length === 1 ? 'y' : 'ies'} | Total <strong>{money(tot)}</strong></div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button type="button" onClick={downloadContribPdf} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📥 PDF with logo</button>
+              <button type="button" onClick={downloadContribExcel} style={{ backgroundColor: '#16a34a', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📊 Excel</button>
+            </div>
+          </div>
+        );
+      })()}
       <div style={{ ...card, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
         <h4 style={h}>🗂️ Department members report</h4>
         <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 0.6rem 0' }}>Choose one department or all of them, then download the list of its members.</p>
@@ -6762,6 +6867,7 @@ export default function Home() {
             fellowships={can('manage_fellowships') ? fellowshipsList : null}
             branches={can('manage_fellowships') ? branchesList : null}
             pledges={can('access_finance') ? pledgesList : null}
+            welfare={can('access_finance') ? welfareRecords : null}
             onBackupExcel={role === 'super_admin' ? downloadBackupExcel : null}
             onBackupJson={role === 'super_admin' ? downloadBackupJson : null}
             events={can('register_events') ? eventsList : null}
