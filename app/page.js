@@ -716,6 +716,13 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
     Object.entries(welfare || {}).forEach(([id, rec]) => {
       let total = 0; const parts = [];
       Object.entries(rec || {}).forEach(([mo, wks]) => {
+        const mi = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(mo);
+        if (mi >= 0 && (cFrom || cTo)) {
+          // the tracker is for the current year; count a month when any part of it falls inside the chosen dates
+          const ms = thisYear + '-' + String(mi + 1).padStart(2, '0') + '-01';
+          const me = thisYear + '-' + String(mi + 1).padStart(2, '0') + '-31';
+          if ((cFrom && me < cFrom) || (cTo && ms > cTo)) return;
+        }
         const t = (Array.isArray(wks) ? wks : []).reduce((a, v) => a + num(v), 0);
         if (t > 0) { total += t; parts.push(mo + ' ' + t.toFixed(2)); }
       });
@@ -736,7 +743,7 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
     let list = fin.contributions
       .filter(x => (cType === 'ALL' || cType === cTypeOf(x)) && cInRange(x.date))
       .map(x => ({ date: String(x.date || '').slice(0, 10), name: x.contributor || '', type: cTypeOf(x), amount: num(x.amount), note: x.note || '' }));
-    if (welfare && !cFrom && !cTo && (cType === 'ALL' || cType === 'Welfare tracker')) list = list.concat(trackerEntries());
+    if (welfare && (cType === 'ALL' || cType === 'Welfare tracker')) list = list.concat(trackerEntries());
     return list.sort((a, b) => a.type.localeCompare(b.type) || String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name));
   };
   const contribSummary = (list) => {
@@ -763,7 +770,7 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
     html += '<h3>Summary by type</h3><table><thead><tr><th>Type</th><th>Entries</th><th>Total</th></tr></thead><tbody>' + s.types.map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v.count + '</td><td>' + money(v.total) + '</td></tr>').join('') + '<tr><td><strong>Grand total</strong></td><td><strong>' + list.length + '</strong></td><td><strong>' + money(s.total) + '</strong></td></tr></tbody></table>';
     html += '<h3>Total per member</h3><table><thead><tr><th>Member / contributor</th><th>Entries</th><th>Total</th></tr></thead><tbody>' + s.mems.map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v.count + '</td><td>' + money(v.total) + '</td></tr>').join('') + '</tbody></table>';
     html += '<h3>All entries (' + list.length + ')</h3><table><thead><tr><th>No</th><th>Date</th><th>Member / contributor</th><th>Type</th><th>Amount</th><th>Note</th></tr></thead><tbody>' + list.map((e, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(e.date || 'Monthly tracker') + '</td><td>' + esc(e.name) + '</td><td>' + esc(e.type) + '</td><td>' + money(e.amount) + '</td><td>' + esc(e.note) + '</td></tr>').join('') + '</tbody></table>';
-    if ((cFrom || cTo) && welfare && (cType === 'ALL' || cType === 'Welfare tracker')) html += '<p style="font-size:12px;color:#64748b">Note: the monthly Welfare tracker has no exact dates, so it is left out when a date range is chosen.</p>';
+    if ((cFrom || cTo) && welfare && (cType === 'ALL' || cType === 'Welfare tracker')) html += '<p style="font-size:12px;color:#64748b">Note: the monthly Welfare tracker has no exact dates, so its whole months that touch the chosen dates are included.</p>';
     openPrint((cType === 'ALL' ? 'Contributions' : cType + ' Contributions') + ' Report', html);
   };
   const downloadContribExcel = () => {
