@@ -3553,6 +3553,9 @@ function shrinkImageDataUrl(src, maxSide = 480, quality = 0.75) {
   });
 }
 
+// Special giving types (used for non-church members, and also available for members)
+const NM_TYPES = ['Seed', 'Special Offering', 'Sacrifice', 'Purposive Giving'];
+
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('member');
@@ -3660,6 +3663,11 @@ export default function Home() {
   const [contributions, setContributions] = useState([]);
   const [contribForm, setContribForm] = useState({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
   const [editingContribIndex, setEditingContribIndex] = useState(null);
+  // Non-member giving report / receipts filters
+  const [ngWho, setNgWho] = useState('non_member'); // 'non_member' | 'ALL' | 'member'
+  const [ngType, setNgType] = useState('ALL');
+  const [ngFrom, setNgFrom] = useState('');
+  const [ngTo, setNgTo] = useState('');
 
   // Welfare table state (12 months x 4 weeks + date metadata)
   const [welfareRecords, setWelfareRecords] = useState({});
@@ -4793,7 +4801,7 @@ export default function Home() {
   };
 
   // One-page receipt / voucher for tithes, contributions, income, pledges, welfare, expenses and budgets
-  const printReceipt = (kind, row) => {
+  const receiptHtml = (kind, row) => {
     const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const n2 = (v) => (parseFloat(v) || 0).toFixed(2);
     const amtNum = parseFloat(row.amount) || 0;
@@ -4803,7 +4811,13 @@ export default function Home() {
     let title = 'Official Receipt', prefix = 'RCT-', numLabel = 'Receipt', who = '', whoLabel = 'Received from', purpose = '', thanks = 'Thank you for your faithful giving. God bless you.';
     let sign1 = 'Received by (Finance)', sign2 = 'Church stamp', amountLabel = 'Amount', extra = '', showWords = true;
     if (kind === 'Tithe') { who = row.member_name; purpose = 'Tithe'; }
-    else if (kind === 'Contribution') { who = row.contributor; purpose = row.type || 'Contribution'; }
+    else if (kind === 'Contribution') {
+      who = row.contributor; purpose = (row.type || 'Contribution') + (row.purpose ? ' - ' + row.purpose : '');
+      if (row.giver_type === 'non_member') {
+        extra = line('Giver', 'Friend of the church (non-member)' + (row.phone ? ' &middot; ' + esc(row.phone) : ''), 'font-size:13px');
+        thanks = 'Thank you for your generous gift to the work of God. God bless you.';
+      }
+    }
     else if (kind === 'Income') {
       who = row.member_name || row.source; purpose = row.source || 'General income';
     } else if (kind === 'Pledge') {
@@ -4828,7 +4842,7 @@ export default function Home() {
     const seed = [kind, row.member_id || who || '', row.date || '', amt].join('|');
     let h = 0; for (let k = 0; k < seed.length; k++) { h = (h * 31 + seed.charCodeAt(k)) % 1000000; }
     const ref = prefix + String(row.date || '').replace(/-/g, '') + '-' + String(h).padStart(6, '0');
-    const html = '<div style="max-width:640px;margin:10px auto;border:2px solid ' + themeColor + ';border-radius:8px;padding:22px">'
+    const html = '<div style="max-width:640px;margin:10px auto;border:2px solid ' + themeColor + ';border-radius:8px;padding:22px;page-break-inside:avoid">'
       + '<p style="text-align:right;margin:0 0 14px;font-size:12px;color:#475569">' + numLabel + ' No: <strong>' + esc(ref) + '</strong></p>'
       + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
       + line(whoLabel, '<strong>' + esc(who || '') + '</strong>')
@@ -4842,7 +4856,71 @@ export default function Home() {
       + '<div style="display:flex;justify-content:space-between;margin-top:42px;font-size:12px;color:#475569"><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + esc(sign1) + '</span><span style="border-top:1px solid #94a3b8;padding-top:4px;min-width:180px;text-align:center">' + esc(sign2) + '</span></div>'
       + '<p style="margin:22px 0 0;padding-top:8px;border-top:1px solid #e2e8f0;text-align:center;font-size:10.5px;color:#64748b">' + esc(churchName) + ' LBG &middot; Registration No. ' + RECEIPT_REG_NO + '</p>'
       + '</div>';
-    openPrintWindow(title, html);
+    return { title, html };
+  };
+
+  const printReceipt = (kind, row) => {
+    const r = receiptHtml(kind, row);
+    openPrintWindow(r.title, r.html);
+  };
+
+  // ---- Giving by non-church members (seeds, special offerings, sacrifices, purposive giving): report and receipts ----
+  const ngEsc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const ngMoney = (n) => 'GHS ' + (parseFloat(n) || 0).toFixed(2);
+  const ngList = () => {
+    return contributions
+      .filter((c) => {
+        const nm = c.giver_type === 'non_member';
+        if (ngWho === 'non_member' && !nm) return false;
+        if (ngWho === 'member' && nm) return false;
+        if (ngType !== 'ALL' && String(c.type || 'General') !== ngType) return false;
+        const d = String(c.date || '').slice(0, 10);
+        if ((ngFrom || ngTo) && !d) return false;
+        if (ngFrom && d < ngFrom) return false;
+        if (ngTo && d > ngTo) return false;
+        return true;
+      })
+      .slice()
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.contributor || '').localeCompare(String(b.contributor || '')));
+  };
+  const ngLabel = () => (ngWho === 'non_member' ? 'Non-church members' : ngWho === 'member' ? 'Church members' : 'All givers') + ' | ' + (ngType === 'ALL' ? 'All giving types' : ngType) + ' | ' + (ngFrom || ngTo ? 'Period: ' + (ngFrom || 'beginning') + ' to ' + (ngTo || 'today') : 'Period: all records');
+  const ngSummary = (list) => {
+    const byType = {}, byWho = {};
+    list.forEach((c) => {
+      const t = String(c.type || 'General'); const a = parseFloat(c.amount) || 0;
+      byType[t] = byType[t] || { count: 0, total: 0 }; byType[t].count += 1; byType[t].total += a;
+      const w = String(c.contributor || 'Not set') + (c.phone ? ' (' + c.phone + ')' : '');
+      byWho[w] = byWho[w] || { count: 0, total: 0 }; byWho[w].count += 1; byWho[w].total += a;
+    });
+    return { types: Object.entries(byType).sort((a, b) => b[1].total - a[1].total), who: Object.entries(byWho).sort((a, b) => b[1].total - a[1].total), total: list.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0) };
+  };
+  const ngReportPdf = () => {
+    const list = ngList();
+    if (!list.length) { alert('No gifts found for this selection.'); return; }
+    const s = ngSummary(list);
+    let html = '<div class="sub"><strong>Special Giving Report</strong><br/>' + ngEsc(ngLabel()) + '<br/>Prepared on ' + new Date().toLocaleDateString() + '</div>';
+    html += '<h3>Summary by type</h3><table><thead><tr><th>Type</th><th>Gifts</th><th>Total</th></tr></thead><tbody>' + s.types.map(([k, v]) => '<tr><td>' + ngEsc(k) + '</td><td>' + v.count + '</td><td>' + ngMoney(v.total) + '</td></tr>').join('') + '<tr><td><strong>Grand total</strong></td><td><strong>' + list.length + '</strong></td><td><strong>' + ngMoney(s.total) + '</strong></td></tr></tbody></table>';
+    html += '<h3>Total per giver</h3><table><thead><tr><th>Giver</th><th>Gifts</th><th>Total</th></tr></thead><tbody>' + s.who.map(([k, v]) => '<tr><td>' + ngEsc(k) + '</td><td>' + v.count + '</td><td>' + ngMoney(v.total) + '</td></tr>').join('') + '</tbody></table>';
+    html += '<h3>All gifts (' + list.length + ')</h3><table><thead><tr><th>No</th><th>Date</th><th>Giver</th><th>Phone</th><th>Type</th><th>Purpose / note</th><th>Amount</th></tr></thead><tbody>' + list.map((c, i) => '<tr><td>' + (i + 1) + '</td><td>' + ngEsc(String(c.date || '').slice(0, 10)) + '</td><td>' + ngEsc(c.contributor) + (c.giver_type === 'non_member' ? '' : ' (member)') + '</td><td>' + ngEsc(c.phone || '') + '</td><td>' + ngEsc(c.type || 'General') + '</td><td>' + ngEsc([c.purpose, c.note].filter(Boolean).join(' - ')) + '</td><td>' + ngMoney(c.amount) + '</td></tr>').join('') + '</tbody></table>';
+    openPrintWindow('Special Giving Report', html);
+  };
+  const ngReportExcel = () => {
+    const list = ngList();
+    if (!list.length) { alert('No gifts found for this selection.'); return; }
+    const s = ngSummary(list);
+    const sheets = [
+      { name: 'Summary', rows: [...s.types.map(([k, v]) => ({ Type: k, Gifts: v.count, Total: v.total.toFixed(2) })), { Type: 'GRAND TOTAL', Gifts: list.length, Total: s.total.toFixed(2) }] },
+      { name: 'Per giver', rows: s.who.map(([k, v]) => ({ Giver: k, Gifts: v.count, Total: v.total.toFixed(2) })) },
+      { name: 'All gifts', rows: list.map((c, i) => ({ No: i + 1, Date: String(c.date || '').slice(0, 10), Giver: c.contributor || '', Group: c.giver_type === 'non_member' ? 'Non-member' : 'Member', Phone: c.phone || '', Type: c.type || 'General', Purpose: c.purpose || '', Note: c.note || '', Amount: (parseFloat(c.amount) || 0).toFixed(2) })) }
+    ];
+    saveTextFile(buildWorkbookXml(sheets), 'Special-Giving-' + new Date().toISOString().slice(0, 10) + '.xls', 'application/vnd.ms-excel');
+  };
+  const ngReceiptsPdf = () => {
+    const list = ngList();
+    if (!list.length) { alert('No gifts found for this selection.'); return; }
+    const parts = list.map((c) => receiptHtml('Contribution', c).html);
+    const intro = '<div class="sub" style="margin-bottom:6px"><strong>Receipts</strong> - ' + ngEsc(ngLabel()) + ' - ' + list.length + ' receipt' + (list.length === 1 ? '' : 's') + '</div>';
+    openPrintWindow('Giving Receipts', intro + parts.join('<div style="page-break-after:always;height:1px"></div>'));
   };
 
   const downloadBackupExcel = () => {
@@ -6385,9 +6463,21 @@ export default function Home() {
                   <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingContribIndex !== null ? 'Edit Contribution Entry' : 'Contributions Tracker - Record Contribution'}</h3>
                   <form onSubmit={(e) => {
                     e.preventDefault();
-                    const selectedMember = members.find(m => m.id === contribForm.member_id);
-                    const contributorName = selectedMember ? displayName(selectedMember).trim() : contribForm.contributor;
+                    const isNM = contribForm.giver_type === 'non_member';
+                    const selectedMember = isNM ? null : members.find(m => m.id === contribForm.member_id);
+                    const contributorName = selectedMember ? displayName(selectedMember).trim() : String(contribForm.contributor || '').trim();
+                    if (isNM && !contributorName) { alert('Please type the name of the giver.'); return; }
                     const payload = { ...contribForm, contributor: contributorName };
+                    if (isNM) {
+                      payload.member_id = '';
+                      payload.giver_type = 'non_member';
+                      ['phone', 'purpose', 'note'].forEach((k) => { payload[k] = String(payload[k] || '').trim(); if (!payload[k]) delete payload[k]; });
+                      if (payload.type !== 'Purposive Giving') delete payload.purpose;
+                    } else {
+                      // members keep exactly the same record shape as before
+                      delete payload.giver_type; delete payload.phone; delete payload.purpose;
+                      if (!String(payload.note || '').trim()) delete payload.note;
+                    }
                     if (editingContribIndex !== null) {
                       if (role !== 'super_admin') { alert('Permission denied. Only Super Admin can edit entries.'); return; }
                       const updated = [...contributions];
@@ -6399,8 +6489,24 @@ export default function Home() {
                       setContributions([payload, ...contributions]);
                       alert('Contribution recorded successfully!');
                     }
-                    setContribForm({ member_id: '', contributor: '', type: 'General', amount: '', date: '' });
+                    setContribForm({ member_id: '', contributor: '', type: isNM ? contribForm.type : 'General', amount: '', date: '', ...(isNM ? { giver_type: 'non_member' } : {}) });
                   }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => setContribForm({ member_id: '', contributor: '', type: 'General', amount: contribForm.amount || '', date: contribForm.date || '' })} style={{ flex: 1, padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid ' + (contribForm.giver_type !== 'non_member' ? themeColor : '#cbd5e1'), backgroundColor: contribForm.giver_type !== 'non_member' ? themeColor : '#ffffff', color: contribForm.giver_type !== 'non_member' ? '#ffffff' : '#334155', fontWeight: 'bold', cursor: 'pointer' }}>Church member</button>
+                      <button type="button" onClick={() => setContribForm({ member_id: '', contributor: '', type: 'Seed', amount: contribForm.amount || '', date: contribForm.date || '', giver_type: 'non_member' })} style={{ flex: 1, padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid ' + (contribForm.giver_type === 'non_member' ? themeColor : '#cbd5e1'), backgroundColor: contribForm.giver_type === 'non_member' ? themeColor : '#ffffff', color: contribForm.giver_type === 'non_member' ? '#ffffff' : '#334155', fontWeight: 'bold', cursor: 'pointer' }}>Non-church member</button>
+                    </div>
+                    {contribForm.giver_type === 'non_member' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Giver's full name</label>
+                          <input type="text" required value={contribForm.contributor || ''} onChange={(e) => setContribForm({ ...contribForm, contributor: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Name of the person giving" />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Phone (optional)</label>
+                          <input type="tel" value={contribForm.phone || ''} onChange={(e) => setContribForm({ ...contribForm, phone: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="For follow-up and the receipt" />
+                        </div>
+                      </div>
+                    ) : (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Select Member</label>
                       <select required value={contribForm.member_id} onChange={(e) => {
@@ -6414,17 +6520,32 @@ export default function Home() {
                         ))}
                       </select>
                     </div>
+                    )}
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Contribution Type</label>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>{contribForm.giver_type === 'non_member' ? 'Type of giving' : 'Contribution Type'}</label>
                       <select value={contribForm.type} onChange={(e) => setContribForm({...contribForm, type: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
-                        <option value="General">General</option>
-                        <option value="Building Fund">Building Fund</option>
-                        <option value="Thanksgiving">Thanksgiving</option>
-                        <option value="Pledge">Pledge</option>
-                        <option value="Missions">Missions</option>
+                        {contribForm.giver_type !== 'non_member' && <option value="General">General</option>}
+                        {contribForm.giver_type !== 'non_member' && <option value="Building Fund">Building Fund</option>}
+                        {contribForm.giver_type !== 'non_member' && <option value="Thanksgiving">Thanksgiving</option>}
+                        {contribForm.giver_type !== 'non_member' && <option value="Pledge">Pledge</option>}
+                        {contribForm.giver_type !== 'non_member' && <option value="Missions">Missions</option>}
+                        {NM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                         <option value="Other">Other</option>
+                        {contribForm.type && !['General', 'Building Fund', 'Thanksgiving', 'Pledge', 'Missions', 'Other', ...NM_TYPES].includes(contribForm.type) && <option value={contribForm.type}>{contribForm.type}</option>}
                       </select>
                     </div>
+                    {contribForm.giver_type === 'non_member' && contribForm.type === 'Purposive Giving' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>What is this gift for?</label>
+                        <input type="text" value={contribForm.purpose || ''} onChange={(e) => setContribForm({ ...contribForm, purpose: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="e.g. Church building, Orphanage, Pastor's welfare" />
+                      </div>
+                    )}
+                    {contribForm.giver_type === 'non_member' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Note (optional)</label>
+                        <input type="text" value={contribForm.note || ''} onChange={(e) => setContribForm({ ...contribForm, note: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="Anything to remember about this gift" />
+                      </div>
+                    )}
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
                       <input type="number" required step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({...contribForm, amount: e.target.value})} style={{ width: '100%', padding: '0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} placeholder="0.00" />
@@ -6438,10 +6559,44 @@ export default function Home() {
                     </button>
                   </form>
                 </div>
+                {(() => {
+                  const ngl = ngList();
+                  const ngTotal = ngl.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+                  const typesHere = [...new Set([...NM_TYPES, ...contributions.map(c => String(c.type || 'General'))])];
+                  const fld = { width: '100%', padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box', fontSize: '0.9rem' };
+                  return (
+                    <div style={{ backgroundColor: '#fefce8', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.25rem' }}>
+                      <h4 style={{ margin: '0 0 0.4rem 0', color: '#0f172a' }}>🌱 Special giving: report and receipts</h4>
+                      <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 0.6rem 0' }}>Seeds, special offerings, sacrifices and purposive giving. By default this shows gifts from non-church members. Choose who, the type and the dates, then download.</p>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+                        <select value={ngWho} onChange={(e) => setNgWho(e.target.value)} style={{ ...fld, flex: '1 1 10rem', width: 'auto' }}>
+                          <option value="non_member">Non-church members</option>
+                          <option value="member">Church members</option>
+                          <option value="ALL">Everyone</option>
+                        </select>
+                        <select value={ngType} onChange={(e) => setNgType(e.target.value)} style={{ ...fld, flex: '1 1 10rem', width: 'auto' }}>
+                          <option value="ALL">All giving types</option>
+                          {typesHere.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                        <div style={{ flex: 1 }}><div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.15rem' }}>From</div><input type="date" value={ngFrom} onChange={(e) => setNgFrom(e.target.value)} style={fld} /></div>
+                        <div style={{ flex: 1 }}><div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.15rem' }}>To</div><input type="date" value={ngTo} onChange={(e) => setNgTo(e.target.value)} style={fld} /></div>
+                      </div>
+                      {(ngFrom || ngTo) && <button type="button" onClick={() => { setNgFrom(''); setNgTo(''); }} style={{ background: 'none', border: 'none', color: themeColor, fontWeight: 'bold', cursor: 'pointer', marginBottom: '0.5rem', padding: 0 }}>Clear dates</button>}
+                      <div style={{ fontSize: '0.92rem', marginBottom: '0.6rem' }}><strong>{ngl.length}</strong> gift{ngl.length === 1 ? '' : 's'} | Total <strong>GHS {ngTotal.toFixed(2)}</strong></div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button type="button" onClick={ngReportPdf} style={{ backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📥 Report (PDF)</button>
+                        <button type="button" onClick={ngReportExcel} style={{ backgroundColor: '#16a34a', color: '#ffffff', border: 'none', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>📊 Excel</button>
+                        <button type="button" onClick={ngReceiptsPdf} style={{ backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>🧾 All receipts (PDF)</button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <h4 style={{ color: '#0f172a' }}>Recorded Contributions ({contributions.length}) - Total: GHS {totalContribSum.toFixed(2)}</h4>
                 {contributions.map((c, i) => (
                   <div key={i} style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>{c.contributor}</strong> - {c.type} ({c.date}) - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong> <button type="button" onClick={() => printReceipt('Contribution', c)} style={{ marginLeft: '0.4rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Receipt</button></span>
+                    <span><strong>{c.contributor}</strong>{c.giver_type === 'non_member' ? <span style={{ marginLeft: '0.35rem', backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.7rem', fontWeight: 'bold', padding: '0.1rem 0.4rem', borderRadius: '999px' }}>Non-member</span> : null} - {c.type}{c.purpose ? ' (' + c.purpose + ')' : ''} ({c.date}){c.phone ? ' - ' + c.phone : ''} - <strong style={{ color: '#16a34a' }}>GHS {parseFloat(c.amount || 0).toFixed(2)}</strong> <button type="button" onClick={() => printReceipt('Contribution', c)} style={{ marginLeft: '0.4rem', backgroundColor: '#ecfdf5', color: '#166534', border: '1px solid #86efac', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.78rem' }}>Receipt</button></span>
                     {role === 'super_admin' && (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" onClick={() => { setContribForm(c); setEditingContribIndex(i); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
