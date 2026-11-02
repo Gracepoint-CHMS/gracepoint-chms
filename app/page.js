@@ -3563,6 +3563,13 @@ export default function Home() {
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [isSelfRegistering, setIsSelfRegistering] = useState(false);
+  // Forgot / reset password
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'forgot'
+  const [authInfo, setAuthInfo] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [newPassword2, setNewPassword2] = useState('');
 
   // Dashboard State
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -3737,6 +3744,18 @@ export default function Home() {
   const logoSrc = settings.logo_url || CHURCH_LOGO;
   const churchName = settings.name || DEFAULT_SETTINGS.name;
   const churchTagline = settings.tagline || '';
+
+  // When someone opens the reset link from their email, show the "choose a new password" screen
+  useEffect(() => {
+    try {
+      const h = String(window.location.hash || '') + '&' + String(window.location.search || '');
+      if (h.indexOf('type=recovery') !== -1) setRecoveryMode(true);
+    } catch (e) { /* ignore */ }
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+    });
+    return () => { try { sub.subscription.unsubscribe(); } catch (e) { /* ignore */ } };
+  }, []);
 
   useEffect(() => {
     async function getUserData() {
@@ -4290,6 +4309,40 @@ export default function Home() {
     }
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthInfo('');
+    const em = String(emailInput || '').trim();
+    if (!em) { setAuthError('Please type your email address first.'); return; }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: window.location.origin });
+    setAuthBusy(false);
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      setAuthInfo('If this email has an account, a reset link has been sent to it. Please check your inbox (and the Spam folder), then open the link on this phone.');
+    }
+  };
+
+  const handleSetNewPassword = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (newPassword.length < 6) { setAuthError('The password must be at least 6 characters.'); return; }
+    if (newPassword !== newPassword2) { setAuthError('The two passwords do not match.'); return; }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setAuthBusy(false);
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      try { window.history.replaceState(null, '', window.location.pathname); } catch (e2) { /* ignore */ }
+      setNewPassword(''); setNewPassword2('');
+      setRecoveryMode(false);
+      window.location.reload();
+    }
+  };
+
   const handleLogout = async () => {
     setViewAsMember(false);
     await supabase.auth.signOut();
@@ -4823,6 +4876,39 @@ export default function Home() {
     );
   }
 
+  if (recoveryMode) {
+    const inp = { width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' };
+    const lab = { display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' };
+    return (
+      <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: themeColor, color: '#ffffff', padding: '1.5rem', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>Choose a new password</h1>
+            <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>{churchName}</p>
+          </div>
+          <div style={{ padding: '1.5rem' }}>
+            {authError && (
+              <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{authError}</div>
+            )}
+            <form onSubmit={handleSetNewPassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={lab}>New password</label>
+                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required style={inp} placeholder="At least 6 characters" />
+              </div>
+              <div>
+                <label style={lab}>Type it again</label>
+                <input type="password" value={newPassword2} onChange={(e) => setNewPassword2(e.target.value)} required style={inp} placeholder="Repeat the new password" />
+              </div>
+              <button type="submit" disabled={authBusy} style={{ backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '1rem', cursor: 'pointer', opacity: authBusy ? 0.6 : 1 }}>
+                {authBusy ? 'Saving...' : 'Save new password'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   if (!user) {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -4843,6 +4929,43 @@ export default function Home() {
                     {authError}
                   </div>
                 )}
+                {authInfo && (
+                  <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                    {authInfo}
+                  </div>
+                )}
+                {authMode === 'forgot' ? (
+                <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>Reset your password</h3>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>Type the email address you use to log in. We will send you a link to choose a new password.</p>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Email Address</label>
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                      placeholder="Enter your email"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={authBusy}
+                    style={{ backgroundColor: themeColor, color: '#ffffff', border: 'none', padding: '0.75rem', borderRadius: '0.375rem', fontWeight: '600', fontSize: '1rem', cursor: 'pointer', opacity: authBusy ? 0.6 : 1 }}
+                  >
+                    {authBusy ? 'Sending...' : 'Send reset link'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode('login'); setAuthError(''); setAuthInfo(''); }}
+                    style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', padding: '0.25rem' }}
+                  >
+                    ← Back to Login
+                  </button>
+                </form>
+                ) : (
+                <div>
                 <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.375rem' }}>Email Address</label>
@@ -4872,6 +4995,13 @@ export default function Home() {
                   >
                     Login
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode('forgot'); setAuthError(''); setAuthInfo(''); }}
+                    style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', padding: '0.25rem' }}
+                  >
+                    Forgot password?
+                  </button>
                 </form>
 
                 <div style={{ marginTop: '1.25rem', textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
@@ -4884,6 +5014,8 @@ export default function Home() {
                     📝 Self-Register as New Member
                   </button>
                 </div>
+                </div>
+                )}
                 <InstallHelp theme={themeColor} />
               </div>
             ) : (
