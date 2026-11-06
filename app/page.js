@@ -3556,6 +3556,113 @@ function shrinkImageDataUrl(src, maxSide = 480, quality = 0.75) {
 // Special giving types (used for non-church members, and also available for members)
 const NM_TYPES = ['Seed', 'Special Offering', 'Sacrifice', 'Purposive Giving'];
 
+
+// ---- Online giving with Paystack (visitors and members) ----
+const GIVE_CATS_VISITOR = ['Offering', 'Seed', 'Special Offering', 'Sacrifice', 'Purposive Giving', 'Welfare', 'Building Project', 'Other'];
+const GIVE_CATS_MEMBER = ['Tithe', 'Offering', 'Seed', 'Special Offering', 'Sacrifice', 'Purposive Giving', 'Welfare', 'Building Project', 'Thanksgiving', 'Missions', 'Pledge', 'Other'];
+
+async function startPaystackGift({ name, email, phone, category, purpose, amount, token }) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch('/api/paystack/init', { method: 'POST', headers, body: JSON.stringify({ name, email, phone, category, purpose, amount }) });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok || !out.url) throw new Error(out.error || 'Could not start the payment. Please try again.');
+  window.location.href = out.url;
+}
+
+function GiveVisitorScreen({ theme, churchName, logo, onBack }) {
+  const [f, setF] = useState({ name: '', email: '', phone: '', category: 'Offering', purpose: '', amount: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const inp = { width: '100%', padding: '0.7rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box', backgroundColor: '#ffffff' };
+  const lab = { display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' };
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr('');
+    const amt = parseFloat(f.amount);
+    if (!amt || amt < 1) { setErr('Please enter an amount of at least GHS 1.'); return; }
+    setBusy(true);
+    try { await startPaystackGift({ ...f, amount: amt }); } catch (x) { setErr(x.message); setBusy(false); }
+  };
+  return (
+    <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+        <div style={{ backgroundColor: theme, color: '#ffffff', padding: '1.5rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>💝 Give Online</h1>
+          <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>{churchName}</p>
+        </div>
+        <form onSubmit={submit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+          <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>Everyone is welcome to give. Pay with MTN MoMo, Telecel Cash, AirtelTigo Money or a bank card (Visa/Mastercard) on the secure Paystack page. You will get a receipt right after.</p>
+          {err && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.7rem', borderRadius: '0.375rem', fontSize: '0.875rem' }}>{err}</div>}
+          <div><label style={lab}>Your full name</label><input required style={inp} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
+          <div><label style={lab}>Email (for your receipt)</label><input required type="email" style={inp} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></div>
+          <div><label style={lab}>Phone (optional)</label><input style={inp} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></div>
+          <div><label style={lab}>What are you giving?</label>
+            <select style={inp} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{GIVE_CATS_VISITOR.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+          </div>
+          {['Special Offering', 'Purposive Giving', 'Other', 'Sacrifice'].includes(f.category) && (
+            <div><label style={lab}>Purpose / note (optional)</label><input style={inp} value={f.purpose} maxLength={200} onChange={(e) => setF({ ...f, purpose: e.target.value })} /></div>
+          )}
+          <div><label style={lab}>Amount (GHS)</label><input required type="number" min="1" step="0.01" style={inp} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="0.00" /></div>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {[20, 50, 100, 200, 500].map((a) => <button key={a} type="button" onClick={() => setF({ ...f, amount: String(a) })} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '2rem', padding: '0.3rem 0.8rem', cursor: 'pointer', fontSize: '0.85rem' }}>{a}</button>)}
+          </div>
+          <button type="submit" disabled={busy} style={{ backgroundColor: busy ? '#94a3b8' : theme, color: '#ffffff', border: 'none', padding: '0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>{busy ? 'Opening Paystack...' : 'Give with Paystack'}</button>
+          <button type="button" onClick={onBack} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>← Back to Login</button>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+function GiveThanksScreen({ reference, theme, churchName, onClose, onReceipt }) {
+  const [pay, setPay] = useState(null);
+  const [msg, setMsg] = useState('Confirming your payment...');
+  useEffect(() => {
+    let stop = false;
+    (async () => {
+      for (let i = 0; i < 6 && !stop; i++) {
+        try {
+          const res = await fetch('/api/paystack/verify?reference=' + encodeURIComponent(reference));
+          const out = await res.json().catch(() => ({}));
+          if (res.ok && out.payment) {
+            setPay(out.payment);
+            if (out.payment.status === 'paid') { setMsg(''); return; }
+            if (out.payment.status === 'amount_mismatch') { setMsg('We could not match the amount paid. Please contact the church office with reference ' + reference + '.'); return; }
+          }
+        } catch (e) { /* try again */ }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!stop) setMsg('We have not received confirmation yet. If money left your account, please contact the church office with reference ' + reference + '. It will be recorded as soon as Paystack confirms it.');
+    })();
+    return () => { stop = true; };
+  }, [reference]);
+  const paid = pay && pay.status === 'paid';
+  return (
+    <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ width: '100%', maxWidth: '28rem', backgroundColor: '#ffffff', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', overflow: 'hidden', textAlign: 'center' }}>
+        <div style={{ backgroundColor: paid ? '#16a34a' : theme, color: '#ffffff', padding: '1.5rem' }}>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 0.25rem 0' }}>{paid ? 'Thank you! God bless you' : 'Payment status'}</h1>
+          <p style={{ fontSize: '0.875rem', opacity: 0.9, margin: 0 }}>{churchName}</p>
+        </div>
+        <div style={{ padding: '1.5rem' }}>
+          {paid ? (
+            <div>
+              <p style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#16a34a', margin: '0 0 0.25rem 0' }}>GHS {Number(pay.amount).toFixed(2)}</p>
+              <p style={{ margin: '0 0 0.25rem 0', color: '#334155' }}>{pay.category}{pay.purpose ? ' - ' + pay.purpose : ''}</p>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#64748b' }}>Reference: {pay.reference}</p>
+              <button type="button" onClick={() => onReceipt(pay)} style={{ backgroundColor: theme, color: '#ffffff', border: 'none', padding: '0.7rem 1.2rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '0.5rem', width: '100%' }}>🧾 View / Print Receipt</button>
+            </div>
+          ) : (
+            <p style={{ color: '#334155', fontSize: '0.95rem' }}>{msg}</p>
+          )}
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem', marginTop: '0.5rem' }}>Continue</button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export default function Home() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('member');
@@ -3609,10 +3716,14 @@ export default function Home() {
   const [viewAsMember, setViewAsMember] = useState(false);
   const [memberPage, setMemberPage] = useState('dashboard');
   const [memberMenuOpen, setMemberMenuOpen] = useState(false);
-  const [payForm, setPayForm] = useState({ amount: '', type: 'Offering' });
+  const [payForm, setPayForm] = useState({ amount: '', type: 'Offering', purpose: '' });
   const [payBusy, setPayBusy] = useState(false);
   const [stmtYear, setStmtYear] = useState(String(new Date().getFullYear()));
   const [payMsg, setPayMsg] = useState('');
+  const [giveRef, setGiveRef] = useState('');
+  const [showGive, setShowGive] = useState(false);
+  const [onlinePays, setOnlinePays] = useState([]);
+  const [onlineMsg, setOnlineMsg] = useState('');
   const [profileEdit, setProfileEdit] = useState(false);
   const [profileForm, setProfileForm] = useState({});
   const [profileMsg, setProfileMsg] = useState('');
@@ -3928,22 +4039,80 @@ export default function Home() {
     const amt = parseFloat(payForm.amount);
     if (!amt || amt < 1) { setPayMsg('Please enter an amount of at least GHS 1.'); return; }
     setPayBusy(true);
-    setPayMsg('Opening the secure Hubtel checkout...');
+    setPayMsg('Opening the secure Paystack checkout...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/pay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') },
-        body: JSON.stringify({ amount: amt, type: payForm.type })
-      });
-      const out = await res.json().catch(() => ({}));
-      if (!res.ok || !out.link) { setPayMsg('Could not start the payment: ' + (out.error || 'please try again.')); setPayBusy(false); return; }
-      window.location.href = out.link;
+      const rec = myRecord || {};
+      const nm = ((rec.first_name || '') + ' ' + (rec.last_name || '')).trim() || String(user.email || '');
+      await startPaystackGift({ name: nm, email: user.email, phone: rec.phone || '', category: payForm.type, purpose: payForm.purpose || '', amount: amt, token: session ? session.access_token : '' });
     } catch (e) {
       setPayMsg('Could not start the payment: ' + e.message);
       setPayBusy(false);
     }
   };
+
+  // Paystack sends the giver back here with ?give=done&reference=...
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search);
+    const ref = p.get('reference') || p.get('trxref');
+    if (p.get('give') === 'done' && ref && /^[A-Za-z0-9]{6,40}$/.test(ref)) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setGiveRef(ref);
+    }
+  }, []);
+
+  const loadOnlinePays = async () => {
+    const { data, error } = await supabase.from('paystack_payments').select('*').order('created_at', { ascending: false }).limit(300);
+    if (!error) setOnlinePays(data || []);
+  };
+
+  // Admins: load online payments, and put every paid one into Finance automatically
+  useEffect(() => {
+    if (!financeLoaded || !user || role === 'member') return;
+    if (!(role === 'super_admin' || myPermissions.access_finance)) return;
+    loadOnlinePays();
+  }, [financeLoaded, activeTab, financeView, role]);
+
+  useEffect(() => {
+    if (!financeLoaded || !user || role === 'member' || !baseRef.current.finance) return;
+    if (!(role === 'super_admin' || myPermissions.access_finance)) return;
+    const todo = onlinePays.filter((o) => o.status === 'paid' && !o.imported);
+    if (!todo.length) return;
+    const haveRef = new Set([...contributions, ...tithes].map((x) => x.online_ref).filter(Boolean));
+    const newContribs = [], newTithes = [];
+    todo.forEach((o) => {
+      if (haveRef.has(o.reference)) return;
+      const date = String(o.paid_at || o.created_at || '').slice(0, 10) || todayISO();
+      const isMember = o.giver_type === 'member' && o.member_id;
+      if (o.category === 'Tithe' && isMember) {
+        newTithes.push({ member_id: o.member_id, member_name: o.giver_name, amount: String(o.amount), date, online_ref: o.reference });
+      } else if (isMember) {
+        newContribs.push({ member_id: o.member_id, contributor: o.giver_name, type: o.category, amount: String(o.amount), date, note: 'Paid online (Paystack)', online_ref: o.reference });
+      } else {
+        newContribs.push({ member_id: '', contributor: o.giver_name, type: o.category, amount: String(o.amount), date, giver_type: 'non_member', phone: o.phone || '', purpose: o.purpose || '', note: 'Paid online (Paystack)', online_ref: o.reference });
+      }
+    });
+    if (newContribs.length) setContributions((c) => { const have = new Set(c.map((x) => x.online_ref).filter(Boolean)); return [...newContribs.filter((n) => !have.has(n.online_ref)), ...c]; });
+    if (newTithes.length) setTithes((t) => { const have = new Set(t.map((x) => x.online_ref).filter(Boolean)); return [...newTithes.filter((n) => !have.has(n.online_ref)), ...t]; });
+  }, [onlinePays, financeLoaded, role]);
+
+  // Once an online gift is safely saved in Finance, mark it as imported
+  useEffect(() => {
+    if (!financeLoaded || role === 'member') return;
+    if (!onlinePays.some((o) => o.status === 'paid' && !o.imported)) return;
+    const check = async () => {
+      if (!baseRef.current.finance) return;
+      const saved = baseRef.current.finance.data || {};
+      const savedRefs = new Set([...(saved.contributions || []), ...(saved.tithes || [])].map((x) => x && x.online_ref).filter(Boolean));
+      const done = onlinePays.filter((o) => o.status === 'paid' && !o.imported && savedRefs.has(o.reference));
+      if (!done.length) return;
+      const { error } = await supabase.from('paystack_payments').update({ imported: true }).in('reference', done.map((o) => o.reference));
+      if (!error) setOnlinePays((list) => list.map((o) => (done.some((d) => d.reference === o.reference) ? { ...o, imported: true } : o)));
+    };
+    const id = setInterval(check, 4000);
+    return () => clearInterval(id);
+  }, [onlinePays, financeLoaded, role]);
 
   // When Hubtel sends the member back to the app, confirm the payment and refresh their records
   useEffect(() => {
@@ -4987,6 +5156,29 @@ export default function Home() {
     );
   }
 
+  if (giveRef) {
+    return (
+      <GiveThanksScreen
+        reference={giveRef}
+        theme={themeColor}
+        churchName={churchName}
+        onClose={() => setGiveRef('')}
+        onReceipt={(pay) => {
+          const date = String(pay.paid_at || '').slice(0, 10) || todayISO();
+          const isMember = pay.giver_type === 'member' && pay.member_id;
+          if (pay.category === 'Tithe' && isMember) printReceipt('Tithe', { member_id: pay.member_id, member_name: pay.giver_name, amount: pay.amount, date });
+          else printReceipt('Contribution', isMember
+            ? { member_id: pay.member_id, contributor: pay.giver_name, type: pay.category, amount: pay.amount, date }
+            : { member_id: '', contributor: pay.giver_name, type: pay.category, purpose: pay.purpose, amount: pay.amount, date, giver_type: 'non_member' });
+        }}
+      />
+    );
+  }
+
+  if (!user && showGive) {
+    return <GiveVisitorScreen theme={themeColor} churchName={churchName} logo={logoSrc} onBack={() => setShowGive(false)} />;
+  }
+
   if (!user) {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, sans-serif', padding: '2rem 1rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -5090,6 +5282,14 @@ export default function Home() {
                     style={{ backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', width: '100%' }}
                   >
                     📝 Self-Register as New Member
+                  </button>
+                  <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.9rem 0 0.5rem 0' }}>Visitor or friend of the church?</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowGive(true)}
+                    style={{ backgroundColor: '#f5a623', color: '#ffffff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', width: '100%' }}
+                  >
+                    💝 Give Online (no account needed)
                   </button>
                 </div>
                 </div>
@@ -5570,17 +5770,20 @@ export default function Home() {
           <div style={{ display: memberPage === 'giving' ? 'block' : 'none' }}>
           <div style={{ backgroundColor: '#ffffff', border: '2px solid ' + themeColor, borderRadius: '0.75rem', padding: '1.25rem 1.5rem', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: themeColor, margin: '0 0 0.4rem 0' }}>💳 Give Online</h3>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Pay securely with MTN MoMo, Vodafone Cash, AirtelTigo Money or a bank card through Hubtel. Your gift is added to your records automatically.</p>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.8rem 0' }}>Pay securely with MTN MoMo, Telecel Cash, AirtelTigo Money or a bank card through Paystack. Your gift is added to your records automatically.</p>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>What are you giving?</label>
             <select value={payForm.type} onChange={(e) => setPayForm({ ...payForm, type: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#ffffff', marginBottom: '0.7rem' }}>
-              {['Tithe', 'Offering', 'Seed Offering', 'Thanksgiving', 'Welfare', 'Building Fund', 'Missions', 'Pledge', 'Other'].map(t => <option key={t} value={t}>{t}</option>)}
+              {GIVE_CATS_MEMBER.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            {['Special Offering', 'Purposive Giving', 'Sacrifice', 'Other'].includes(payForm.type) && (
+              <input type="text" maxLength={200} value={payForm.purpose} onChange={(e) => setPayForm({ ...payForm, purpose: e.target.value })} placeholder="Purpose / note (optional)" style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', marginBottom: '0.7rem' }} />
+            )}
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Amount (GHS)</label>
             <input type="number" min="1" step="0.01" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} placeholder="0.00" style={{ width: '100%', padding: '0.65rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', boxSizing: 'border-box', marginBottom: '0.5rem' }} />
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.8rem' }}>
               {[20, 50, 100, 200, 500].map(a => <button key={a} type="button" onClick={() => setPayForm({ ...payForm, amount: String(a) })} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '2rem', padding: '0.3rem 0.8rem', cursor: 'pointer', fontSize: '0.85rem' }}>{a}</button>)}
             </div>
-            <button type="button" disabled={payBusy} onClick={startPayment} style={{ width: '100%', backgroundColor: payBusy ? '#94a3b8' : '#f5a623', color: '#ffffff', border: 'none', padding: '0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>{payBusy ? 'Please wait...' : 'Give with Hubtel'}</button>
+            <button type="button" disabled={payBusy} onClick={startPayment} style={{ width: '100%', backgroundColor: payBusy ? '#94a3b8' : '#f5a623', color: '#ffffff', border: 'none', padding: '0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>{payBusy ? 'Please wait...' : 'Give with Paystack'}</button>
             {payMsg && <div style={{ marginTop: '0.7rem', padding: '0.7rem', borderRadius: '0.5rem', fontSize: '0.88rem', backgroundColor: /^(Could not|The payment was not|We could not)/.test(payMsg) ? '#fee2e2' : '#dcfce7', color: /^(Could not|The payment was not|We could not)/.test(payMsg) ? '#991b1b' : '#166534' }}>{payMsg}</div>}
           </div>
 
@@ -6459,6 +6662,28 @@ export default function Home() {
                 <button type="button" onClick={() => { setFinanceView('hub'); setEditingContribIndex(null); }} style={{ backgroundColor: '#e2e8f0', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', fontWeight: 'bold', cursor: 'pointer', marginBottom: '1rem' }}>
                   ← Back to Finance Hub
                 </button>
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+                    <h3 style={{ margin: 0, color: '#0f172a' }}>🌐 Online payments (Paystack)</h3>
+                    <button type="button" onClick={async () => { await loadOnlinePays(); setOnlineMsg('Refreshed.'); setTimeout(() => setOnlineMsg(''), 2500); }} style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.3rem 0.8rem', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.85rem' }}>↻ Refresh</button>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 0.6rem 0' }}>Paid gifts are added to Tithes and Contributions automatically{onlineMsg ? ' - ' + onlineMsg : '.'}</p>
+                  {onlinePays.length === 0 ? (
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>No online payments yet.</p>
+                  ) : (
+                    <div style={{ maxHeight: '14rem', overflowY: 'auto' }}>
+                      {onlinePays.slice(0, 40).map((o) => (
+                        <div key={o.reference} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', padding: '0.4rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.85rem' }}>
+                          <span>{String(o.paid_at || o.created_at || '').slice(0, 10)} · {o.giver_name} · {o.category}{o.giver_type === 'member' ? '' : ' (visitor)'}</span>
+                          <span style={{ whiteSpace: 'nowrap' }}>
+                            <strong style={{ color: o.status === 'paid' ? '#16a34a' : '#64748b' }}>GHS {Number(o.amount).toFixed(2)}</strong>{' '}
+                            <em style={{ color: o.status === 'paid' ? '#16a34a' : o.status === 'pending' ? '#b45309' : '#991b1b', fontSize: '0.75rem' }}>{o.status === 'paid' ? (o.imported ? 'recorded' : 'recording...') : o.status}</em>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
                   <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>{editingContribIndex !== null ? 'Edit Contribution Entry' : 'Contributions Tracker - Record Contribution'}</h3>
                   <form onSubmit={(e) => {
