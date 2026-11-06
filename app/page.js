@@ -4059,6 +4059,9 @@ export default function Home() {
     if (p.get('give') === 'done' && ref && /^[A-Za-z0-9]{6,40}$/.test(ref)) {
       window.history.replaceState({}, '', window.location.pathname);
       setGiveRef(ref);
+    } else if (p.get('give') === '1') {
+      window.history.replaceState({}, '', window.location.pathname);
+      setShowGive(true);
     }
   }, []);
 
