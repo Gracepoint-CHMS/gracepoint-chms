@@ -907,6 +907,7 @@ function ReportsTab({ members, fin, attendance, assets, visitors, converts, serv
 // ---------- Messages (opens the phone's own SMS / email / WhatsApp apps) ----------
 function MessagesTab({ members, theme, churchName }) {
   const [audience, setAudience] = useState('all');
+  const [personId, setPersonId] = useState('');
   const [subject, setSubject] = useState('');
   const [msg, setMsg] = useState('');
   const [copied, setCopied] = useState('');
@@ -914,6 +915,7 @@ function MessagesTab({ members, theme, churchName }) {
   const inGroup = (m) => {
     if (audience === 'all') return true;
     if (audience === 'admins') return !!(m.role && m.role !== 'member');
+    if (audience === 'one') return !!personId && String(m.id) === String(personId);
     if (audience.startsWith('core:')) return m.core_department === audience.slice(5);
     if (audience.startsWith('sub:')) return String(m.sub_departments || '').includes(audience.slice(4));
     return false;
@@ -957,6 +959,7 @@ function MessagesTab({ members, theme, churchName }) {
         <select style={{ ...box, marginBottom: '0.75rem' }} value={audience} onChange={(e) => setAudience(e.target.value)}>
           <option value="all">All members</option>
           <option value="admins">Admins and Sub-admins</option>
+          <option value="one">One person (choose below)</option>
           <optgroup label="Core Departments">
             {CORE_DEPARTMENTS.map(d => <option key={d} value={'core:' + d}>{d + ' (' + countCore(d) + ')'}</option>)}
           </optgroup>
@@ -964,6 +967,12 @@ function MessagesTab({ members, theme, churchName }) {
             {SUB_DEPARTMENTS.map(d => <option key={d} value={'sub:' + d}>{d + ' (' + countSub(d) + ')'}</option>)}
           </optgroup>
         </select>
+        {audience === 'one' ? (
+          <select style={{ ...box, marginBottom: '0.75rem' }} value={personId} onChange={(e) => setPersonId(e.target.value)}>
+            <option value="">Choose a member...</option>
+            {[...members].sort((x, y) => (displayName(x) || '').localeCompare(displayName(y) || '')).map(m => <option key={m.id} value={m.id}>{(displayName(m) || 'Unnamed') + (m.phone ? ' - ' + m.phone : ' - no phone')}</option>)}
+          </select>
+        ) : null}
         <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '0.75rem' }}>{pick.length} people selected - {phones.length} with phone numbers, {emails.length} with emails</div>
         <label style={lab}>Subject (for email)</label>
         <input style={{ ...box, marginBottom: '0.75rem' }} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={churchName} />
