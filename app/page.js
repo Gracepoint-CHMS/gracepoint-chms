@@ -936,11 +936,11 @@ function MessagesTab({ members, theme, churchName }) {
   const sendBulkSms = async () => {
     if (!body.trim() || !phones.length) return;
     const full = body.trim() + (smsSign ? ' - ' + churchName : '');
-    if (!window.confirm('Send this SMS to ' + phones.length + ' people now? Hubtel will charge your SMS credit.')) return;
+    if (!window.confirm('Send this SMS to ' + phones.length + ' people now? Your SMS credit will be used.')) return;
     setSmsBusy(true); setSmsMsg('Sending...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: JSON.stringify({ message: full, phones }) });
+      const res = await fetch('/api/bulksms', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: JSON.stringify({ message: full, phones }) });
       const out = await res.json().catch(() => ({}));
       if (res.ok && out.sent) setSmsMsg('Sent to ' + out.sent + ' of ' + out.total + ' people.' + (out.failed ? ' ' + out.failed + ' could not be sent' + (out.error ? ' (' + out.error + ')' : '') + '.' : ''));
       else setSmsMsg('Could not send: ' + (out.error || 'please try again.'));
@@ -950,7 +950,7 @@ function MessagesTab({ members, theme, churchName }) {
   return (
     <div>
       <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Messages</h3>
-      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Write one message, pick who gets it, then send it with your phone's SMS, email or WhatsApp. Use <b>Send SMS from app</b> to text everyone at once through Hubtel (uses your Hubtel SMS credit), or use the buttons below to send with your own phone.</p>
+      <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 0 }}>Write one message, pick who gets it, then send it with your phone's SMS, email or WhatsApp. Use <b>Send SMS from app</b> to text everyone at once (uses your SMS credit), or use the buttons below to send with your own phone.</p>
 
       <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
         <label style={lab}>Send to</label>
@@ -2245,11 +2245,11 @@ const smallBtn = (bg, fg) => ({ backgroundColor: bg || '#f1f5f9', color: fg || '
 const noteBox = (bad) => ({ marginTop: '0.7rem', padding: '0.7rem', borderRadius: '0.5rem', fontSize: '0.88rem', backgroundColor: bad ? '#fee2e2' : '#dcfce7', color: bad ? '#991b1b' : '#166534' });
 const isBad = (m) => /^(Could not|Please)/.test(String(m || ''));
 
-// Send an SMS through the church's Hubtel account (server route /api/sms). Returns a message to show.
+// Send an SMS through the church's SMS account (server route /api/bulksms). Returns a message to show.
 async function sendAppSms(phones, message) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: JSON.stringify({ message, phones }) });
+    const res = await fetch('/api/bulksms', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: JSON.stringify({ message, phones }) });
     const out = await res.json().catch(() => ({}));
     if (res.ok && out.sent) return 'Sent to ' + out.sent + ' of ' + out.total + ' people.' + (out.failed ? ' ' + out.failed + ' could not be sent.' : '');
     return 'Could not send: ' + (out.error || 'please try again.');
