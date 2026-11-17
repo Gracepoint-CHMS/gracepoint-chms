@@ -1284,13 +1284,20 @@ function FollowUpTab({ visitors, converts, setVisitors, setConverts, theme }) {
 // ---------- Outreach: house-to-house evangelism contacts, follow-up and reports ----------
 const OUTREACH_RESPONSES = ['Not yet contacted', 'Accepted Christ', 'Interested', 'Wants a visit', 'Wants prayer', 'Not now', 'No answer'];
 const OUTREACH_COLORS = { 'Not yet contacted': '#64748b', 'Accepted Christ': '#16a34a', 'Interested': '#2563eb', 'Wants a visit': '#7c3aed', 'Wants prayer': '#d97706', 'Not now': '#94a3b8', 'No answer': '#dc2626' };
-// First list brought from the field (handwritten page). Numbers marked "check" were hard to read.
-const OUTREACH_FIRST_LIST = [
-  ['Ricky', '0555005675'], ['Ako Sua', '0552177432', 'check'], ['Sis Comfort', '0541408154'], ['Sandra', '0557884970'],
-  ['Sis Constance', '0599447351'], ['Linda', '0558005679'], ['Sis Joyce', '0550206617'], ['Nana Hemaa', '0241300101'],
-  ['Rebecca', '0257311407', 'check'], ['Bro Joe', '0543982622', 'check'], ['Dada John', '0202628320'], ['Eliza', '0248104039'],
-  ['Richmon', '0543706101', 'check'], ['O.P.K', '0245011178']
-];
+// Paper lists are now pasted in on the Outreach page, so no names or phone numbers are kept in the code.
+// Each line: name and phone number. Put "?" at the end of a line if the number was hard to read.
+function parseContactLines(text) {
+  return String(text || '').split(/\r?\n/).map(line => {
+    const raw = line.trim();
+    if (!raw) return null;
+    const m = raw.match(/(\+?\d[\d\s-]{7,}\d)/);
+    if (!m) return null;
+    const phone = m[1].replace(/[\s-]/g, '');
+    const check = /\?\s*$/.test(raw) || /\bcheck\b/i.test(raw);
+    const name = raw.replace(m[1], '').replace(/\bcheck\b/ig, '').replace(/[?,;:|\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return name ? [name, phone, check ? 'check' : ''] : null;
+  }).filter(Boolean);
+}
 function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, theme, onPrint, canDelete, onMoveVisitor, onMoveConvert, churchName, idInfo }) {
   const today = todayISO();
   const uid = () => 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1306,7 +1313,7 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
   const [msg, setMsg] = useState('');
   const [newDisc, setNewDisc] = useState('');
   const [pickMember, setPickMember] = useState('');
-  const [imp, setImp] = useState({ disciple: '', date: today, area: '' });
+  const [imp, setImp] = useState({ disciple: '', date: today, area: '', text: '' });
   const [rFrom, setRFrom] = useState('');
   const [rTo, setRTo] = useState('');
   const [rDisc, setRDisc] = useState('');
@@ -1340,12 +1347,15 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
     const who = imp.disciple === '__new__' ? '' : imp.disciple;
     if (!who) { flash('Please choose the disciple who brought this list.'); return; }
     const existing = new Set(list.map(c => String(c.phone).replace(/\s+/g, '')));
-    const add = OUTREACH_FIRST_LIST.filter(r => !existing.has(r[1])).map(r => ({
+    const rows = parseContactLines(imp.text);
+    if (!rows.length) { flash('Please paste at least one line with a name and phone number.'); return; }
+    const add = rows.filter(r => !existing.has(r[1])).map(r => ({
       id: uid(), history: [], name: r[0], phone: r[1], area: imp.area.trim(), disciple: who, date_reached: imp.date,
       response: 'Not yet contacted', next_followup: '', notes: r[2] === 'check' ? 'Number was hard to read on the handwritten page. Please confirm it.' : ''
     }));
     if (!add.length) { flash('These contacts are already in the list.'); return; }
     setContacts([...add, ...list]);
+    setImp({ ...imp, text: '' });
     flash(add.length + ' contacts added from the field list.');
   };
   const moveTo = (c, kind) => {
@@ -1463,7 +1473,7 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
     w.document.close();
   };
   const tabBtn = (id, label) => <button key={id} type="button" onClick={() => setView(id)} style={{ backgroundColor: view === id ? theme : '#f1f5f9', color: view === id ? '#fff' : '#334155', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>{label}</button>;
-  const firstListDone = OUTREACH_FIRST_LIST.every(r => list.some(c => String(c.phone).replace(/\s+/g, '') === r[1]));
+  const pastedCount = parseContactLines(imp.text).length;
 
   return (
     <div>
@@ -1480,10 +1490,11 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
             <button type="button" onClick={() => { setForm({ ...blank, disciple: fDisciple || '' }); setEditId(null); }} style={{ ...greenBtn }}>+ Add contact</button>
             {view === 'due' && dueCount > 0 ? <button type="button" onClick={printFieldSheet} style={btn('#eff6ff', '#1d4ed8')}>🖨 Print follow-up sheet</button> : null}
           </div>
-          {!firstListDone && (
+          {(
             <div style={{ ...cardBox, backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
-              <div style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '0.3rem' }}>Load the first list from the handwritten page</div>
-              <div style={{ fontSize: '0.82rem', color: '#78350f', marginBottom: '0.5rem' }}>14 people (Ricky to O.P.K). Choose who brought it, the date and the area. Four numbers were hard to read and will be flagged for checking. Contacts already saved are skipped.</div>
+              <div style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '0.3rem' }}>Add a list from the field (paper page)</div>
+              <div style={{ fontSize: '0.82rem', color: '#78350f', marginBottom: '0.5rem' }}>Type or paste one person per line: name and phone number (e.g. Ama Mensah 0244123456). Put ? at the end of a line if the number was hard to read. Contacts already saved are skipped.</div>
+              <textarea value={imp.text} onChange={e => setImp({ ...imp, text: e.target.value })} placeholder={'Ama Mensah 0244123456\nKwame 0201234567 ?'} style={{ ...formBox, width: '100%', minHeight: '6rem', marginBottom: '0.5rem', boxSizing: 'border-box' }} />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <select value={imp.disciple} onChange={e => setImp({ ...imp, disciple: e.target.value })} style={{ ...formBox, width: 'auto', minWidth: '10rem' }}>
                   <option value="">Disciple...</option>
@@ -1491,7 +1502,7 @@ function OutreachTab({ contacts, setContacts, disciples, setDisciples, members, 
                 </select>
                 <input type="date" value={imp.date} onChange={e => setImp({ ...imp, date: e.target.value })} style={{ ...formBox, width: 'auto' }} />
                 <input placeholder="Area (optional)" value={imp.area} onChange={e => setImp({ ...imp, area: e.target.value })} style={{ ...formBox, width: 'auto' }} />
-                <button type="button" onClick={doImport} style={btn(theme, '#fff')}>Load 14 contacts</button>
+                <button type="button" onClick={doImport} style={btn(theme, '#fff')}>{pastedCount ? 'Add ' + pastedCount + ' contacts' : 'Add contacts'}</button>
               </div>
               {discs.length === 0 ? <div style={{ fontSize: '0.8rem', color: '#92400e', marginTop: '0.4rem' }}>Add the disciples first on the Disciples tab.</div> : null}
             </div>
@@ -3700,6 +3711,7 @@ export default function Home() {
   const [shrinkMsg, setShrinkMsg] = useState('');
   const memberColsRef = useRef(null);
   const [myRecord, setMyRecord] = useState(null);
+  const isAdminRef = useRef(false);
   const photoRunRef = useRef(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegisterForm, setShowRegisterForm] = useState(false);
@@ -3906,6 +3918,7 @@ export default function Home() {
           memberColsRef.current = Object.keys(memberData).filter((k) => k !== 'photo_url').join(',');
         }
         const isAdminRole = !!(memberData && memberData.role && memberData.role !== 'member');
+        isAdminRef.current = isAdminRole;
         await loadSettings();
         if (isAdminRole) {
           const isSuperRole = memberData.role === 'super_admin';
@@ -4455,6 +4468,17 @@ export default function Home() {
   }
 
   async function fetchMembers() {
+    // Privacy: only admins load the full members list. A regular member (or someone not signed in)
+    // loads just their own record, so other members' phones, addresses and birthdays never reach their device.
+    if (!isAdminRef.current) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = session && session.user ? String(session.user.email || '').trim() : '';
+      if (!email) { setMembers([]); return; }
+      const { data: own } = await supabase.from('members').select('*')
+        .ilike('email', email.replace(/[\\%_]/g, '\\$&')).limit(10);
+      setMembers(own || []);
+      return;
+    }
     // Try up to 3 times. An empty answer or an error can come from an expired session or a slow
     // connection, so we renew the session and wait a moment between tries.
     let lastMessage = '';
